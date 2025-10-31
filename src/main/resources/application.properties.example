@@ -1,0 +1,34 @@
+# Banco de Dados MySQL
+spring.datasource.url=jdbc:mysql://localhost:3306/siseg?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+spring.datasource.username=root
+spring.datasource.password=
+
+# JPA/Hibernate
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.hibernate.ddl-auto=create-drop
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQL8Dialect
+
+spring.flyway.enabled=false
+spring.flyway.locations=classpath:db/migration
+spring.flyway.baseline-on-migrate=true
+spring.flyway.validate-on-migrate=true
+spring.flyway.clean-disabled=true
+
+# Swagger/OpenAPI
+springdoc.api-docs.path=/api-docs
+springdoc.swagger-ui.path=/swagger-ui.html
+
+# Upload local
+app.storage.upload-dir=uploads
+
+# Segurança/JWT (RSA)
+jwt.public.key=classpath:app.pub
+jwt.private.key=classpath:app.key
+
+# Asaas
+# Configure via variáveis de ambiente ou application-local.properties
+asaas.baseUrl=${ASAAS_BASE_URL:https://api-sandbox.asaas.com/v3}
+asaas.apiKey=${ASAAS_API_KEY:}
+asaas.webhookSecret=${ASAAS_WEBHOOK_SECRET:}
+

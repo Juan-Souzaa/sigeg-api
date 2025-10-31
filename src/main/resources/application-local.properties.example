@@ -1,0 +1,8 @@
+# Copie este arquivo para application-local.properties e configure suas credenciais reais
+# O arquivo application-local.properties não será commitado no Git
+
+# Asaas - Configure suas chaves reais aqui
+asaas.baseUrl=https://api-sandbox.asaas.com/v3
+asaas.apiKey=COLE_SUA_CHAVE_API_AQUI
+asaas.webhookSecret=COLE_SEU_SEGREDO_WEBHOOK_AQUI
+

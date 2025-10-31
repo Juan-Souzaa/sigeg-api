@@ -1,0 +1,8 @@
+INSERT INTO roles(role_name) VALUES
+ ('ROLE_USER'),
+ ('ROLE_ADMIN'),
+ ('ROLE_RESTAURANTE'),
+ ('ROLE_ENTREGADOR'),
+ ('ROLE_CLIENTE');
+
+
