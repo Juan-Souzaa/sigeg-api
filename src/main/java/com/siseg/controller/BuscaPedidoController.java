@@ -51,8 +51,9 @@ public class BuscaPedidoController {
     @PostMapping("/pedidos")
     @Operation(summary = "Criar pedido")
     public ResponseEntity<PedidoResponseDTO> criarPedido(
-            @RequestParam Long clienteId,
             @Valid @RequestBody PedidoRequestDTO dto) {
+       
+        Long clienteId = null; 
         PedidoResponseDTO response = pedidoService.criarPedido(clienteId, dto);
         return ResponseEntity.ok(response);
     }

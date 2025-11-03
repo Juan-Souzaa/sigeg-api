@@ -2,7 +2,7 @@ package com.siseg.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -93,6 +93,19 @@ public class GlobalExceptionHandler {
                 fieldErrors
         );
         return ResponseEntity.unprocessableEntity().body(err);
+    }
+
+    @ExceptionHandler({com.siseg.exception.AccessDeniedException.class, AccessDeniedException.class})
+    public ResponseEntity<ErrorResponse> handleAccessDenied(Exception ex, HttpServletRequest req) {
+        ErrorResponse err = new ErrorResponse(
+                Instant.now(),
+                HttpStatus.FORBIDDEN.value(),
+                "Forbidden",
+                "Acesso negado. Você não tem permissão para realizar esta operação.",
+                req.getRequestURI(),
+                null
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(err);
     }
 
     @ExceptionHandler(Exception.class)
