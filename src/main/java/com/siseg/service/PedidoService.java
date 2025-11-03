@@ -44,13 +44,14 @@ public class PedidoService {
     private final NotificationService notificationService;
     private final GeocodingService geocodingService;
     private final RastreamentoService rastreamentoService;
+    private final AvaliacaoService avaliacaoService;
     private final ModelMapper modelMapper;
 
     public PedidoService(PedidoRepository pedidoRepository, ClienteRepository clienteRepository,
                          RestauranteRepository restauranteRepository, PratoRepository pratoRepository,
                          EntregadorRepository entregadorRepository, NotificationService notificationService,
                          GeocodingService geocodingService, RastreamentoService rastreamentoService,
-                         ModelMapper modelMapper) {
+                         AvaliacaoService avaliacaoService, ModelMapper modelMapper) {
         this.pedidoRepository = pedidoRepository;
         this.clienteRepository = clienteRepository;
         this.restauranteRepository = restauranteRepository;
@@ -59,6 +60,7 @@ public class PedidoService {
         this.notificationService = notificationService;
         this.geocodingService = geocodingService;
         this.rastreamentoService = rastreamentoService;
+        this.avaliacaoService = avaliacaoService;
         this.modelMapper = modelMapper;
     }
     
@@ -299,6 +301,8 @@ public class PedidoService {
         pedido.setStatus(StatusPedido.DELIVERED);
         Pedido saved = pedidoRepository.save(pedido);
         
+        logger.info("Pedido " + saved.getId() + " marcado como entregue. Cliente pode criar avaliação agora.");
+        
         // Notificar cliente e restaurante
         if (saved.getCliente() != null) {
             notificationService.notifyOrderStatusChange(
@@ -526,6 +530,12 @@ public class PedidoService {
                 dto.setDistanciaKm(null);
                 dto.setTempoEstimadoMinutos(null);
             }
+            
+            BigDecimal mediaAvaliacao = avaliacaoService.calcularMediaRestaurante(r.getId());
+            long totalAvaliacoes = avaliacaoService.contarAvaliacoesRestaurante(r.getId());
+            
+            dto.setMediaAvaliacao(mediaAvaliacao);
+            dto.setTotalAvaliacoes(totalAvaliacoes);
             
             return dto;
         });
