@@ -66,6 +66,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(err);
     }
 
+    @ExceptionHandler(AvaliacaoAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleAvaliacaoAlreadyExists(AvaliacaoAlreadyExistsException ex, HttpServletRequest req) {
+        ErrorResponse err = new ErrorResponse(
+                Instant.now(),
+                HttpStatus.CONFLICT.value(),
+                "Avaliação Already Exists",
+                ex.getMessage(),
+                req.getRequestURI(),
+                null
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(err);
+    }
+
     @ExceptionHandler(PratoNotAvailableException.class)
     public ResponseEntity<ErrorResponse> handlePratoNotAvailable(PratoNotAvailableException ex, HttpServletRequest req) {
         ErrorResponse err = new ErrorResponse(
