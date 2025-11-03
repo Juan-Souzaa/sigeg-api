@@ -22,10 +22,13 @@ public class RastreamentoService {
     
     private final PedidoRepository pedidoRepository;
     private final EntregadorRepository entregadorRepository;
+    private final GeocodingService geocodingService;
     
-    public RastreamentoService(PedidoRepository pedidoRepository, EntregadorRepository entregadorRepository) {
+    public RastreamentoService(PedidoRepository pedidoRepository, EntregadorRepository entregadorRepository,
+                               GeocodingService geocodingService) {
         this.pedidoRepository = pedidoRepository;
         this.entregadorRepository = entregadorRepository;
+        this.geocodingService = geocodingService;
     }
     
     @Transactional(readOnly = true)
@@ -60,21 +63,58 @@ public class RastreamentoService {
         rastreamento.setPosicaoAtualLat(entregador.getLatitude());
         rastreamento.setPosicaoAtualLon(entregador.getLongitude());
         
-        BigDecimal distanciaRestante = DistanceCalculator.calculateDistance(
-            entregador.getLatitude(),
-            entregador.getLongitude(),
-            pedido.getLatitudeEntrega(),
-            pedido.getLongitudeEntrega()
-        );
+        BigDecimal distanciaRestante = null;
+        int tempoEstimado = 0;
+        
+        // Tentar calcular usando OSRM (rota real)
+        try {
+            String profile = "driving";
+            if (entregador.getTipoVeiculo() != null) {
+                String tipoVeiculo = entregador.getTipoVeiculo().name();
+                if ("BICICLETA".equalsIgnoreCase(tipoVeiculo)) {
+                    profile = "cycling";
+                }
+            }
+            
+            java.util.Optional<GeocodingService.RouteResult> routeResult = 
+                geocodingService.calculateRoute(
+                    entregador.getLatitude(),
+                    entregador.getLongitude(),
+                    pedido.getLatitudeEntrega(),
+                    pedido.getLongitudeEntrega(),
+                    profile
+                );
+            
+            if (routeResult.isPresent()) {
+                distanciaRestante = routeResult.get().getDistanciaKm();
+                tempoEstimado = routeResult.get().getTempoMinutos();
+                logger.info("Rastreamento - Pedido ID " + pedidoId + ": Distância calculada via OSRM (profile=" + profile + ") = " + distanciaRestante + " km, Tempo = " + tempoEstimado + " min");
+            }
+        } catch (Exception e) {
+            logger.fine("Erro ao calcular rota via OSRM, usando fallback Haversine: " + e.getMessage());
+        }
+        
+        // Fallback para Haversine se OSRM falhar ou não retornar resultado
+        if (distanciaRestante == null) {
+            distanciaRestante = DistanceCalculator.calculateDistance(
+                entregador.getLatitude(),
+                entregador.getLongitude(),
+                pedido.getLatitudeEntrega(),
+                pedido.getLongitudeEntrega()
+            );
+            
+            if (distanciaRestante != null && distanciaRestante.compareTo(BigDecimal.ZERO) > 0) {
+                tempoEstimado = DistanceCalculator.estimateDeliveryTime(
+                    distanciaRestante,
+                    entregador.getTipoVeiculo() != null ? entregador.getTipoVeiculo().name() : "MOTO"
+                );
+                logger.info("Rastreamento - Pedido ID " + pedidoId + ": Distância calculada via Haversine = " + distanciaRestante + " km, Tempo = " + tempoEstimado + " min");
+            }
+        }
         
         if (distanciaRestante != null && distanciaRestante.compareTo(BigDecimal.ZERO) > 0) {
             rastreamento.setDistanciaRestanteKm(distanciaRestante);
             rastreamento.setProximoAoDestino(distanciaRestante.compareTo(DISTANCIA_PROXIMO_DESTINO) <= 0);
-            
-            int tempoEstimado = DistanceCalculator.estimateDeliveryTime(
-                distanciaRestante,
-                entregador.getTipoVeiculo().name()
-            );
             rastreamento.setTempoEstimadoMinutos(tempoEstimado);
         } else {
             rastreamento.setDistanciaRestanteKm(BigDecimal.ZERO);

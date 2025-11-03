@@ -384,19 +384,56 @@ public class PedidoService {
             pedido.getLatitudeEntrega() != null && 
             pedido.getLongitudeEntrega() != null) {
             
-            // Calcula distância do restaurante até o endereço de entrega
-            BigDecimal distanciaKm = DistanceCalculator.calculateDistance(
-                pedido.getRestaurante().getLatitude(),
-                pedido.getRestaurante().getLongitude(),
-                pedido.getLatitudeEntrega(),
-                pedido.getLongitudeEntrega()
-            );
+            BigDecimal distanciaKm = null;
+            int tempoMinutos = 0;
+            
+            // Tentar calcular usando OSRM (rota real)
+            try {
+                String profile = "driving";
+                if (entregador.getTipoVeiculo() != null) {
+                    String tipoVeiculo = entregador.getTipoVeiculo().name();
+                    if ("BICICLETA".equalsIgnoreCase(tipoVeiculo)) {
+                        profile = "cycling";
+                    }
+                }
+                
+                java.util.Optional<GeocodingService.RouteResult> routeResult = 
+                    geocodingService.calculateRoute(
+                        pedido.getRestaurante().getLatitude(),
+                        pedido.getRestaurante().getLongitude(),
+                        pedido.getLatitudeEntrega(),
+                        pedido.getLongitudeEntrega(),
+                        profile
+                    );
+                
+                if (routeResult.isPresent()) {
+                    distanciaKm = routeResult.get().getDistanciaKm();
+                    tempoMinutos = routeResult.get().getTempoMinutos();
+                    logger.info("Marcar como preparando - Pedido ID " + pedido.getId() + ": Distância calculada via OSRM (profile=" + profile + ") = " + distanciaKm + " km, Tempo = " + tempoMinutos + " min");
+                }
+            } catch (Exception e) {
+                logger.fine("Erro ao calcular rota via OSRM, usando fallback Haversine: " + e.getMessage());
+            }
+            
+            // Fallback para Haversine se OSRM falhar ou não retornar resultado
+            if (distanciaKm == null) {
+                distanciaKm = DistanceCalculator.calculateDistance(
+                    pedido.getRestaurante().getLatitude(),
+                    pedido.getRestaurante().getLongitude(),
+                    pedido.getLatitudeEntrega(),
+                    pedido.getLongitudeEntrega()
+                );
+                
+                if (distanciaKm != null && distanciaKm.compareTo(BigDecimal.ZERO) > 0) {
+                    tempoMinutos = DistanceCalculator.estimateDeliveryTime(
+                        distanciaKm, 
+                        entregador.getTipoVeiculo() != null ? entregador.getTipoVeiculo().name() : "MOTO"
+                    );
+                    logger.info("Marcar como preparando - Pedido ID " + pedido.getId() + ": Distância calculada via Haversine = " + distanciaKm + " km, Tempo = " + tempoMinutos + " min");
+                }
+            }
             
             if (distanciaKm != null && distanciaKm.compareTo(BigDecimal.ZERO) > 0) {
-                int tempoMinutos = DistanceCalculator.estimateDeliveryTime(
-                    distanciaKm, 
-                    entregador.getTipoVeiculo().name()
-                );
                 java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(tempoMinutos);
                 pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
                 logger.info("Tempo estimado calculado: " + tempoMinutos + " minutos para distância de " + distanciaKm + " km");
@@ -511,21 +548,52 @@ public class PedidoService {
             if (finalClienteLat != null && finalClienteLon != null && 
                 r.getLatitude() != null && r.getLongitude() != null) {
                 
-                BigDecimal distanciaKm = DistanceCalculator.calculateDistance(
-                    finalClienteLat,
-                    finalClienteLon,
-                    r.getLatitude(),
-                    r.getLongitude()
-                );
+                BigDecimal distanciaKm = null;
+                int tempoMinutos = 0;
+                
+                // Tentar calcular usando OSRM (rota real)
+                try {
+                    java.util.Optional<GeocodingService.RouteResult> routeResult = 
+                        geocodingService.calculateRoute(
+                            finalClienteLat,
+                            finalClienteLon,
+                            r.getLatitude(),
+                            r.getLongitude(),
+                            "driving"
+                        );
+                    
+                    if (routeResult.isPresent()) {
+                        distanciaKm = routeResult.get().getDistanciaKm();
+                        tempoMinutos = routeResult.get().getTempoMinutos();
+                        logger.info("Busca restaurantes - Restaurante ID " + r.getId() + ": Distância calculada via OSRM = " + distanciaKm + " km, Tempo = " + tempoMinutos + " min");
+                    }
+                } catch (Exception e) {
+                    logger.fine("Erro ao calcular rota via OSRM, usando fallback Haversine: " + e.getMessage());
+                }
+                
+                // Fallback para Haversine se OSRM falhar ou não retornar resultado
+                if (distanciaKm == null) {
+                    distanciaKm = DistanceCalculator.calculateDistance(
+                        finalClienteLat,
+                        finalClienteLon,
+                        r.getLatitude(),
+                        r.getLongitude()
+                    );
+                    
+                    if (distanciaKm != null) {
+                        tempoMinutos = DistanceCalculator.estimateDeliveryTime(distanciaKm, "MOTO");
+                        logger.info("Busca restaurantes - Restaurante ID " + r.getId() + ": Distância calculada via Haversine = " + distanciaKm + " km, Tempo = " + tempoMinutos + " min");
+                    }
+                }
                 
                 if (distanciaKm != null) {
                     // Se a distância for muito pequena (< 0.1 km = 100 metros), tratar como 0.1 km
                     if (distanciaKm.compareTo(new BigDecimal("0.1")) < 0) {
                         distanciaKm = new BigDecimal("0.1");
+                        tempoMinutos = Math.max(1, tempoMinutos);
                     }
                     
                     dto.setDistanciaKm(distanciaKm);
-                    int tempoMinutos = DistanceCalculator.estimateDeliveryTime(distanciaKm, "MOTO");
                     dto.setTempoEstimadoMinutos(tempoMinutos);
                 } else {
                     dto.setDistanciaKm(null);
