@@ -43,12 +43,14 @@ public class PedidoService {
     private final EntregadorRepository entregadorRepository;
     private final NotificationService notificationService;
     private final GeocodingService geocodingService;
+    private final RastreamentoService rastreamentoService;
     private final ModelMapper modelMapper;
 
     public PedidoService(PedidoRepository pedidoRepository, ClienteRepository clienteRepository,
                          RestauranteRepository restauranteRepository, PratoRepository pratoRepository,
                          EntregadorRepository entregadorRepository, NotificationService notificationService,
-                         GeocodingService geocodingService, ModelMapper modelMapper) {
+                         GeocodingService geocodingService, RastreamentoService rastreamentoService,
+                         ModelMapper modelMapper) {
         this.pedidoRepository = pedidoRepository;
         this.clienteRepository = clienteRepository;
         this.restauranteRepository = restauranteRepository;
@@ -56,6 +58,7 @@ public class PedidoService {
         this.entregadorRepository = entregadorRepository;
         this.notificationService = notificationService;
         this.geocodingService = geocodingService;
+        this.rastreamentoService = rastreamentoService;
         this.modelMapper = modelMapper;
     }
     
@@ -146,7 +149,17 @@ public class PedidoService {
         
         validatePedidoOwnership(pedido);
         
-        return mapearParaResponse(pedido);
+        PedidoResponseDTO response = mapearParaResponse(pedido);
+        
+        if (pedido.getStatus() == StatusPedido.OUT_FOR_DELIVERY) {
+            try {
+                response.setRastreamento(rastreamentoService.obterRastreamento(id));
+            } catch (Exception e) {
+                logger.warning("Erro ao obter rastreamento para pedido " + id + ": " + e.getMessage());
+            }
+        }
+        
+        return response;
     }
     
     @Transactional
@@ -236,9 +249,22 @@ public class PedidoService {
         }
         
         pedido.setStatus(StatusPedido.OUT_FOR_DELIVERY);
+        
+        if (pedido.getEntregador() != null) {
+            Entregador entregador = pedido.getEntregador();
+            if ((entregador.getLatitude() == null || entregador.getLongitude() == null) &&
+                pedido.getRestaurante() != null &&
+                pedido.getRestaurante().getLatitude() != null &&
+                pedido.getRestaurante().getLongitude() != null) {
+                entregador.setLatitude(pedido.getRestaurante().getLatitude());
+                entregador.setLongitude(pedido.getRestaurante().getLongitude());
+                entregadorRepository.save(entregador);
+                logger.info("Posição inicial do entregador definida com coordenadas do restaurante");
+            }
+        }
+        
         Pedido saved = pedidoRepository.save(pedido);
         
-        // Notificar cliente
         if (saved.getCliente() != null) {
             notificationService.notifyOrderStatusChange(
                 saved.getId(),
