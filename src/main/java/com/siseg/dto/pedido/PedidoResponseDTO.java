@@ -1,6 +1,7 @@
 package com.siseg.dto.pedido;
 
 import com.siseg.dto.entregador.EntregadorSimplesDTO;
+import com.siseg.dto.rastreamento.RastreamentoDTO;
 import com.siseg.model.enumerations.MetodoPagamento;
 import com.siseg.model.enumerations.StatusPedido;
 import lombok.Data;
@@ -26,4 +27,5 @@ public class PedidoResponseDTO {
     private EntregadorSimplesDTO entregador;
     private Instant tempoEstimadoEntrega;
     private Instant criadoEm;
+    private RastreamentoDTO rastreamento;
 }
