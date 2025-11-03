@@ -56,7 +56,10 @@ public class TestJwtUtil {
         return getOrCreateUser("admin", ERole.ROLE_ADMIN);
     }
 
-    private User getOrCreateUser(String username, ERole roleName) {
+    /**
+     * Obtém ou cria um usuário (método público para uso em helpers de teste)
+     */
+    public User getOrCreateUser(String username, ERole roleName) {
         try {
             return userRepository.findByUsername(username)
                     .orElseGet(() -> createUser(username, roleName));

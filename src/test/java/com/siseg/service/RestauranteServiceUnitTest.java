@@ -4,13 +4,16 @@ import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Restaurante;
+import com.siseg.model.User;
 import com.siseg.model.enumerations.StatusRestaurante;
 import com.siseg.repository.RestauranteRepository;
+import com.siseg.util.SecurityUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
@@ -69,19 +72,27 @@ class RestauranteServiceUnitTest {
     @Test
     void deveCriarRestauranteComSucesso() {
         // Given
+        User mockUser = new User();
+        mockUser.setId(1L);
+        mockUser.setUsername("testuser");
+        
         when(modelMapper.map(restauranteRequestDTO, Restaurante.class)).thenReturn(restaurante);
         when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
         when(modelMapper.map(restaurante, RestauranteResponseDTO.class)).thenReturn(restauranteResponseDTO);
 
-        // When
-        RestauranteResponseDTO result = restauranteService.criarRestaurante(restauranteRequestDTO);
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
 
-        // Then
-        assertNotNull(result);
-        assertEquals(restauranteResponseDTO.getId(), result.getId());
-        assertEquals(restauranteResponseDTO.getNome(), result.getNome());
-        assertEquals(StatusRestaurante.PENDING_APPROVAL, result.getStatus());
-        verify(restauranteRepository, times(1)).save(any(Restaurante.class));
+            // When
+            RestauranteResponseDTO result = restauranteService.criarRestaurante(restauranteRequestDTO);
+
+            // Then
+            assertNotNull(result);
+            assertEquals(restauranteResponseDTO.getId(), result.getId());
+            assertEquals(restauranteResponseDTO.getNome(), result.getNome());
+            assertEquals(StatusRestaurante.PENDING_APPROVAL, result.getStatus());
+            verify(restauranteRepository, times(1)).save(argThat(r -> r.getUser() != null && r.getUser().getId().equals(mockUser.getId())));
+        }
     }
 
     @Test

@@ -230,4 +230,35 @@ class RestauranteControllerFunctionalTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
     }
+
+    @Test
+    void deveRetornarForbiddenQuandoUsuarioTentaAprovarRestauranteSemSerAdmin() throws Exception {
+        // Primeiro cria um restaurante
+        String json = """
+                {
+                    "nome": "Restaurante para Teste Admin",
+                    "email": "admin-test@restaurante.com",
+                    "telefone": "(11) 44444-4444",
+                    "endereco": "Rua Admin Test, 303"
+                }
+                """;
+
+        String response = mockMvc.perform(post("/api/restaurantes")
+                .header("Authorization", "Bearer " + userToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String id = response.substring(response.indexOf("\"id\":") + 5, response.indexOf(","));
+        id = id.trim();
+
+        // Tenta aprovar como usuário comum (deve retornar 403)
+        mockMvc.perform(patch("/api/restaurantes/{id}/aprovar", id)
+                .header("Authorization", "Bearer " + userToken))
+                .andDo(print())
+                .andExpect(status().isForbidden());
+    }
 }
