@@ -54,7 +54,7 @@ public class DistanceCalculator {
      */
     public static int estimateDeliveryTime(BigDecimal distanciaKm, String tipoVeiculo) {
         if (distanciaKm == null || distanciaKm.compareTo(BigDecimal.ZERO) <= 0) {
-            return 30; // Tempo padrão
+            return 0; // Já chegou ou coordenadas inválidas
         }
         
         double velocidadeMediaKmh;
@@ -68,8 +68,9 @@ public class DistanceCalculator {
         double tempoHoras = distanciaKm.doubleValue() / velocidadeMediaKmh;
         int tempoMinutos = (int) Math.ceil(tempoHoras * 60);
         
-        // Tempo mínimo de 15 minutos e máximo de 120 minutos
-        return Math.max(15, Math.min(120, tempoMinutos));
+        // Tempo mínimo de 1 minuto (para distâncias muito curtas) e máximo de 120 minutos
+        // Remove o mínimo de 15 minutos para permitir atualização dinâmica
+        return Math.max(1, Math.min(120, tempoMinutos));
     }
 }
 
