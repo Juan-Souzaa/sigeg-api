@@ -22,6 +22,18 @@ CREATE TABLE IF NOT EXISTS user_roles (
     FOREIGN KEY (role_id) REFERENCES roles(id)
 );
 
+-- Inserir roles padrão (ignorar se já existir - compatível com H2)
+INSERT INTO roles(role_name) 
+SELECT 'ROLE_USER' WHERE NOT EXISTS (SELECT 1 FROM roles WHERE role_name = 'ROLE_USER');
+INSERT INTO roles(role_name) 
+SELECT 'ROLE_ADMIN' WHERE NOT EXISTS (SELECT 1 FROM roles WHERE role_name = 'ROLE_ADMIN');
+INSERT INTO roles(role_name) 
+SELECT 'ROLE_RESTAURANTE' WHERE NOT EXISTS (SELECT 1 FROM roles WHERE role_name = 'ROLE_RESTAURANTE');
+INSERT INTO roles(role_name) 
+SELECT 'ROLE_ENTREGADOR' WHERE NOT EXISTS (SELECT 1 FROM roles WHERE role_name = 'ROLE_ENTREGADOR');
+INSERT INTO roles(role_name) 
+SELECT 'ROLE_CLIENTE' WHERE NOT EXISTS (SELECT 1 FROM roles WHERE role_name = 'ROLE_CLIENTE');
+
 -- Tabela de restaurantes
 CREATE TABLE IF NOT EXISTS restaurantes (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -61,12 +73,31 @@ CREATE TABLE IF NOT EXISTS clientes (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- Tabela de entregadores
+CREATE TABLE IF NOT EXISTS entregadores (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL UNIQUE,
+    nome VARCHAR(255) NOT NULL,
+    cpf VARCHAR(14) NOT NULL UNIQUE,
+    telefone VARCHAR(20) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    foto_cnh_url TEXT,
+    tipo_veiculo VARCHAR(50) NOT NULL,
+    placa_veiculo VARCHAR(10) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING_APPROVAL',
+    latitude DECIMAL(10, 8),
+    longitude DECIMAL(11, 8),
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 -- Tabela de pedidos
 CREATE TABLE IF NOT EXISTS pedidos (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     cliente_id BIGINT NOT NULL,
     restaurante_id BIGINT NOT NULL,
-    status VARCHAR(20) NOT NULL CHECK (status IN ('CREATED','CONFIRMED','PREPARING','READY','DELIVERED','CANCELLED')),
+    status VARCHAR(20) NOT NULL CHECK (status IN ('CREATED','CONFIRMED','PREPARING','OUT_FOR_DELIVERY','DELIVERED','CANCELED')),
     metodo_pagamento VARCHAR(20) NOT NULL CHECK (metodo_pagamento IN ('PIX','CASH','CREDIT_CARD')),
     troco DECIMAL(10,2),
     observacoes TEXT,
@@ -74,9 +105,12 @@ CREATE TABLE IF NOT EXISTS pedidos (
     subtotal DECIMAL(10,2) NOT NULL,
     taxa_entrega DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     total DECIMAL(10,2) NOT NULL,
+    entregador_id BIGINT,
+    tempo_estimado_entrega TIMESTAMP,
     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (cliente_id) REFERENCES clientes(id),
-    FOREIGN KEY (restaurante_id) REFERENCES restaurantes(id)
+    FOREIGN KEY (restaurante_id) REFERENCES restaurantes(id),
+    FOREIGN KEY (entregador_id) REFERENCES entregadores(id)
 );
 
 -- Tabela de itens do pedido
