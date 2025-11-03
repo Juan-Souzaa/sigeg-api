@@ -1,5 +1,7 @@
 package com.siseg.controller;
 
+import com.siseg.util.TestJwtUtil;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -20,6 +22,31 @@ class RestauranteControllerFunctionalTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private TestJwtUtil testJwtUtil;
+
+    private String userToken;
+    private String adminToken;
+
+    @BeforeEach
+    void setUp() {
+        // Gera tokens JWT válidos para os testes
+        // Usa retry em caso de erro na criação do schema
+        try {
+            userToken = testJwtUtil.generateUserToken();
+            adminToken = testJwtUtil.generateAdminToken();
+        } catch (Exception e) {
+            // Se falhar, tenta novamente após um pequeno delay
+            try {
+                Thread.sleep(100);
+                userToken = testJwtUtil.generateUserToken();
+                adminToken = testJwtUtil.generateAdminToken();
+            } catch (Exception ex) {
+                throw new RuntimeException("Erro ao gerar tokens JWT para testes", ex);
+            }
+        }
+    }
+
     @Test
     void deveCriarRestauranteComSucesso() throws Exception {
         String json = """
@@ -32,6 +59,7 @@ class RestauranteControllerFunctionalTest {
                 """;
 
         mockMvc.perform(post("/api/restaurantes")
+                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
                 .andDo(print())
@@ -45,7 +73,7 @@ class RestauranteControllerFunctionalTest {
     }
 
     @Test
-    void deveRetornarErro400AoCriarRestauranteComCamposObrigatoriosFaltando() throws Exception {
+    void deveRetornarErro422AoCriarRestauranteComCamposObrigatoriosFaltando() throws Exception {
         String json = """
                 {
                     "email": "teste@restaurante.com",
@@ -54,22 +82,25 @@ class RestauranteControllerFunctionalTest {
                 """;
 
         mockMvc.perform(post("/api/restaurantes")
+                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
                 .andDo(print())
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.error").value("Dados inválidos"))
-                .andExpect(jsonPath("$.errors").exists());
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.status").value(422))
+                .andExpect(jsonPath("$.error").value("Validation Error"))
+                .andExpect(jsonPath("$.message").value("Dados inválidos"))
+                .andExpect(jsonPath("$.fieldErrors").exists());
     }
 
     @Test
     void deveRetornarNotFoundAoBuscarRestauranteInexistente() throws Exception {
-        mockMvc.perform(get("/api/restaurantes/9999"))
+        mockMvc.perform(get("/api/restaurantes/9999")
+                .header("Authorization", "Bearer " + userToken))
                 .andDo(print())
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.error").value("Recurso não encontrado"));
+                .andExpect(jsonPath("$.error").value("Not Found"));
     }
 
     @Test
@@ -85,12 +116,14 @@ class RestauranteControllerFunctionalTest {
                 """;
 
         mockMvc.perform(post("/api/restaurantes")
+                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
                 .andExpect(status().isOk());
 
         // Depois lista os restaurantes
-        mockMvc.perform(get("/api/restaurantes?page=0&size=10&sort=nome,asc"))
+        mockMvc.perform(get("/api/restaurantes?page=0&size=10&sort=nome,asc")
+                .header("Authorization", "Bearer " + userToken))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
@@ -111,6 +144,7 @@ class RestauranteControllerFunctionalTest {
                 """;
 
         String response = mockMvc.perform(post("/api/restaurantes")
+                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
                 .andExpect(status().isOk())
@@ -123,7 +157,8 @@ class RestauranteControllerFunctionalTest {
         id = id.trim();
 
         // Busca o restaurante por ID
-        mockMvc.perform(get("/api/restaurantes/{id}", id))
+        mockMvc.perform(get("/api/restaurantes/{id}", id)
+                .header("Authorization", "Bearer " + userToken))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nome").value("Restaurante para Busca"))
@@ -143,6 +178,7 @@ class RestauranteControllerFunctionalTest {
                 """;
 
         String response = mockMvc.perform(post("/api/restaurantes")
+                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
                 .andExpect(status().isOk())
@@ -155,7 +191,8 @@ class RestauranteControllerFunctionalTest {
         id = id.trim();
 
         // Aprova o restaurante (requer autenticação de admin)
-        mockMvc.perform(patch("/api/restaurantes/{id}/aprovar", id))
+        mockMvc.perform(patch("/api/restaurantes/{id}/aprovar", id)
+                .header("Authorization", "Bearer " + adminToken))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("APPROVED"));
@@ -174,6 +211,7 @@ class RestauranteControllerFunctionalTest {
                 """;
 
         String response = mockMvc.perform(post("/api/restaurantes")
+                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
                 .andExpect(status().isOk())
@@ -186,7 +224,8 @@ class RestauranteControllerFunctionalTest {
         id = id.trim();
 
         // Rejeita o restaurante (requer autenticação de admin)
-        mockMvc.perform(patch("/api/restaurantes/{id}/rejeitar", id))
+        mockMvc.perform(patch("/api/restaurantes/{id}/rejeitar", id)
+                .header("Authorization", "Bearer " + adminToken))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
