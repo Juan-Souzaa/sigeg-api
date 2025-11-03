@@ -1,5 +1,6 @@
 package com.siseg.service;
 
+import com.siseg.dto.geocoding.Coordinates;
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
 import com.siseg.exception.ResourceNotFoundException;
@@ -21,6 +22,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,6 +38,9 @@ class RestauranteServiceUnitTest {
 
     @Mock
     private ModelMapper modelMapper;
+
+    @Mock
+    private GeocodingService geocodingService;
 
     @InjectMocks
     private RestauranteService restauranteService;
@@ -82,6 +87,11 @@ class RestauranteServiceUnitTest {
 
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
+            
+            // Mock geocodificação bem-sucedida
+            Coordinates coords = new Coordinates(new BigDecimal("-23.5505"), new BigDecimal("-46.6333"));
+            when(geocodingService.geocodeAddress(restauranteRequestDTO.getEndereco()))
+                    .thenReturn(Optional.of(coords));
 
             // When
             RestauranteResponseDTO result = restauranteService.criarRestaurante(restauranteRequestDTO);
@@ -91,7 +101,11 @@ class RestauranteServiceUnitTest {
             assertEquals(restauranteResponseDTO.getId(), result.getId());
             assertEquals(restauranteResponseDTO.getNome(), result.getNome());
             assertEquals(StatusRestaurante.PENDING_APPROVAL, result.getStatus());
-            verify(restauranteRepository, times(1)).save(argThat(r -> r.getUser() != null && r.getUser().getId().equals(mockUser.getId())));
+            verify(restauranteRepository, times(1)).save(argThat(r -> 
+                r.getUser() != null && r.getUser().getId().equals(mockUser.getId()) &&
+                r.getLatitude() != null && r.getLongitude() != null
+            ));
+            verify(geocodingService, times(1)).geocodeAddress(restauranteRequestDTO.getEndereco());
         }
     }
 
@@ -194,5 +208,36 @@ class RestauranteServiceUnitTest {
         assertEquals(id, result.getId());
         verify(restauranteRepository, times(1)).findById(id);
         verify(restauranteRepository, times(1)).save(any(Restaurante.class));
+    }
+
+    @Test
+    void deveCriarRestauranteSemCoordenadasSeGeocodificacaoFalhar() {
+        // Given
+        User mockUser = new User();
+        mockUser.setId(1L);
+        mockUser.setUsername("testuser");
+        
+        when(modelMapper.map(restauranteRequestDTO, Restaurante.class)).thenReturn(restaurante);
+        when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
+        when(modelMapper.map(restaurante, RestauranteResponseDTO.class)).thenReturn(restauranteResponseDTO);
+        
+        // Mock geocodificação falhando
+        when(geocodingService.geocodeAddress(restauranteRequestDTO.getEndereco()))
+                .thenReturn(Optional.empty());
+
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
+
+            // When
+            RestauranteResponseDTO result = restauranteService.criarRestaurante(restauranteRequestDTO);
+
+            // Then
+            assertNotNull(result);
+            // Restaurante deve ser criado mesmo sem coordenadas
+            verify(restauranteRepository, times(1)).save(argThat(r -> 
+                r.getUser() != null && r.getUser().getId().equals(mockUser.getId())
+            ));
+            verify(geocodingService, times(1)).geocodeAddress(restauranteRequestDTO.getEndereco());
+        }
     }
 }
