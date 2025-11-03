@@ -20,6 +20,8 @@ public interface AvaliacaoRepository extends JpaRepository<Avaliacao, Long> {
     
     Page<Avaliacao> findByEntregadorId(Long entregadorId, Pageable pageable);
     
+    Page<Avaliacao> findByEntregadorIdOrderByCriadoEmDesc(Long entregadorId, Pageable pageable);
+    
     Optional<Avaliacao> findByClienteIdAndPedidoId(Long clienteId, Long pedidoId);
     
     boolean existsByClienteIdAndPedidoId(Long clienteId, Long pedidoId);

@@ -3,6 +3,9 @@ package com.siseg.service;
 import com.siseg.dto.avaliacao.AvaliacaoRequestDTO;
 import com.siseg.dto.avaliacao.AvaliacaoResponseDTO;
 import com.siseg.dto.avaliacao.AvaliacaoResumoDTO;
+import com.siseg.dto.avaliacao.AvaliacaoRestauranteResponseDTO;
+import com.siseg.dto.avaliacao.AvaliacaoEntregadorResponseDTO;
+import com.siseg.dto.avaliacao.AvaliacaoResumoEntregadorDTO;
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.AvaliacaoAlreadyExistsException;
 import com.siseg.exception.ResourceNotFoundException;
@@ -153,9 +156,23 @@ public class AvaliacaoService {
     }
     
     @Transactional(readOnly = true)
-    public Page<AvaliacaoResponseDTO> listarAvaliacoesPorRestaurante(Long restauranteId, Pageable pageable) {
+    public Page<AvaliacaoRestauranteResponseDTO> listarAvaliacoesPorRestaurante(Long restauranteId, Pageable pageable) {
         Page<Avaliacao> avaliacoes = avaliacaoRepository.findByRestauranteIdOrderByCriadoEmDesc(restauranteId, pageable);
-        return avaliacoes.map(this::mapearParaResponse);
+        return avaliacoes.map(this::mapearParaResponseRestaurante);
+    }
+    
+    @Transactional(readOnly = true)
+    public Page<AvaliacaoEntregadorResponseDTO> listarAvaliacoesPorEntregador(Long entregadorId, Pageable pageable) {
+        Page<Avaliacao> avaliacoes = avaliacaoRepository.findByEntregadorIdOrderByCriadoEmDesc(entregadorId, pageable);
+        return avaliacoes.map(this::mapearParaResponseEntregador);
+    }
+    
+    @Transactional(readOnly = true)
+    public AvaliacaoResumoEntregadorDTO obterResumoEntregador(Long entregadorId) {
+        AvaliacaoResumoEntregadorDTO resumo = new AvaliacaoResumoEntregadorDTO();
+        resumo.setMediaNotaEntregador(calcularMediaEntregador(entregadorId));
+        resumo.setTotalAvaliacoesEntregador(contarAvaliacoesEntregador(entregadorId));
+        return resumo;
     }
     
     @Transactional(readOnly = true)
@@ -202,6 +219,42 @@ public class AvaliacaoService {
         if (avaliacao.getEntregador() != null) {
             dto.setEntregadorId(avaliacao.getEntregador().getId());
         }
+        return dto;
+    }
+    
+    /**
+     * Mapeia avaliação para response específico de restaurante (apenas dados do restaurante e pedido)
+     */
+    private AvaliacaoRestauranteResponseDTO mapearParaResponseRestaurante(Avaliacao avaliacao) {
+        AvaliacaoRestauranteResponseDTO dto = new AvaliacaoRestauranteResponseDTO();
+        dto.setId(avaliacao.getId());
+        dto.setPedidoId(avaliacao.getPedido().getId());
+        dto.setClienteId(avaliacao.getCliente().getId());
+        dto.setRestauranteId(avaliacao.getRestaurante().getId());
+        dto.setNotaRestaurante(avaliacao.getNotaRestaurante());
+        dto.setNotaPedido(avaliacao.getNotaPedido());
+        dto.setComentarioRestaurante(avaliacao.getComentarioRestaurante());
+        dto.setComentarioPedido(avaliacao.getComentarioPedido());
+        dto.setCriadoEm(avaliacao.getCriadoEm());
+        dto.setAtualizadoEm(avaliacao.getAtualizadoEm());
+        return dto;
+    }
+    
+    /**
+     * Mapeia avaliação para response específico de entregador (apenas dados do entregador)
+     */
+    private AvaliacaoEntregadorResponseDTO mapearParaResponseEntregador(Avaliacao avaliacao) {
+        AvaliacaoEntregadorResponseDTO dto = new AvaliacaoEntregadorResponseDTO();
+        dto.setId(avaliacao.getId());
+        dto.setPedidoId(avaliacao.getPedido().getId());
+        dto.setClienteId(avaliacao.getCliente().getId());
+        if (avaliacao.getEntregador() != null) {
+            dto.setEntregadorId(avaliacao.getEntregador().getId());
+        }
+        dto.setNotaEntregador(avaliacao.getNotaEntregador());
+        dto.setComentarioEntregador(avaliacao.getComentarioEntregador());
+        dto.setCriadoEm(avaliacao.getCriadoEm());
+        dto.setAtualizadoEm(avaliacao.getAtualizadoEm());
         return dto;
     }
 }

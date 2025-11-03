@@ -3,6 +3,9 @@ package com.siseg.controller;
 import com.siseg.dto.avaliacao.AvaliacaoRequestDTO;
 import com.siseg.dto.avaliacao.AvaliacaoResponseDTO;
 import com.siseg.dto.avaliacao.AvaliacaoResumoDTO;
+import com.siseg.dto.avaliacao.AvaliacaoRestauranteResponseDTO;
+import com.siseg.dto.avaliacao.AvaliacaoEntregadorResponseDTO;
+import com.siseg.dto.avaliacao.AvaliacaoResumoEntregadorDTO;
 import com.siseg.service.AvaliacaoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -54,10 +57,10 @@ public class AvaliacaoController {
     
     @GetMapping("/restaurantes/{restauranteId}")
     @Operation(summary = "Listar avaliações de um restaurante")
-    public ResponseEntity<Page<AvaliacaoResponseDTO>> listarAvaliacoesPorRestaurante(
+    public ResponseEntity<Page<AvaliacaoRestauranteResponseDTO>> listarAvaliacoesPorRestaurante(
             @PathVariable Long restauranteId,
             Pageable pageable) {
-        Page<AvaliacaoResponseDTO> response = avaliacaoService.listarAvaliacoesPorRestaurante(restauranteId, pageable);
+        Page<AvaliacaoRestauranteResponseDTO> response = avaliacaoService.listarAvaliacoesPorRestaurante(restauranteId, pageable);
         return ResponseEntity.ok(response);
     }
     
@@ -65,6 +68,22 @@ public class AvaliacaoController {
     @Operation(summary = "Obter resumo de avaliações de um restaurante (média e total)")
     public ResponseEntity<AvaliacaoResumoDTO> obterResumoRestaurante(@PathVariable Long restauranteId) {
         AvaliacaoResumoDTO response = avaliacaoService.obterResumoRestaurante(restauranteId);
+        return ResponseEntity.ok(response);
+    }
+    
+    @GetMapping("/entregadores/{entregadorId}")
+    @Operation(summary = "Listar avaliações de um entregador")
+    public ResponseEntity<Page<AvaliacaoEntregadorResponseDTO>> listarAvaliacoesPorEntregador(
+            @PathVariable Long entregadorId,
+            Pageable pageable) {
+        Page<AvaliacaoEntregadorResponseDTO> response = avaliacaoService.listarAvaliacoesPorEntregador(entregadorId, pageable);
+        return ResponseEntity.ok(response);
+    }
+    
+    @GetMapping("/entregadores/{entregadorId}/resumo")
+    @Operation(summary = "Obter resumo de avaliações de um entregador (média e total)")
+    public ResponseEntity<AvaliacaoResumoEntregadorDTO> obterResumoEntregador(@PathVariable Long entregadorId) {
+        AvaliacaoResumoEntregadorDTO response = avaliacaoService.obterResumoEntregador(entregadorId);
         return ResponseEntity.ok(response);
     }
 }
