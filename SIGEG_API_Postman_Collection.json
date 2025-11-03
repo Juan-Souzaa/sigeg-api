@@ -823,6 +823,170 @@
 					"description": "Consulta rastreamento em tempo real do pedido em entrega.\n\nFuncionalidades:\n- Retorna posição atual do entregador (latitude/longitude)\n- Retorna posição de destino (endereço de entrega)\n- Calcula distância restante em km\n- Calcula tempo estimado de chegada baseado na velocidade do veículo\n- Indica se o entregador está próximo ao destino (< 100m)\n- Funciona apenas para pedidos com status OUT_FOR_DELIVERY\n- Apenas o cliente dono do pedido pode consultar\n\nSimulação Automática:\n- A posição do entregador é atualizada automaticamente a cada 10 segundos\n- O movimento é simulado do restaurante até o cliente\n- Velocidade média: MOTO/CARRO = 30 km/h, BICICLETA = 15 km/h\n- Quando o entregador está a menos de 100m, a simulação para\n\nExemplo de Resposta:\n{\n  \"posicaoAtualLat\": -23.5505,\n  \"posicaoAtualLon\": -46.6333,\n  \"posicaoDestinoLat\": -23.5631,\n  \"posicaoDestinoLon\": -46.6542,\n  \"distanciaRestanteKm\": 1.5,\n  \"tempoEstimadoMinutos\": 15,\n  \"statusEntrega\": \"OUT_FOR_DELIVERY\",\n  \"proximoAoDestino\": false\n}"
 				},
 				{
+					"name": "Criar Avaliação do Pedido",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notaRestaurante\": 5,\n  \"notaEntregador\": 4,\n  \"notaPedido\": 5,\n  \"comentarioRestaurante\": \"Comida deliciosa e entrega rápida!\",\n  \"comentarioEntregador\": \"Muito pontual\",\n  \"comentarioPedido\": \"Pedido perfeito, chegou quentinho\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"description": "Cria uma avaliação para um pedido entregue.\n\nRequisitos:\n- Pedido deve estar com status DELIVERED\n- Apenas o cliente dono do pedido pode avaliar\n- Uma única avaliação por pedido (mas pode editar depois)\n- NotaRestaurante e NotaPedido são obrigatórias (1-5)\n- NotaEntregador é opcional (1-5)\n- Comentários são opcionais\n\nValidações:\n- Se o pedido não tiver entregador, não é possível avaliar entregador\n- Se já existe avaliação, use o endpoint de edição\n\nExemplo de Resposta:\n{\n  \"id\": 1,\n  \"pedidoId\": 123,\n  \"clienteId\": 1,\n  \"restauranteId\": 5,\n  \"entregadorId\": 2,\n  \"notaRestaurante\": 5,\n  \"notaEntregador\": 4,\n  \"notaPedido\": 5,\n  \"comentarioRestaurante\": \"Comida deliciosa!\",\n  \"comentarioPedido\": \"Pedido perfeito\",\n  \"criadoEm\": \"2025-01-15T10:30:00Z\"\n}",
+						"url": {
+							"raw": "{{baseUrl}}/api/avaliacoes/pedidos/{{pedido_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"avaliacoes",
+								"pedidos",
+								"{{pedido_id}}"
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('avaliacao_id', response.id);",
+									"    console.log('Avaliação ID salvo:', response.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Editar Avaliação",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notaRestaurante\": 4,\n  \"notaEntregador\": 5,\n  \"notaPedido\": 4,\n  \"comentarioRestaurante\": \"Comida boa, mas demorou um pouco\",\n  \"comentarioPedido\": \"Pedido correto\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"description": "Edita uma avaliação existente.\n\nRequisitos:\n- Apenas o cliente dono da avaliação pode editar\n- Pode atualizar notas e comentários\n- Campo atualizadoEm é atualizado automaticamente",
+						"url": {
+							"raw": "{{baseUrl}}/api/avaliacoes/{{avaliacao_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"avaliacoes",
+								"{{avaliacao_id}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Buscar Avaliação por Pedido",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/avaliacoes/pedidos/{{pedido_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"avaliacoes",
+								"pedidos",
+								"{{pedido_id}}"
+							]
+						}
+					},
+					"description": "Busca a avaliação de um pedido específico. Apenas o cliente dono do pedido ou admin pode consultar."
+				},
+				{
+					"name": "Listar Avaliações do Restaurante",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/avaliacoes/restaurantes/{{restaurante_id}}?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"avaliacoes",
+								"restaurantes",
+								"{{restaurante_id}}"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"description": "Lista todas as avaliações de um restaurante (público).\n\n- Ordenado por data (mais recentes primeiro)\n- Paginação disponível\n- Retorna lista completa com comentários e notas"
+				},
+				{
+					"name": "Obter Resumo de Avaliações do Restaurante",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/avaliacoes/restaurantes/{{restaurante_id}}/resumo",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"avaliacoes",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"resumo"
+							]
+						}
+					},
+					"description": "Retorna resumo estatístico das avaliações: média de notas e total de avaliações.\n\nExemplo de Resposta:\n{\n  \"mediaNotaRestaurante\": 4.5,\n  \"totalAvaliacoesRestaurante\": 25\n}\n\nNota: A média também aparece na busca de restaurantes junto com o total de avaliações."
+				},
+				{
 					"name": "Confirmar Pedido",
 					"request": {
 						"method": "POST",
