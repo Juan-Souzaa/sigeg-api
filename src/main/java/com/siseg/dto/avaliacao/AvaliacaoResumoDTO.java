@@ -8,7 +8,5 @@ import java.math.BigDecimal;
 public class AvaliacaoResumoDTO {
     private BigDecimal mediaNotaRestaurante;
     private Long totalAvaliacoesRestaurante;
-    private BigDecimal mediaNotaEntregador;
-    private Long totalAvaliacoesEntregador;
 }
 
