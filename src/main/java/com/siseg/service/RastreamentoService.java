@@ -141,7 +141,21 @@ public class RastreamentoService {
             return;
         }
         
-        double velocidadeKmh = entregador.getTipoVeiculo().name().equals("BICICLETA") ? 15.0 : 30.0;
+        // Velocidade base por tipo de veículo
+        double velocidadeBaseKmh = entregador.getTipoVeiculo().name().equals("BICICLETA") ? 15.0 : 30.0;
+        
+        // Variação aleatória de velocidade (±20% para simular trânsito, semáforos, etc)
+        double variacao = (Math.random() * 0.4) - 0.2; // -0.2 a +0.2 (20% para mais ou menos)
+        double velocidadeKmh = velocidadeBaseKmh * (1.0 + variacao);
+        
+        // Garantir velocidade mínima (não pode ser negativa ou muito baixa)
+        if (velocidadeKmh < velocidadeBaseKmh * 0.5) {
+            velocidadeKmh = velocidadeBaseKmh * 0.5; // Mínimo 50% da velocidade base
+        }
+        if (velocidadeKmh > velocidadeBaseKmh * 1.5) {
+            velocidadeKmh = velocidadeBaseKmh * 1.5; // Máximo 150% da velocidade base
+        }
+        
         double distanciaPorIteracao = (velocidadeKmh / 3600.0) * 10.0;
         
         if (distanciaAtual.doubleValue() <= distanciaPorIteracao) {
@@ -170,9 +184,10 @@ public class RastreamentoService {
         );
         
         logger.info(String.format(
-            "Simulação de movimento: Pedido %d - Distância restante: %.2f km -> %.2f km",
+            "Simulação de movimento: Pedido %d - Distância restante: %.2f km -> %.2f km (Velocidade: %.1f km/h)",
             pedidoId, distanciaAtual.doubleValue(), 
-            novaDistancia != null ? novaDistancia.doubleValue() : 0.0
+            novaDistancia != null ? novaDistancia.doubleValue() : 0.0,
+            velocidadeKmh
         ));
     }
 }
