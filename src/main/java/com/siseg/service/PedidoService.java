@@ -7,6 +7,7 @@ import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
 import com.siseg.dto.pedido.PedidoItemResponseDTO;
 import com.siseg.dto.restaurante.RestauranteBuscaDTO;
+import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.exception.PedidoAlreadyProcessedException;
 import com.siseg.exception.PratoNotAvailableException;
@@ -14,6 +15,7 @@ import com.siseg.model.*;
 import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.*;
+import com.siseg.util.SecurityUtils;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -48,8 +50,24 @@ public class PedidoService {
     
     @Transactional
     public PedidoResponseDTO criarPedido(Long clienteId, PedidoRequestDTO dto) {
-        Cliente cliente = clienteRepository.findById(clienteId)
-                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + clienteId));
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        Cliente cliente;
+        
+        // Se clienteId for fornecido, valida ownership. Senão, obtém automaticamente do usuário autenticado
+        if (clienteId != null) {
+            cliente = clienteRepository.findById(clienteId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + clienteId));
+            
+            // Valida se o clienteId pertence ao usuário autenticado
+            if (!SecurityUtils.isAdmin() && (cliente.getUser() == null || !cliente.getUser().getId().equals(currentUser.getId()))) {
+                throw new AccessDeniedException("Você não tem permissão para criar pedidos para este cliente");
+            }
+        } else {
+            // Obtém o cliente do usuário autenticado
+            cliente = clienteRepository.findByUserId(currentUser.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado para o usuário autenticado"));
+        }
         
         Restaurante restaurante = restauranteRepository.findById(dto.getRestauranteId())
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + dto.getRestauranteId()));
@@ -95,6 +113,9 @@ public class PedidoService {
     public PedidoResponseDTO buscarPorId(Long id) {
         Pedido pedido = pedidoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
+        
+        validatePedidoOwnership(pedido);
+        
         return mapearParaResponse(pedido);
     }
     
@@ -102,6 +123,8 @@ public class PedidoService {
     public PedidoResponseDTO confirmarPedido(Long id) {
         Pedido pedido = pedidoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
+        
+        validatePedidoOwnership(pedido);
         
         if (pedido.getStatus() != StatusPedido.CREATED) {
             throw new PedidoAlreadyProcessedException("Pedido já foi processado");
@@ -111,6 +134,26 @@ public class PedidoService {
         Pedido saved = pedidoRepository.save(pedido);
         
         return mapearParaResponse(saved);
+    }
+    
+    private void validatePedidoOwnership(Pedido pedido) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Admin pode acessar qualquer pedido
+        if (SecurityUtils.isAdmin()) {
+            return;
+        }
+        
+        // Verifica se o pedido pertence ao cliente autenticado
+        if (pedido.getCliente() == null || pedido.getCliente().getUser() == null || 
+            !pedido.getCliente().getUser().getId().equals(currentUser.getId())) {
+            
+            // Também verifica se é dono do restaurante
+            if (pedido.getRestaurante() == null || pedido.getRestaurante().getUser() == null ||
+                !pedido.getRestaurante().getUser().getId().equals(currentUser.getId())) {
+                throw new AccessDeniedException("Você não tem permissão para acessar este pedido");
+            }
+        }
     }
     
     public Page<RestauranteBuscaDTO> buscarRestaurantes(String cozinha, Pageable pageable) {

@@ -1,15 +1,18 @@
 package com.siseg.service;
 
 import com.siseg.dto.pagamento.*;
+import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.exception.PaymentGatewayException;
 import com.siseg.model.Cliente;
 import com.siseg.model.Pagamento;
 import com.siseg.model.Pedido;
+import com.siseg.model.User;
 import com.siseg.model.enumerations.MetodoPagamento;
 import com.siseg.model.enumerations.StatusPagamento;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.*;
+import com.siseg.util.SecurityUtils;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -63,6 +66,9 @@ public class PagamentoService {
     public PagamentoResponseDTO criarPagamento(Long pedidoId) {
         Pedido pedido = pedidoRepository.findById(pedidoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + pedidoId));
+        
+        // Valida se o pedido pertence ao usuário autenticado
+        validatePedidoOwnership(pedido);
         
         if (pedido.getStatus() != StatusPedido.CREATED) {
             throw new RuntimeException("Pedido já foi processado");
@@ -223,7 +229,31 @@ public class PagamentoService {
     public PagamentoResponseDTO buscarPagamentoPorPedido(Long pedidoId) {
         Pagamento pagamento = pagamentoRepository.findByPedidoId(pedidoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Pagamento não encontrado para o pedido: " + pedidoId));
+        
+        // Valida se o pedido do pagamento pertence ao usuário autenticado
+        validatePedidoOwnership(pagamento.getPedido());
+        
         return modelMapper.map(pagamento, PagamentoResponseDTO.class);
+    }
+    
+    private void validatePedidoOwnership(Pedido pedido) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Admin pode acessar qualquer pedido
+        if (SecurityUtils.isAdmin()) {
+            return;
+        }
+        
+        // Verifica se o pedido pertence ao cliente autenticado
+        if (pedido.getCliente() == null || pedido.getCliente().getUser() == null || 
+            !pedido.getCliente().getUser().getId().equals(currentUser.getId())) {
+            
+            // Também verifica se é dono do restaurante
+            if (pedido.getRestaurante() == null || pedido.getRestaurante().getUser() == null ||
+                !pedido.getRestaurante().getUser().getId().equals(currentUser.getId())) {
+                throw new AccessDeniedException("Você não tem permissão para acessar este pagamento");
+            }
+        }
     }
     
     public boolean validarWebhookSignature(String signature, String payload) {

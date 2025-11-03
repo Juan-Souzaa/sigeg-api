@@ -2,12 +2,15 @@ package com.siseg.service;
 
 import com.siseg.dto.prato.PratoRequestDTO;
 import com.siseg.dto.prato.PratoResponseDTO;
+import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Prato;
 import com.siseg.model.Restaurante;
+import com.siseg.model.User;
 import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.repository.PratoRepository;
 import com.siseg.repository.RestauranteRepository;
+import com.siseg.util.SecurityUtils;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -44,6 +47,9 @@ public class PratoService {
         Restaurante restaurante = restauranteRepository.findById(restauranteId)
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
         
+        // Valida se o usuário é dono do restaurante
+        validateRestauranteOwnership(restaurante);
+        
         Prato prato = modelMapper.map(dto, Prato.class);
         prato.setRestaurante(restaurante);
         
@@ -60,6 +66,9 @@ public class PratoService {
     public PratoResponseDTO atualizarPrato(Long id, PratoRequestDTO dto) {
         Prato prato = pratoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Prato não encontrado com ID: " + id));
+        
+        // Valida se o usuário é dono do restaurante do prato
+        validateRestauranteOwnership(prato.getRestaurante());
         
         // Registrar alterações antes de atualizar
         registrarAlteracao(prato, "nome", prato.getNome(), dto.getNome());
@@ -83,6 +92,9 @@ public class PratoService {
         Prato prato = pratoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Prato não encontrado com ID: " + id));
         
+        // Valida se o usuário é dono do restaurante do prato
+        validateRestauranteOwnership(prato.getRestaurante());
+        
         Boolean antigoStatus = prato.getDisponivel();
         prato.setDisponivel(!antigoStatus);
         
@@ -90,6 +102,20 @@ public class PratoService {
         
         Prato saved = pratoRepository.save(prato);
         return modelMapper.map(saved, PratoResponseDTO.class);
+    }
+    
+    private void validateRestauranteOwnership(Restaurante restaurante) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Admin pode acessar qualquer restaurante
+        if (SecurityUtils.isAdmin()) {
+            return;
+        }
+        
+        // Verifica se o restaurante pertence ao usuário autenticado
+        if (restaurante.getUser() == null || !restaurante.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Você não tem permissão para gerenciar pratos deste restaurante");
+        }
     }
     
     @Transactional(readOnly = true)

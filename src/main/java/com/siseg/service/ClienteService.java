@@ -2,6 +2,7 @@ package com.siseg.service;
 
 import com.siseg.dto.cliente.ClienteRequestDTO;
 import com.siseg.dto.cliente.ClienteResponseDTO;
+import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Cliente;
 import com.siseg.model.Role;
@@ -10,6 +11,7 @@ import com.siseg.model.enumerations.ERole;
 import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.RoleRepository;
 import com.siseg.repository.UserRepository;
+import com.siseg.util.SecurityUtils;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -65,11 +67,37 @@ public class ClienteService {
     public ClienteResponseDTO buscarPorId(Long id) {
         Cliente cliente = clienteRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + id));
+        
+        validateClienteOwnership(cliente);
+        
         return modelMapper.map(cliente, ClienteResponseDTO.class);
     }
 
     public Page<ClienteResponseDTO> listarTodos(Pageable pageable) {
-        Page<Cliente> clientes = clienteRepository.findAll(pageable);
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Admin pode ver todos os clientes
+        if (SecurityUtils.isAdmin()) {
+            Page<Cliente> clientes = clienteRepository.findAll(pageable);
+            return clientes.map(cliente -> modelMapper.map(cliente, ClienteResponseDTO.class));
+        }
+        
+        // Cliente só vê seus próprios dados
+        Page<Cliente> clientes = clienteRepository.findByUserId(currentUser.getId(), pageable);
         return clientes.map(cliente -> modelMapper.map(cliente, ClienteResponseDTO.class));
+    }
+    
+    private void validateClienteOwnership(Cliente cliente) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Admin pode acessar qualquer cliente
+        if (SecurityUtils.isAdmin()) {
+            return;
+        }
+        
+        // Verifica se o cliente pertence ao usuário autenticado
+        if (cliente.getUser() == null || !cliente.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Você não tem permissão para acessar este cliente");
+        }
     }
 }

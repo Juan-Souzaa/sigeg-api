@@ -2,10 +2,13 @@ package com.siseg.service;
 
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
+import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Restaurante;
+import com.siseg.model.User;
 import com.siseg.model.enumerations.StatusRestaurante;
 import com.siseg.repository.RestauranteRepository;
+import com.siseg.util.SecurityUtils;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,8 +33,11 @@ public class RestauranteService {
     }
     
     public RestauranteResponseDTO criarRestaurante(RestauranteRequestDTO dto) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        
         Restaurante restaurante = modelMapper.map(dto, Restaurante.class);
         restaurante.setStatus(StatusRestaurante.PENDING_APPROVAL);
+        restaurante.setUser(currentUser);
         
         Restaurante saved = restauranteRepository.save(restaurante);
         
@@ -39,6 +45,20 @@ public class RestauranteService {
         logger.info("Email simulado enviado para: " + saved.getEmail() + " - Status: PENDING_APPROVAL");
         
         return modelMapper.map(saved, RestauranteResponseDTO.class);
+    }
+    
+    private void validateRestauranteOwnership(Restaurante restaurante) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Admin pode acessar qualquer restaurante
+        if (SecurityUtils.isAdmin()) {
+            return;
+        }
+        
+        // Verifica se o restaurante pertence ao usuário autenticado
+        if (restaurante.getUser() == null || !restaurante.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Você não tem permissão para acessar este restaurante");
+        }
     }
     
     public RestauranteResponseDTO buscarPorId(Long id) {
