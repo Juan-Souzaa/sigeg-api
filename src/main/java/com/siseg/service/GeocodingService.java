@@ -20,9 +20,11 @@ public class GeocodingService {
     private static final Logger logger = Logger.getLogger(GeocodingService.class.getName());
     private static final String NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
     private static final String VIACEP_BASE_URL = "https://viacep.com.br";
+    private static final String OSRM_BASE_URL = "https://router.project-osrm.org";
     
     private final WebClient nominatimClient;
     private final WebClient viacepClient;
+    private final WebClient osrmClient;
     private final Map<String, Coordinates> cache = new ConcurrentHashMap<>();
     
     // Última requisição para controlar rate limit (1 req/segundo)
@@ -42,6 +44,11 @@ public class GeocodingService {
         
         this.viacepClient = WebClient.builder()
                 .baseUrl(VIACEP_BASE_URL)
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .build();
+        
+        this.osrmClient = WebClient.builder()
+                .baseUrl(OSRM_BASE_URL)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
@@ -225,6 +232,76 @@ public class GeocodingService {
     }
     
     /**
+     * Calcula distância e tempo de viagem usando OSRM (Open Source Routing Machine)
+     * Retorna distância real de rota e tempo estimado
+     * 
+     * @param origemLat Latitude do ponto de origem
+     * @param origemLon Longitude do ponto de origem
+     * @param destinoLat Latitude do ponto de destino
+     * @param destinoLon Longitude do ponto de destino
+     * @param profile Perfil de roteamento: "driving", "walking", "cycling" (padrão: "driving")
+     * @return Optional com RouteResult contendo distância (km) e tempo (minutos), ou empty se falhar
+     */
+    public Optional<RouteResult> calculateRoute(BigDecimal origemLat, BigDecimal origemLon,
+                                               BigDecimal destinoLat, BigDecimal destinoLon,
+                                               String profile) {
+        if (origemLat == null || origemLon == null || destinoLat == null || destinoLon == null) {
+            return Optional.empty();
+        }
+        
+        try {
+            // Formato OSRM: longitude,latitude;longitude,latitude
+            String coordinates = String.format("%s,%s;%s,%s",
+                origemLon, origemLat,
+                destinoLon, destinoLat);
+            
+            String routeProfile = (profile != null && !profile.isEmpty()) ? profile : "driving";
+            
+            OsrmRouteResponse response = osrmClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/route/v1/{profile}/{coordinates}")
+                            .queryParam("overview", "false")
+                            .queryParam("alternatives", "false")
+                            .queryParam("steps", "false")
+                            .build(routeProfile, coordinates))
+                    .retrieve()
+                    .bodyToMono(OsrmRouteResponse.class)
+                    .block();
+            
+            if (response != null && response.getCode() != null && 
+                "Ok".equals(response.getCode()) && 
+                response.getRoutes() != null && 
+                !response.getRoutes().isEmpty()) {
+                
+                OsrmRoute route = response.getRoutes().get(0);
+                
+                // distance está em metros, converter para km
+                double distanciaMetros = route.getDistance();
+                BigDecimal distanciaKm = BigDecimal.valueOf(distanciaMetros / 1000.0)
+                        .setScale(2, java.math.RoundingMode.HALF_UP);
+                
+                // duration está em segundos, converter para minutos
+                double tempoSegundos = route.getDuration();
+                int tempoMinutos = (int) Math.ceil(tempoSegundos / 60.0);
+                
+                RouteResult result = new RouteResult(distanciaKm, tempoMinutos);
+                logger.fine("Rota calculada via OSRM: " + distanciaKm + " km, " + tempoMinutos + " min");
+                return Optional.of(result);
+            }
+            
+            logger.warning("OSRM não retornou rota válida");
+            return Optional.empty();
+            
+        } catch (org.springframework.web.reactive.function.client.WebClientException e) {
+            logger.warning("Erro de conexão com OSRM: " + e.getMessage());
+            return Optional.empty();
+        } catch (Exception e) {
+            logger.warning("Erro ao calcular rota com OSRM: " + e.getMessage());
+            return Optional.empty();
+        }
+    }
+    
+    /**
      * Limpa o cache (útil para testes ou quando necessário)
      */
     public void clearCache() {
@@ -279,6 +356,54 @@ public class GeocodingService {
         public void setLon(String lon) { this.lon = lon; }
         public String getDisplayName() { return displayName; }
         public void setDisplayName(String displayName) { this.displayName = displayName; }
+    }
+    
+    // DTO para resultado de rota OSRM
+    public static class RouteResult {
+        private final BigDecimal distanciaKm;
+        private final int tempoMinutos;
+        
+        public RouteResult(BigDecimal distanciaKm, int tempoMinutos) {
+            this.distanciaKm = distanciaKm;
+            this.tempoMinutos = tempoMinutos;
+        }
+        
+        public BigDecimal getDistanciaKm() {
+            return distanciaKm;
+        }
+        
+        public int getTempoMinutos() {
+            return tempoMinutos;
+        }
+    }
+    
+    // Classes internas para deserialização JSON do OSRM
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private static class OsrmRouteResponse {
+        @JsonProperty("code")
+        private String code;
+        
+        @JsonProperty("routes")
+        private java.util.List<OsrmRoute> routes;
+        
+        public String getCode() { return code; }
+        public void setCode(String code) { this.code = code; }
+        public java.util.List<OsrmRoute> getRoutes() { return routes; }
+        public void setRoutes(java.util.List<OsrmRoute> routes) { this.routes = routes; }
+    }
+    
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private static class OsrmRoute {
+        @JsonProperty("distance")
+        private double distance;
+        
+        @JsonProperty("duration")
+        private double duration;
+        
+        public double getDistance() { return distance; }
+        public void setDistance(double distance) { this.distance = distance; }
+        public double getDuration() { return duration; }
+        public void setDuration(double duration) { this.duration = duration; }
     }
 }
 
