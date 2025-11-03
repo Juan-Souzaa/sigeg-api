@@ -26,10 +26,12 @@ public class RestauranteService {
     
     private final RestauranteRepository restauranteRepository;
     private final ModelMapper modelMapper;
+    private final GeocodingService geocodingService;
     
-    public RestauranteService(RestauranteRepository restauranteRepository, ModelMapper modelMapper) {
+    public RestauranteService(RestauranteRepository restauranteRepository, ModelMapper modelMapper, GeocodingService geocodingService) {
         this.restauranteRepository = restauranteRepository;
         this.modelMapper = modelMapper;
+        this.geocodingService = geocodingService;
     }
     
     public RestauranteResponseDTO criarRestaurante(RestauranteRequestDTO dto) {
@@ -38,6 +40,17 @@ public class RestauranteService {
         Restaurante restaurante = modelMapper.map(dto, Restaurante.class);
         restaurante.setStatus(StatusRestaurante.PENDING_APPROVAL);
         restaurante.setUser(currentUser);
+        
+        // Geocodificar endereço automaticamente
+        geocodingService.geocodeAddress(restaurante.getEndereco())
+                .ifPresentOrElse(
+                    coords -> {
+                        restaurante.setLatitude(coords.getLatitude());
+                        restaurante.setLongitude(coords.getLongitude());
+                        logger.info("Coordenadas geocodificadas para restaurante: " + restaurante.getEndereco());
+                    },
+                    () -> logger.warning("Não foi possível geocodificar endereço do restaurante: " + restaurante.getEndereco())
+                );
         
         Restaurante saved = restauranteRepository.save(restaurante);
         

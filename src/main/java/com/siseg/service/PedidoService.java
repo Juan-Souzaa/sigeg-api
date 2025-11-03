@@ -43,18 +43,20 @@ public class PedidoService {
     private final PratoRepository pratoRepository;
     private final EntregadorRepository entregadorRepository;
     private final NotificationService notificationService;
+    private final GeocodingService geocodingService;
     private final ModelMapper modelMapper;
-    
+
     public PedidoService(PedidoRepository pedidoRepository, ClienteRepository clienteRepository,
-                        RestauranteRepository restauranteRepository, PratoRepository pratoRepository,
-                        EntregadorRepository entregadorRepository, NotificationService notificationService,
-                        ModelMapper modelMapper) {
+                         RestauranteRepository restauranteRepository, PratoRepository pratoRepository,
+                         EntregadorRepository entregadorRepository, NotificationService notificationService,
+                         GeocodingService geocodingService, ModelMapper modelMapper) {
         this.pedidoRepository = pedidoRepository;
         this.clienteRepository = clienteRepository;
         this.restauranteRepository = restauranteRepository;
         this.pratoRepository = pratoRepository;
         this.entregadorRepository = entregadorRepository;
         this.notificationService = notificationService;
+        this.geocodingService = geocodingService;
         this.modelMapper = modelMapper;
     }
     
@@ -90,6 +92,25 @@ public class PedidoService {
         pedido.setObservacoes(dto.getObservacoes());
         pedido.setEnderecoEntrega(dto.getEnderecoEntrega());
         pedido.setStatus(StatusPedido.CREATED);
+        
+        // Geocodificar endereço de entrega automaticamente
+        // Otimização: se o endereço for o mesmo do cliente e ele já tiver coordenadas, reutilizar
+        if (cliente.getEndereco() != null && cliente.getEndereco().equals(dto.getEnderecoEntrega()) 
+            && cliente.getLatitude() != null && cliente.getLongitude() != null) {
+            pedido.setLatitudeEntrega(cliente.getLatitude());
+            pedido.setLongitudeEntrega(cliente.getLongitude());
+            logger.info("Coordenadas reutilizadas do cliente para endereço de entrega");
+        } else {
+            geocodingService.geocodeAddress(dto.getEnderecoEntrega())
+                    .ifPresentOrElse(
+                        coords -> {
+                            pedido.setLatitudeEntrega(coords.getLatitude());
+                            pedido.setLongitudeEntrega(coords.getLongitude());
+                            logger.info("Coordenadas geocodificadas para endereço de entrega: " + dto.getEnderecoEntrega());
+                        },
+                        () -> logger.warning("Não foi possível geocodificar endereço de entrega: " + dto.getEnderecoEntrega())
+                    );
+        }
         
         BigDecimal subtotal = BigDecimal.ZERO;
         
@@ -327,18 +348,19 @@ public class PedidoService {
         pedido.setEntregador(entregador);
         
         // Calcular tempo estimado de entrega baseado na distância real
-        // Usando coordenadas do entregador e do endereço de entrega (restaurante por enquanto)
-        if (entregador.getLatitude() != null && entregador.getLongitude() != null &&
-            pedido.getRestaurante() != null) {
+        // Distância = do restaurante até o endereço de entrega
+        if (pedido.getRestaurante() != null && 
+            pedido.getRestaurante().getLatitude() != null && 
+            pedido.getRestaurante().getLongitude() != null &&
+            pedido.getLatitudeEntrega() != null && 
+            pedido.getLongitudeEntrega() != null) {
             
-            // Por enquanto usa coordenadas do restaurante (pode ser melhorado com geocodificação do endereço)
-            // TODO: Implementar geocodificação do endereço de entrega para coordenadas reais
-            // Por enquanto usa coordenadas fictícias do restaurante ou calcula distância do entregador ao restaurante
-            BigDecimal distanciaKm = com.siseg.util.DistanceCalculator.calculateDistance(
-                entregador.getLatitude(),
-                entregador.getLongitude(),
-                BigDecimal.valueOf(-23.5505), // Latitude exemplo (São Paulo)
-                BigDecimal.valueOf(-46.6333)  // Longitude exemplo (São Paulo)
+            // Calcula distância do restaurante até o endereço de entrega
+            BigDecimal distanciaKm = DistanceCalculator.calculateDistance(
+                pedido.getRestaurante().getLatitude(),
+                pedido.getRestaurante().getLongitude(),
+                pedido.getLatitudeEntrega(),
+                pedido.getLongitudeEntrega()
             );
             
             if (distanciaKm != null && distanciaKm.compareTo(BigDecimal.ZERO) > 0) {
@@ -348,15 +370,18 @@ public class PedidoService {
                 );
                 java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(tempoMinutos);
                 pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
+                logger.info("Tempo estimado calculado: " + tempoMinutos + " minutos para distância de " + distanciaKm + " km");
             } else {
                 // Fallback para 30 minutos se não conseguir calcular ou distância inválida
                 java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(30);
                 pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
+                logger.warning("Distância inválida ou zero, usando tempo padrão de 30 minutos");
             }
         } else {
             // Fallback para 30 minutos se não houver coordenadas do restaurante ou do endereço de entrega
             java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(30);
             pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
+            logger.warning("Coordenadas não disponíveis para restaurante ou endereço de entrega, usando tempo padrão de 30 minutos");
         }
         
         Pedido saved = pedidoRepository.save(pedido);

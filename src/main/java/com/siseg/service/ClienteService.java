@@ -31,14 +31,17 @@ public class ClienteService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final ModelMapper modelMapper;
+    private final GeocodingService geocodingService;
 
     public ClienteService(ClienteRepository clienteRepository, UserRepository userRepository, 
-                         RoleRepository roleRepository, PasswordEncoder passwordEncoder, ModelMapper modelMapper) {
+                         RoleRepository roleRepository, PasswordEncoder passwordEncoder, ModelMapper modelMapper,
+                         GeocodingService geocodingService) {
         this.clienteRepository = clienteRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.modelMapper = modelMapper;
+        this.geocodingService = geocodingService;
     }
 
     public ClienteResponseDTO criarCliente(ClienteRequestDTO dto) {
@@ -59,6 +62,20 @@ public class ClienteService {
         // Criar Cliente
         Cliente cliente = modelMapper.map(dto, Cliente.class);
         cliente.setUser(savedUser);
+        
+        // Geocodificar endereço automaticamente
+        geocodingService.geocodeAddress(cliente.getEndereco())
+                .ifPresentOrElse(
+                    coords -> {
+                        cliente.setLatitude(coords.getLatitude());
+                        cliente.setLongitude(coords.getLongitude());
+                        java.util.logging.Logger.getLogger(ClienteService.class.getName())
+                                .info("Coordenadas geocodificadas para cliente: " + cliente.getEndereco());
+                    },
+                    () -> java.util.logging.Logger.getLogger(ClienteService.class.getName())
+                            .warning("Não foi possível geocodificar endereço do cliente: " + cliente.getEndereco())
+                );
+        
         Cliente saved = clienteRepository.save(cliente);
         
         return modelMapper.map(saved, ClienteResponseDTO.class);
