@@ -6,8 +6,10 @@ import com.siseg.model.Entregador;
 import com.siseg.model.Pedido;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
+import com.siseg.model.enumerations.ERole;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.TipoVeiculo;
+import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.PedidoRepository;
 import com.siseg.service.RastreamentoService;
 import com.siseg.util.TestJwtUtil;
@@ -21,10 +23,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+
 import java.math.BigDecimal;
 import java.util.Optional;
 
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -46,19 +48,24 @@ class RastreamentoControllerFunctionalTest {
     @MockBean
     private RastreamentoService rastreamentoService;
     
+    @MockBean
+    private ClienteRepository clienteRepository;
+    
     private String clienteToken;
     private Pedido pedido;
+    private Cliente cliente;
     
     @BeforeEach
     void setUp() throws Exception {
-        clienteToken = testJwtUtil.generateUserToken();
+        clienteToken = testJwtUtil.generateTokenForUser("testcliente", ERole.ROLE_CLIENTE);
         
-        User clienteUser = new User();
-        clienteUser.setId(1L);
+        User clienteUser = testJwtUtil.getOrCreateUser("testcliente", ERole.ROLE_CLIENTE);
         
-        Cliente cliente = new Cliente();
+        cliente = new Cliente();
         cliente.setId(1L);
         cliente.setUser(clienteUser);
+        
+        when(clienteRepository.findByUserId(clienteUser.getId())).thenReturn(Optional.of(cliente));
         
         Entregador entregador = new Entregador();
         entregador.setId(1L);
