@@ -147,3 +147,25 @@ CREATE TABLE IF NOT EXISTS pagamentos (
     atualizado_em TIMESTAMP,
     FOREIGN KEY (pedido_id) REFERENCES pedidos(id)
 );
+
+-- Tabela de avaliações
+CREATE TABLE IF NOT EXISTS avaliacoes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    pedido_id BIGINT NOT NULL,
+    cliente_id BIGINT NOT NULL,
+    restaurante_id BIGINT NOT NULL,
+    entregador_id BIGINT NULL,
+    nota_restaurante INT NOT NULL CHECK (nota_restaurante >= 1 AND nota_restaurante <= 5),
+    nota_entregador INT NULL CHECK (nota_entregador IS NULL OR (nota_entregador >= 1 AND nota_entregador <= 5)),
+    nota_pedido INT NOT NULL CHECK (nota_pedido >= 1 AND nota_pedido <= 5),
+    comentario_restaurante TEXT,
+    comentario_entregador TEXT,
+    comentario_pedido TEXT,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP NULL,
+    FOREIGN KEY (pedido_id) REFERENCES pedidos(id),
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id),
+    FOREIGN KEY (restaurante_id) REFERENCES restaurantes(id),
+    FOREIGN KEY (entregador_id) REFERENCES entregadores(id),
+    CONSTRAINT uk_avaliacao_cliente_pedido UNIQUE (cliente_id, pedido_id)
+);
