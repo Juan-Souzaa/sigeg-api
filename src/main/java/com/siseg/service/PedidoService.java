@@ -499,7 +499,7 @@ public class PedidoService {
                 }
             }
         } catch (Exception e) {
-            logger.fine("Não foi possível obter coordenadas do cliente: " + e.getMessage());
+            logger.warning("Erro ao obter coordenadas do cliente: " + e.getMessage());
         }
         
         final BigDecimal finalClienteLat = clienteLat;
@@ -518,7 +518,12 @@ public class PedidoService {
                     r.getLongitude()
                 );
                 
-                if (distanciaKm != null && distanciaKm.compareTo(BigDecimal.ZERO) > 0) {
+                if (distanciaKm != null) {
+                    // Se a distância for muito pequena (< 0.1 km = 100 metros), tratar como 0.1 km
+                    if (distanciaKm.compareTo(new BigDecimal("0.1")) < 0) {
+                        distanciaKm = new BigDecimal("0.1");
+                    }
+                    
                     dto.setDistanciaKm(distanciaKm);
                     int tempoMinutos = DistanceCalculator.estimateDeliveryTime(distanciaKm, "MOTO");
                     dto.setTempoEstimadoMinutos(tempoMinutos);
