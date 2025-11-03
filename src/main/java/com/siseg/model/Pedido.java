@@ -47,6 +47,12 @@ public class Pedido {
     @Column(nullable = false)
     private String enderecoEntrega;
 
+    @Column(precision = 10, scale = 8)
+    private BigDecimal latitudeEntrega;
+
+    @Column(precision = 11, scale = 8)
+    private BigDecimal longitudeEntrega;
+
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal subtotal;
 

@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS restaurantes (
     endereco VARCHAR(200) NOT NULL,
     status VARCHAR(20) NOT NULL CHECK (status IN ('PENDING_APPROVAL','APPROVED','REJECTED')),
     user_id BIGINT,
+    latitude DECIMAL(10, 8),
+    longitude DECIMAL(11, 8),
     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
@@ -69,6 +71,8 @@ CREATE TABLE IF NOT EXISTS clientes (
     email VARCHAR(100) NOT NULL UNIQUE,
     telefone VARCHAR(20) NOT NULL,
     endereco VARCHAR(200) NOT NULL,
+    latitude DECIMAL(10, 8),
+    longitude DECIMAL(11, 8),
     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
@@ -102,6 +106,8 @@ CREATE TABLE IF NOT EXISTS pedidos (
     troco DECIMAL(10,2),
     observacoes TEXT,
     endereco_entrega VARCHAR(200) NOT NULL,
+    latitude_entrega DECIMAL(10, 8),
+    longitude_entrega DECIMAL(11, 8),
     subtotal DECIMAL(10,2) NOT NULL,
     taxa_entrega DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     total DECIMAL(10,2) NOT NULL,
