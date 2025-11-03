@@ -26,7 +26,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -453,13 +452,55 @@ public class PedidoService {
         throw new AccessDeniedException("Você não tem permissão para acessar este pedido");
     }
     
+    @Transactional(readOnly = true)
     public Page<RestauranteBuscaDTO> buscarRestaurantes(String cozinha, Pageable pageable) {
         Page<Restaurante> restaurantes = restauranteRepository.buscarRestaurantesAprovados(cozinha, pageable);
         
+        BigDecimal clienteLat = null;
+        BigDecimal clienteLon = null;
+        
+        try {
+            User currentUser = SecurityUtils.getCurrentUser();
+            if (currentUser != null) {
+                Cliente cliente = clienteRepository.findByUserId(currentUser.getId()).orElse(null);
+                if (cliente != null && cliente.getLatitude() != null && cliente.getLongitude() != null) {
+                    clienteLat = cliente.getLatitude();
+                    clienteLon = cliente.getLongitude();
+                }
+            }
+        } catch (Exception e) {
+            logger.fine("Não foi possível obter coordenadas do cliente: " + e.getMessage());
+        }
+        
+        final BigDecimal finalClienteLat = clienteLat;
+        final BigDecimal finalClienteLon = clienteLon;
+        
         return restaurantes.map(r -> {
             RestauranteBuscaDTO dto = modelMapper.map(r, RestauranteBuscaDTO.class);
-            dto.setDistanciaKm(BigDecimal.valueOf(Math.random() * 10).setScale(2, RoundingMode.HALF_UP));
-            dto.setTempoEstimadoMinutos((int) (Math.random() * 30) + 15);
+            
+            if (finalClienteLat != null && finalClienteLon != null && 
+                r.getLatitude() != null && r.getLongitude() != null) {
+                
+                BigDecimal distanciaKm = DistanceCalculator.calculateDistance(
+                    finalClienteLat,
+                    finalClienteLon,
+                    r.getLatitude(),
+                    r.getLongitude()
+                );
+                
+                if (distanciaKm != null && distanciaKm.compareTo(BigDecimal.ZERO) > 0) {
+                    dto.setDistanciaKm(distanciaKm);
+                    int tempoMinutos = DistanceCalculator.estimateDeliveryTime(distanciaKm, "MOTO");
+                    dto.setTempoEstimadoMinutos(tempoMinutos);
+                } else {
+                    dto.setDistanciaKm(null);
+                    dto.setTempoEstimadoMinutos(null);
+                }
+            } else {
+                dto.setDistanciaKm(null);
+                dto.setTempoEstimadoMinutos(null);
+            }
+            
             return dto;
         });
     }
