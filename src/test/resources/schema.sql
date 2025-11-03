@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS restaurantes (
     telefone VARCHAR(20) NOT NULL,
     endereco VARCHAR(200) NOT NULL,
     status VARCHAR(20) NOT NULL CHECK (status IN ('PENDING_APPROVAL','APPROVED','REJECTED')),
-    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    user_id BIGINT,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 -- Tabela de pratos

@@ -34,6 +34,10 @@ public class Restaurante {
     @Column(nullable = false)
     private StatusRestaurante status = StatusRestaurante.PENDING_APPROVAL;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     @Column(nullable = false, updatable = false)
     private Instant criadoEm = Instant.now();
 }
