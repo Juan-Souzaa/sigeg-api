@@ -56,6 +56,12 @@ public class Pedido {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal total;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "entregador_id")
+    private Entregador entregador;
+
+    private Instant tempoEstimadoEntrega;
+
     @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<PedidoItem> itens = new ArrayList<>();
 
