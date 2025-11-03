@@ -2,13 +2,56 @@
 	"info": {
 		"_postman_id": "sigeg-api-collection",
 		"name": "SIGEG API - Sistema Integrado de Gestão de Entregas Gastronômicas",
-		"description": "Coleção completa para testar todos os endpoints da API SIGEG",
+		"description": "Coleção completa para testar todos os endpoints da API SIGEG.\n\nIMPORTANTE - Segurança e Ownership:\n- Todos os recursos (Restaurantes, Clientes, Pratos, Pedidos, Pagamentos, Entregadores) estão associados ao usuário autenticado\n- Usuários só podem acessar/editar seus próprios recursos\n- Administradores podem acessar todos os recursos\n- O clienteId não é mais necessário ao criar pedidos (obtido automaticamente do usuário autenticado)\n- Endpoints de aprovação/rejeição de restaurantes e entregadores requerem role ADMIN\n- Endpoints de entrega requerem role ENTREGADOR e status APPROVED\n- Restaurantes só podem marcar seus próprios pedidos como preparando\n- Entregadores só podem aceitar/marcar pedidos que estão disponíveis ou que foram atribuídos a eles\n\nGEOCODIFICAÇÃO AUTOMÁTICA:\n- Ao criar Restaurante, Cliente ou Pedido, o endereço é geocodificado automaticamente\n- Aceita CEP (formato: 12345678 ou 12345-678) ou endereço completo\n- Coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap Nominatim\n- Se a geocodificação falhar, o recurso ainda é criado (sem coordenadas)\n- Para pedidos: se o endereço de entrega for igual ao do cliente, as coordenadas são reutilizadas\n- Distância e tempo estimado de entrega são calculados usando coordenadas reais",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
 		{
 			"name": "Autenticação",
 			"item": [
+				{
+					"name": "Login como Admin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/authenticate",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"authenticate"
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const token = pm.response.text();",
+									"    pm.environment.set('jwt_token', token);",
+									"    pm.environment.set('admin_token', token);",
+									"    console.log('Token admin salvo:', token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
 				{
 					"name": "Registrar Usuário",
 					"request": {
@@ -37,7 +80,7 @@
 					}
 				},
 				{
-					"name": "Login",
+					"name": "Login (Genérico)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -48,7 +91,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+							"raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/auth/authenticate",
@@ -60,7 +103,8 @@
 								"auth",
 								"authenticate"
 							]
-						}
+						},
+						"description": "Login genérico - use variáveis {{username}} e {{password}} no environment"
 					},
 					"event": [
 						{
@@ -99,8 +143,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"nome\": \"Cliente Teste\",\n  \"email\": \"cliente@teste.com\",\n  \"telefone\": \"11912345678\",\n  \"endereco\": \"Rua do Cliente, 456 - São Paulo/SP\",\n  \"password\": \"123456\"\n}"
+							"raw": "{\n  \"nome\": \"Cliente Teste\",\n  \"email\": \"cliente@teste.com\",\n  \"telefone\": \"11912345678\",\n  \"endereco\": \"01310-100\",\n  \"password\": \"123456\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
 						},
+						"description": "Cria um novo cliente.\n\nGeocodificação Automática:\n- O endereço pode ser um CEP (12345678 ou 12345-678) ou endereço completo\n- As coordenadas (latitude/longitude) são calculadas automaticamente\n- Exemplo com CEP: \"01310-100\" ou \"01310100\"\n- Exemplo com endereço: \"Avenida Paulista, 1578, Bela Vista, São Paulo, SP\"",
 						"url": {
 							"raw": "{{baseUrl}}/api/clientes",
 							"host": [
@@ -146,7 +196,8 @@
 									"value": "nome"
 								}
 							]
-						}
+						},
+						"description": "Retorna apenas os clientes do usuário autenticado (ou todos se for ADMIN)"
 					}
 				},
 				{
@@ -193,8 +244,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"nome\": \"Restaurante Teste\",\n  \"email\": \"teste@restaurante.com\",\n  \"telefone\": \"11999999999\",\n  \"endereco\": \"Rua Teste, 123\"\n}"
+							"raw": "{\n  \"nome\": \"Restaurante Teste\",\n  \"email\": \"teste@restaurante.com\",\n  \"telefone\": \"11999999999\",\n  \"endereco\": \"01310-100\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
 						},
+						"description": "Cria um novo restaurante.\n\nGeocodificação Automática:\n- O endereço pode ser um CEP (12345678 ou 12345-678) ou endereço completo\n- As coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap\n- O restaurante é associado automaticamente ao usuário autenticado\n- Exemplo com CEP: \"01310-100\"\n- Exemplo com endereço: \"Avenida Paulista, 1578, Bela Vista, São Paulo, SP\"",
 						"url": {
 							"raw": "{{baseUrl}}/api/restaurantes",
 							"host": [
@@ -681,22 +738,22 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"restauranteId\": {{restaurante_id}},\n  \"metodoPagamento\": \"PIX\",\n  \"troco\": 0,\n  \"observacoes\": \"Sem cebola\",\n  \"enderecoEntrega\": \"Rua A, 123\",\n  \"itens\": [\n    {\n      \"pratoId\": {{prato_id}},\n      \"quantidade\": 2\n    }\n  ]\n}"
+							"raw": "{\n  \"restauranteId\": {{restaurante_id}},\n  \"metodoPagamento\": \"PIX\",\n  \"troco\": 0,\n  \"observacoes\": \"Sem cebola\",\n  \"enderecoEntrega\": \"01310-100\",\n  \"itens\": [\n    {\n      \"pratoId\": {{prato_id}},\n      \"quantidade\": 2\n    }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
 						},
+						"description": "Cria um novo pedido.\n\nGeocodificação Automática:\n- O clienteId é obtido automaticamente do usuário autenticado\n- O endereço de entrega pode ser CEP (12345678 ou 12345-678) ou endereço completo\n- Coordenadas (latitudeEntrega/longitudeEntrega) são calculadas automaticamente\n- Se o endereço for igual ao do cliente, as coordenadas são reutilizadas (otimização)\n- Ao aceitar pedido, a distância e tempo estimado são calculados usando coordenadas reais do restaurante → endereço de entrega\n- Exemplo com CEP: \"01310-100\"\n- Exemplo com endereço: \"Avenida Paulista, 1578, Bela Vista, São Paulo, SP\"",
 						"url": {
-							"raw": "{{baseUrl}}/api/pedidos?clienteId=1",
+							"raw": "{{baseUrl}}/api/pedidos",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
 								"pedidos"
-							],
-							"query": [
-								{
-									"key": "clienteId",
-									"value": "1"
-								}
 							]
 						}
 					},
@@ -761,6 +818,31 @@
 								"confirmar"
 							]
 						}
+					}
+				},
+				{
+					"name": "Marcar Pedido como Preparando",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/pedidos/{{pedido_id}}/preparando",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pedidos",
+								"{{pedido_id}}",
+								"preparando"
+							]
+						},
+						"description": "Marca pedido como PREPARING. Apenas o dono do restaurante."
 					}
 				}
 			]
@@ -857,6 +939,717 @@
 							]
 						}
 					}
+				}
+			]
+		},
+		{
+			"name": "Entregadores",
+			"item": [
+				{
+					"name": "Cadastrar Entregador",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nome\": \"Entregador Teste\",\n  \"email\": \"entregador@teste.com\",\n  \"cpf\": \"12345678901\",\n  \"telefone\": \"(11) 99999-9999\",\n  \"tipoVeiculo\": \"MOTO\",\n  \"placaVeiculo\": \"ABC1234\",\n  \"latitude\": -23.5505,\n  \"longitude\": -46.6333,\n  \"password\": \"senha123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores"
+							]
+						},
+						"description": "Cadastra um novo entregador com status PENDING_APPROVAL. Requer aprovação do admin."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('entregador_id', response.id);",
+									"    console.log('Entregador ID salvo:', response.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Listar Entregadores",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores?page=0&size=10&sort=nome",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								},
+								{
+									"key": "sort",
+									"value": "nome"
+								}
+							]
+						},
+						"description": "Lista entregadores. Admin vê todos, entregador vê apenas o próprio."
+					}
+				},
+				{
+					"name": "Buscar Entregador por ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/{{entregador_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"{{entregador_id}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Listar Entregadores por Status (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/status/PENDING_APPROVAL?page=0&size=10&sort=nome",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"status",
+								"PENDING_APPROVAL"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								},
+								{
+									"key": "sort",
+									"value": "nome"
+								}
+							]
+						},
+						"description": "Lista entregadores por status. Apenas ADMIN. Valores: PENDING_APPROVAL, APPROVED, REJECTED, UNAVAILABLE, AVAILABLE"
+					}
+				},
+				{
+					"name": "Aprovar Entregador (Admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/{{entregador_id}}/aprovar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"{{entregador_id}}",
+								"aprovar"
+							]
+						},
+						"description": "Aprova um entregador, mudando status para APPROVED. Apenas ADMIN."
+					}
+				},
+				{
+					"name": "Rejeitar Entregador (Admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/{{entregador_id}}/rejeitar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"{{entregador_id}}",
+								"rejeitar"
+							]
+						},
+						"description": "Rejeita um entregador, mudando status para REJECTED. Apenas ADMIN."
+					}
+				}
+			]
+		},
+		{
+			"name": "Entrega e Rastreamento",
+			"item": [
+				{
+					"name": "Marcar Pedido como Preparando (Restaurante)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/pedidos/{{pedido_id}}/preparando",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pedidos",
+								"{{pedido_id}}",
+								"preparando"
+							]
+						},
+						"description": "Marca pedido como PREPARING. Apenas o dono do restaurante pode executar. O pedido deve estar no status CONFIRMED."
+					}
+				},
+				{
+					"name": "Listar Pedidos Disponíveis para Entrega (Entregador)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/pedidos/disponiveis?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"pedidos",
+								"disponiveis"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista pedidos com status PREPARING sem entregador atribuído. Apenas entregadores aprovados (APPROVED)."
+					}
+				},
+				{
+					"name": "Aceitar Pedido (Entregador)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"description": "Entregador aceita um pedido disponível.\n\nCálculo de Distância e Tempo:\n- Usa coordenadas reais do restaurante e do endereço de entrega\n- Calcula distância usando fórmula de Haversine\n- Tempo estimado baseado na distância e tipo de veículo do entregador\n- Se coordenadas não estiverem disponíveis, usa fallback de 30 minutos",
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/pedidos/{{pedido_id}}/aceitar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"pedidos",
+								"{{pedido_id}}",
+								"aceitar"
+							]
+						},
+						"description": "Entregador aceita um pedido disponível. O pedido deve estar PREPARING e sem entregador atribuído. Calcula tempo estimado de entrega baseado na distância real."
+					}
+				},
+				{
+					"name": "Marcar Pedido como Saiu para Entrega",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/pedidos/{{pedido_id}}/saiu-entrega",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"pedidos",
+								"{{pedido_id}}",
+								"saiu-entrega"
+							]
+						},
+						"description": "Marca pedido como OUT_FOR_DELIVERY. Apenas o entregador associado ao pedido pode executar. O pedido deve estar PREPARING."
+					}
+				},
+				{
+					"name": "Marcar Pedido como Entregue",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/pedidos/{{pedido_id}}/entregue",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"pedidos",
+								"{{pedido_id}}",
+								"entregue"
+							]
+						},
+						"description": "Marca pedido como DELIVERED. Apenas o entregador associado ao pedido pode executar. O pedido deve estar OUT_FOR_DELIVERY."
+					}
+				},
+				{
+					"name": "Recusar Pedido (Entregador)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/pedidos/{{pedido_id}}/recusar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"pedidos",
+								"{{pedido_id}}",
+								"recusar"
+							]
+						},
+						"description": "Entregador recusa um pedido disponível (apenas log, não persiste nada)."
+					}
+				}
+			]
+		},
+		{
+			"name": "Testes de Segurança",
+			"item": [
+				{
+					"name": "Tentar Acessar Restaurante de Outro Usuário (403)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id_outro}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id_outro}}"
+							]
+						},
+						"description": "Esperado: 403 Forbidden - Acesso negado ao tentar acessar restaurante de outro usuário"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});",
+									"pm.test(\"Response contains error message\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.message).to.include(\"Acesso negado\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Tentar Aprovar Restaurante como Usuário Não-Admin (403)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/aprovar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"aprovar"
+							]
+						},
+						"description": "Esperado: 403 Forbidden - Apenas admins podem aprovar restaurantes"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Tentar Criar Prato em Restaurante de Outro Usuário (403)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "nome",
+									"value": "Prato Teste",
+									"type": "text"
+								},
+								{
+									"key": "descricao",
+									"value": "Descrição",
+									"type": "text"
+								},
+								{
+									"key": "preco",
+									"value": "25.50",
+									"type": "text"
+								},
+								{
+									"key": "categoria",
+									"value": "MAIN",
+									"type": "text"
+								},
+								{
+									"key": "disponivel",
+									"value": "true",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id_outro}}/pratos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id_outro}}",
+								"pratos"
+							]
+						},
+						"description": "Esperado: 403 Forbidden - Apenas o dono do restaurante pode criar pratos"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Tentar Acessar Cliente de Outro Usuário (403)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/{{cliente_id_outro}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"{{cliente_id_outro}}"
+							]
+						},
+						"description": "Esperado: 403 Forbidden - Usuários só podem acessar seus próprios clientes"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Tentar Acessar Pedido de Outro Usuário (403)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/pedidos/{{pedido_id_outro}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pedidos",
+								"{{pedido_id_outro}}"
+							]
+						},
+						"description": "Esperado: 403 Forbidden - Usuários só podem acessar pedidos do próprio cliente ou do restaurante que possuem"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Tentar Aprovar Entregador como Não-Admin (403)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/{{entregador_id}}/aprovar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"{{entregador_id}}",
+								"aprovar"
+							]
+						},
+						"description": "Esperado: 403 Forbidden - Apenas admins podem aprovar entregadores"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Tentar Aceitar Pedido como Não-Entregador (403)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/pedidos/{{pedido_id}}/aceitar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"pedidos",
+								"{{pedido_id}}",
+								"aceitar"
+							]
+						},
+						"description": "Esperado: 403 Forbidden - Apenas entregadores aprovados podem aceitar pedidos"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Tentar Marcar Pedido como Preparando sem Ser Dono (403)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/pedidos/{{pedido_id}}/preparando",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pedidos",
+								"{{pedido_id}}",
+								"preparando"
+							]
+						},
+						"description": "Esperado: 403 Forbidden - Apenas o dono do restaurante pode marcar como preparando"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
 				}
 			]
 		},
