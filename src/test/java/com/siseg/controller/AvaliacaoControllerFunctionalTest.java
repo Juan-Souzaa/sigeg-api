@@ -2,6 +2,7 @@ package com.siseg.controller;
 
 import com.siseg.dto.avaliacao.AvaliacaoRequestDTO;
 import com.siseg.dto.avaliacao.AvaliacaoResponseDTO;
+import com.siseg.dto.avaliacao.AvaliacaoRestauranteResponseDTO;
 import com.siseg.model.Cliente;
 import com.siseg.model.Entregador;
 import com.siseg.model.Pedido;
@@ -161,15 +162,15 @@ class AvaliacaoControllerFunctionalTest {
     
     @Test
     void deveListarAvaliacoesPorRestaurante() throws Exception {
-        AvaliacaoResponseDTO avaliacao1 = new AvaliacaoResponseDTO();
+        AvaliacaoRestauranteResponseDTO avaliacao1 = new AvaliacaoRestauranteResponseDTO();
         avaliacao1.setId(1L);
         avaliacao1.setNotaRestaurante(5);
         
-        AvaliacaoResponseDTO avaliacao2 = new AvaliacaoResponseDTO();
+        AvaliacaoRestauranteResponseDTO avaliacao2 = new AvaliacaoRestauranteResponseDTO();
         avaliacao2.setId(2L);
         avaliacao2.setNotaRestaurante(4);
         
-        Page<AvaliacaoResponseDTO> page = new PageImpl<>(Arrays.asList(avaliacao1, avaliacao2), PageRequest.of(0, 10), 2);
+        Page<AvaliacaoRestauranteResponseDTO> page = new PageImpl<>(Arrays.asList(avaliacao1, avaliacao2), PageRequest.of(0, 10), 2);
         
         when(avaliacaoService.listarAvaliacoesPorRestaurante(eq(1L), any())).thenReturn(page);
         
