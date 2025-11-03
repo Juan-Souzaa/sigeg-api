@@ -72,6 +72,13 @@ public class BuscaPedidoController {
         return ResponseEntity.ok(response);
     }
     
+    @PatchMapping("/pedidos/{id}/preparando")
+    @Operation(summary = "Marcar pedido como preparando (Restaurante)")
+    public ResponseEntity<PedidoResponseDTO> marcarComoPreparando(@PathVariable Long id) {
+        PedidoResponseDTO response = pedidoService.marcarComoPreparando(id);
+        return ResponseEntity.ok(response);
+    }
+    
     @PostMapping("/pedidos/{id}/pagamento")
     @Operation(summary = "Criar pagamento para pedido")
     public ResponseEntity<PagamentoResponseDTO> criarPagamento(@PathVariable Long id) {

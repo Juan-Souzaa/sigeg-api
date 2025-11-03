@@ -3,6 +3,7 @@ package com.siseg.service;
 import com.siseg.dto.cardapio.CardapioResponseDTO;
 import com.siseg.dto.cardapio.CategoriaCardapioDTO;
 import com.siseg.dto.cardapio.PratoCardapioDTO;
+import com.siseg.dto.entregador.EntregadorSimplesDTO;
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
 import com.siseg.dto.pedido.PedidoItemResponseDTO;
@@ -15,6 +16,7 @@ import com.siseg.model.*;
 import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.*;
+import com.siseg.util.DistanceCalculator;
 import com.siseg.util.SecurityUtils;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
@@ -27,24 +29,32 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 @Service
 public class PedidoService {
     
+    private static final Logger logger = Logger.getLogger(PedidoService.class.getName());
+    
     private final PedidoRepository pedidoRepository;
     private final ClienteRepository clienteRepository;
     private final RestauranteRepository restauranteRepository;
     private final PratoRepository pratoRepository;
+    private final EntregadorRepository entregadorRepository;
+    private final NotificationService notificationService;
     private final ModelMapper modelMapper;
     
     public PedidoService(PedidoRepository pedidoRepository, ClienteRepository clienteRepository,
                         RestauranteRepository restauranteRepository, PratoRepository pratoRepository,
+                        EntregadorRepository entregadorRepository, NotificationService notificationService,
                         ModelMapper modelMapper) {
         this.pedidoRepository = pedidoRepository;
         this.clienteRepository = clienteRepository;
         this.restauranteRepository = restauranteRepository;
         this.pratoRepository = pratoRepository;
+        this.entregadorRepository = entregadorRepository;
+        this.notificationService = notificationService;
         this.modelMapper = modelMapper;
     }
     
@@ -133,7 +143,260 @@ public class PedidoService {
         pedido.setStatus(StatusPedido.CONFIRMED);
         Pedido saved = pedidoRepository.save(pedido);
         
+        // Notificar cliente e restaurante
+        if (saved.getCliente() != null) {
+            notificationService.notifyOrderStatusChange(
+                saved.getId(), 
+                saved.getCliente().getEmail(),
+                saved.getCliente().getTelefone(),
+                "CONFIRMED"
+            );
+        }
+        if (saved.getRestaurante() != null) {
+            notificationService.notifyRestaurantNewOrder(
+                saved.getId(),
+                saved.getRestaurante().getEmail(),
+                saved.getTotal()
+            );
+        }
+        
         return mapearParaResponse(saved);
+    }
+
+    @Transactional
+    public PedidoResponseDTO marcarComoPreparando(Long id) {
+        Pedido pedido = pedidoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
+        
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Apenas o dono do restaurante pode marcar como preparando
+        if (!SecurityUtils.isAdmin() && (pedido.getRestaurante() == null || pedido.getRestaurante().getUser() == null ||
+            !pedido.getRestaurante().getUser().getId().equals(currentUser.getId()))) {
+            throw new AccessDeniedException("Você não tem permissão para atualizar este pedido");
+        }
+        
+        if (pedido.getStatus() != StatusPedido.CONFIRMED) {
+            throw new PedidoAlreadyProcessedException("Pedido deve estar CONFIRMED para ser marcado como PREPARING");
+        }
+        
+        pedido.setStatus(StatusPedido.PREPARING);
+        Pedido saved = pedidoRepository.save(pedido);
+        
+        // Notificar cliente
+        if (saved.getCliente() != null) {
+            notificationService.notifyOrderStatusChange(
+                saved.getId(),
+                saved.getCliente().getEmail(),
+                saved.getCliente().getTelefone(),
+                "PREPARING"
+            );
+        }
+        
+        return mapearParaResponse(saved);
+    }
+
+    @Transactional
+    public PedidoResponseDTO marcarSaiuEntrega(Long id) {
+        Pedido pedido = pedidoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
+        
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Apenas o entregador associado ao pedido pode marcar como saiu para entrega
+        if (!SecurityUtils.isAdmin()) {
+            if (pedido.getEntregador() == null || pedido.getEntregador().getUser() == null ||
+                !pedido.getEntregador().getUser().getId().equals(currentUser.getId())) {
+                throw new AccessDeniedException("Apenas o entregador associado pode atualizar este status");
+            }
+        }
+        
+        if (pedido.getStatus() != StatusPedido.PREPARING) {
+            throw new PedidoAlreadyProcessedException("Pedido deve estar PREPARING para ser marcado como OUT_FOR_DELIVERY");
+        }
+        
+        pedido.setStatus(StatusPedido.OUT_FOR_DELIVERY);
+        Pedido saved = pedidoRepository.save(pedido);
+        
+        // Notificar cliente
+        if (saved.getCliente() != null) {
+            notificationService.notifyOrderStatusChange(
+                saved.getId(),
+                saved.getCliente().getEmail(),
+                saved.getCliente().getTelefone(),
+                "OUT_FOR_DELIVERY"
+            );
+        }
+        
+        return mapearParaResponse(saved);
+    }
+
+    @Transactional
+    public PedidoResponseDTO marcarComoEntregue(Long id) {
+        Pedido pedido = pedidoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
+        
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Apenas o entregador associado ao pedido pode marcar como entregue
+        if (!SecurityUtils.isAdmin()) {
+            if (pedido.getEntregador() == null || pedido.getEntregador().getUser() == null ||
+                !pedido.getEntregador().getUser().getId().equals(currentUser.getId())) {
+                throw new AccessDeniedException("Apenas o entregador associado pode marcar como entregue");
+            }
+        }
+        
+        if (pedido.getStatus() != StatusPedido.OUT_FOR_DELIVERY) {
+            throw new PedidoAlreadyProcessedException("Pedido deve estar OUT_FOR_DELIVERY para ser marcado como DELIVERED");
+        }
+        
+        pedido.setStatus(StatusPedido.DELIVERED);
+        Pedido saved = pedidoRepository.save(pedido);
+        
+        // Notificar cliente e restaurante
+        if (saved.getCliente() != null) {
+            notificationService.notifyOrderStatusChange(
+                saved.getId(),
+                saved.getCliente().getEmail(),
+                saved.getCliente().getTelefone(),
+                "DELIVERED"
+            );
+        }
+        if (saved.getRestaurante() != null) {
+            notificationService.notifyRestaurantNewOrder(
+                saved.getId(),
+                saved.getRestaurante().getEmail(),
+                saved.getTotal()
+            );
+        }
+        
+        return mapearParaResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PedidoResponseDTO> listarPedidosDisponiveis(Pageable pageable) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Verificar se usuário é entregador aprovado
+        Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
+                .orElseThrow(() -> new AccessDeniedException("Usuário não é entregador"));
+        
+        if (entregador.getStatus() != com.siseg.model.enumerations.StatusEntregador.APPROVED) {
+            throw new AccessDeniedException("Entregador não está aprovado");
+        }
+        
+        Page<Pedido> pedidos = pedidoRepository.findByStatusAndEntregadorIsNull(StatusPedido.PREPARING, pageable);
+        
+        // Notificar entregadores sobre novos pedidos disponíveis (opcional - pode ser otimizado)
+        pedidos.getContent().forEach(pedido -> {
+            notificationService.notifyNewOrderAvailable(
+                pedido.getId(),
+                entregador.getEmail(),
+                entregador.getTelefone(),
+                pedido.getEnderecoEntrega(),
+                pedido.getTotal()
+            );
+        });
+        
+        return pedidos.map(this::mapearParaResponse);
+    }
+
+    @Transactional
+    public PedidoResponseDTO aceitarPedido(Long pedidoId) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        // Verificar se usuário é entregador aprovado
+        Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
+                .orElseThrow(() -> new AccessDeniedException("Usuário não é entregador"));
+        
+        if (entregador.getStatus() != com.siseg.model.enumerations.StatusEntregador.APPROVED) {
+            throw new AccessDeniedException("Entregador não está aprovado");
+        }
+        
+        Pedido pedido = pedidoRepository.findById(pedidoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + pedidoId));
+        
+        if (pedido.getStatus() != StatusPedido.PREPARING) {
+            throw new PedidoAlreadyProcessedException("Pedido deve estar PREPARING para ser aceito");
+        }
+        
+        if (pedido.getEntregador() != null) {
+            throw new PedidoAlreadyProcessedException("Pedido já foi aceito por outro entregador");
+        }
+        
+        pedido.setEntregador(entregador);
+        
+        // Calcular tempo estimado de entrega baseado na distância real
+        // Usando coordenadas do entregador e do endereço de entrega (restaurante por enquanto)
+        if (entregador.getLatitude() != null && entregador.getLongitude() != null &&
+            pedido.getRestaurante() != null) {
+            
+            // Por enquanto usa coordenadas do restaurante (pode ser melhorado com geocodificação do endereço)
+            // TODO: Implementar geocodificação do endereço de entrega para coordenadas reais
+            // Por enquanto usa coordenadas fictícias do restaurante ou calcula distância do entregador ao restaurante
+            BigDecimal distanciaKm = com.siseg.util.DistanceCalculator.calculateDistance(
+                entregador.getLatitude(),
+                entregador.getLongitude(),
+                BigDecimal.valueOf(-23.5505), // Latitude exemplo (São Paulo)
+                BigDecimal.valueOf(-46.6333)  // Longitude exemplo (São Paulo)
+            );
+            
+            if (distanciaKm != null && distanciaKm.compareTo(BigDecimal.ZERO) > 0) {
+                int tempoMinutos = DistanceCalculator.estimateDeliveryTime(
+                    distanciaKm, 
+                    entregador.getTipoVeiculo().name()
+                );
+                java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(tempoMinutos);
+                pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
+            } else {
+                // Fallback para 30 minutos se não conseguir calcular ou distância inválida
+                java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(30);
+                pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
+            }
+        } else {
+            // Fallback para 30 minutos se não houver coordenadas do restaurante ou do endereço de entrega
+            java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(30);
+            pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
+        }
+        
+        Pedido saved = pedidoRepository.save(pedido);
+        
+        // Notificar restaurante e cliente
+        if (saved.getRestaurante() != null) {
+            notificationService.notifyRestaurantNewOrder(
+                saved.getId(),
+                saved.getRestaurante().getEmail(),
+                saved.getTotal()
+            );
+        }
+        if (saved.getCliente() != null) {
+            notificationService.notifyOrderStatusChange(
+                saved.getId(),
+                saved.getCliente().getEmail(),
+                saved.getCliente().getTelefone(),
+                "ACEITO_POR_ENTREGADOR"
+            );
+        }
+        
+        return mapearParaResponse(saved);
+    }
+    
+    /**
+     * Recusar pedido (apenas log, não persiste)
+     * Método opcional mencionado no plano
+     */
+    public void recusarPedido(Long pedidoId) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        
+        Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
+                .orElseThrow(() -> new AccessDeniedException("Usuário não é entregador"));
+        
+        // Verificar se pedido existe
+        pedidoRepository.findById(pedidoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + pedidoId));
+        
+        logger.info(String.format("Entregador %s recusou o pedido %d", entregador.getNome(), pedidoId));
+        // Não persiste nada, apenas log para estatísticas futuras
     }
     
     private void validatePedidoOwnership(Pedido pedido) {
@@ -145,15 +408,24 @@ public class PedidoService {
         }
         
         // Verifica se o pedido pertence ao cliente autenticado
-        if (pedido.getCliente() == null || pedido.getCliente().getUser() == null || 
-            !pedido.getCliente().getUser().getId().equals(currentUser.getId())) {
-            
-            // Também verifica se é dono do restaurante
-            if (pedido.getRestaurante() == null || pedido.getRestaurante().getUser() == null ||
-                !pedido.getRestaurante().getUser().getId().equals(currentUser.getId())) {
-                throw new AccessDeniedException("Você não tem permissão para acessar este pedido");
-            }
+        if (pedido.getCliente() != null && pedido.getCliente().getUser() != null && 
+            pedido.getCliente().getUser().getId().equals(currentUser.getId())) {
+            return;
         }
+        
+        // Verifica se é dono do restaurante
+        if (pedido.getRestaurante() != null && pedido.getRestaurante().getUser() != null &&
+            pedido.getRestaurante().getUser().getId().equals(currentUser.getId())) {
+            return;
+        }
+        
+        // Verifica se é o entregador associado ao pedido
+        if (pedido.getEntregador() != null && pedido.getEntregador().getUser() != null &&
+            pedido.getEntregador().getUser().getId().equals(currentUser.getId())) {
+            return;
+        }
+        
+        throw new AccessDeniedException("Você não tem permissão para acessar este pedido");
     }
     
     public Page<RestauranteBuscaDTO> buscarRestaurantes(String cozinha, Pageable pageable) {
@@ -210,6 +482,17 @@ public class PedidoService {
         PedidoResponseDTO response = modelMapper.map(pedido, PedidoResponseDTO.class);
         response.setClienteId(pedido.getCliente().getId());
         response.setRestauranteId(pedido.getRestaurante().getId());
+        
+        // Incluir informações do entregador se houver
+        if (pedido.getEntregador() != null) {
+            EntregadorSimplesDTO entregadorDto = new EntregadorSimplesDTO();
+            entregadorDto.setId(pedido.getEntregador().getId());
+            entregadorDto.setNome(pedido.getEntregador().getNome());
+            entregadorDto.setTelefone(pedido.getEntregador().getTelefone());
+            response.setEntregador(entregadorDto);
+        }
+        
+        response.setTempoEstimadoEntrega(pedido.getTempoEstimadoEntrega());
         
         List<PedidoItemResponseDTO> itens = pedido.getItens().stream()
                 .map(item -> {
