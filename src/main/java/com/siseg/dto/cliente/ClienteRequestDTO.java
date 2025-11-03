@@ -22,7 +22,7 @@ public class ClienteRequestDTO {
     private String telefone;
 
     @NotBlank(message = "Endereço é obrigatório")
-    @Size(min = 10, max = 200, message = "Endereço deve ter entre 10 e 200 caracteres")
+    @Size(min = 8, max = 200, message = "Endereço deve ter entre 8 e 200 caracteres")
     private String endereco;
 
     @NotBlank(message = "Senha é obrigatória")
