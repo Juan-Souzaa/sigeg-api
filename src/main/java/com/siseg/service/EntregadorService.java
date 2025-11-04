@@ -2,7 +2,6 @@ package com.siseg.service;
 
 import com.siseg.dto.entregador.EntregadorRequestDTO;
 import com.siseg.dto.entregador.EntregadorResponseDTO;
-import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Entregador;
 import com.siseg.model.Role;
@@ -12,7 +11,9 @@ import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.repository.EntregadorRepository;
 import com.siseg.repository.RoleRepository;
 import com.siseg.repository.UserRepository;
+import com.siseg.mapper.EntregadorMapper;
 import com.siseg.util.SecurityUtils;
+import com.siseg.validator.EntregadorValidator;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -38,56 +39,58 @@ public class EntregadorService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final ModelMapper modelMapper;
+    private final EntregadorMapper entregadorMapper;
+    private final EntregadorValidator entregadorValidator;
 
     public EntregadorService(EntregadorRepository entregadorRepository, UserRepository userRepository,
-                            RoleRepository roleRepository, PasswordEncoder passwordEncoder, ModelMapper modelMapper) {
+                            RoleRepository roleRepository, PasswordEncoder passwordEncoder, 
+                            ModelMapper modelMapper, EntregadorMapper entregadorMapper,
+                            EntregadorValidator entregadorValidator) {
         this.entregadorRepository = entregadorRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.modelMapper = modelMapper;
+        this.entregadorMapper = entregadorMapper;
+        this.entregadorValidator = entregadorValidator;
     }
 
     public EntregadorResponseDTO criarEntregador(EntregadorRequestDTO dto) {
-        // Verificar se já existe usuário com este email
-        if (userRepository.findByUsername(dto.getEmail()).isPresent()) {
-            throw new IllegalArgumentException("Já existe um usuário com este email.");
-        }
-
-        // Verificar se já existe CPF cadastrado
-        if (entregadorRepository.findByCpf(dto.getCpf()).isPresent()) {
-            throw new IllegalArgumentException("Já existe um entregador com este CPF.");
-        }
-
-        // Criar User primeiro
+        entregadorValidator.validateEmailUnico(dto.getEmail());
+        entregadorValidator.validateCpfUnico(dto.getCpf());
+        
+        User savedUser = criarUserEntregador(dto);
+        Entregador saved = criarEntregadorBasico(dto, savedUser);
+        
+        logger.info(String.format("NOTIFICAÇÃO SIMULADA: Email enviado para %s - Entregador cadastrado com status PENDING_APPROVAL", saved.getEmail()));
+        
+        return entregadorMapper.toResponseDTO(saved, savedUser.getId());
+    }
+    
+    private User criarUserEntregador(EntregadorRequestDTO dto) {
         User user = new User();
         user.setUsername(dto.getEmail());
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
-
-        // Adicionar role de entregador
+        user.setRoles(obterRolesEntregador());
+        return userRepository.save(user);
+    }
+    
+    private Set<Role> obterRolesEntregador() {
         Set<Role> roles = new HashSet<>();
         Role entregadorRole = roleRepository.findByRoleName(ERole.ROLE_ENTREGADOR)
                 .orElseThrow(() -> new ResourceNotFoundException("Role ENTREGADOR não encontrada"));
         roles.add(entregadorRole);
-        user.setRoles(roles);
-
-        User savedUser = userRepository.save(user);
-
-        // Criar Entregador
+        return roles;
+    }
+    
+    private Entregador criarEntregadorBasico(EntregadorRequestDTO dto, User user) {
         Entregador entregador = modelMapper.map(dto, Entregador.class);
-        entregador.setUser(savedUser);
+        entregador.setUser(user);
         entregador.setStatus(StatusEntregador.PENDING_APPROVAL);
         entregador.setCriadoEm(Instant.now());
-
-        Entregador saved = entregadorRepository.save(entregador);
-
-        // Log de notificação (simulação - inicialmente via logs)
-        logger.info(String.format("NOTIFICAÇÃO SIMULADA: Email enviado para %s - Entregador cadastrado com status PENDING_APPROVAL", saved.getEmail()));
-
-        EntregadorResponseDTO response = modelMapper.map(saved, EntregadorResponseDTO.class);
-        response.setUserId(savedUser.getId());
-        return response;
+        return entregadorRepository.save(entregador);
     }
+    
 
     @Transactional(readOnly = true)
     public EntregadorResponseDTO buscarPorId(Long id) {
@@ -96,42 +99,35 @@ public class EntregadorService {
         
         validateEntregadorOwnership(entregador);
         
-        EntregadorResponseDTO response = modelMapper.map(entregador, EntregadorResponseDTO.class);
-        response.setUserId(entregador.getUser().getId());
-        return response;
+        return entregadorMapper.toResponseDTO(entregador, entregador.getUser().getId());
     }
 
     @Transactional(readOnly = true)
     public Page<EntregadorResponseDTO> listarTodos(Pageable pageable) {
-        User currentUser = SecurityUtils.getCurrentUser();
-        
-        // Admin pode ver todos os entregadores
         if (SecurityUtils.isAdmin()) {
-            Page<Entregador> entregadores = entregadorRepository.findAll(pageable);
-            return entregadores.map(e -> {
-                EntregadorResponseDTO dto = modelMapper.map(e, EntregadorResponseDTO.class);
-                dto.setUserId(e.getUser().getId());
-                return dto;
-            });
+            return listarTodosEntregadores(pageable);
         }
-        
-        // Entregador só vê seus próprios dados
+        return listarProprioEntregador(pageable);
+    }
+    
+    private Page<EntregadorResponseDTO> listarTodosEntregadores(Pageable pageable) {
+        Page<Entregador> entregadores = entregadorRepository.findAll(pageable);
+        return entregadores.map(e -> entregadorMapper.toResponseDTO(e, e.getUser().getId()));
+    }
+    
+    private Page<EntregadorResponseDTO> listarProprioEntregador(Pageable pageable) {
+        User currentUser = SecurityUtils.getCurrentUser();
         Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Entregador não encontrado para o usuário autenticado"));
         
-        EntregadorResponseDTO dto = modelMapper.map(entregador, EntregadorResponseDTO.class);
-        dto.setUserId(entregador.getUser().getId());
+        EntregadorResponseDTO dto = entregadorMapper.toResponseDTO(entregador, entregador.getUser().getId());
         return new PageImpl<>(List.of(dto), pageable, 1);
     }
 
     @Transactional(readOnly = true)
     public Page<EntregadorResponseDTO> findByStatus(StatusEntregador status, Pageable pageable) {
         Page<Entregador> entregadores = entregadorRepository.findByStatus(status, pageable);
-        return entregadores.map(e -> {
-            EntregadorResponseDTO dto = modelMapper.map(e, EntregadorResponseDTO.class);
-            dto.setUserId(e.getUser().getId());
-            return dto;
-        });
+        return entregadores.map(e -> entregadorMapper.toResponseDTO(e, e.getUser().getId()));
     }
 
     public EntregadorResponseDTO aprovarEntregador(Long id) {
@@ -142,12 +138,9 @@ public class EntregadorService {
         entregador.setAtualizadoEm(Instant.now());
         Entregador saved = entregadorRepository.save(entregador);
         
-        // Log de notificação (simulação)
         logger.info(String.format("NOTIFICAÇÃO SIMULADA: Email enviado para %s - Entregador aprovado", saved.getEmail()));
         
-        EntregadorResponseDTO response = modelMapper.map(saved, EntregadorResponseDTO.class);
-        response.setUserId(saved.getUser().getId());
-        return response;
+        return entregadorMapper.toResponseDTO(saved, saved.getUser().getId());
     }
 
     public EntregadorResponseDTO rejeitarEntregador(Long id) {
@@ -158,26 +151,13 @@ public class EntregadorService {
         entregador.setAtualizadoEm(Instant.now());
         Entregador saved = entregadorRepository.save(entregador);
         
-        // Log de notificação (simulação)
         logger.info(String.format("NOTIFICAÇÃO SIMULADA: Email enviado para %s - Entregador rejeitado", saved.getEmail()));
         
-        EntregadorResponseDTO response = modelMapper.map(saved, EntregadorResponseDTO.class);
-        response.setUserId(saved.getUser().getId());
-        return response;
+        return entregadorMapper.toResponseDTO(saved, saved.getUser().getId());
     }
 
     private void validateEntregadorOwnership(Entregador entregador) {
-        User currentUser = SecurityUtils.getCurrentUser();
-        
-        // Admin pode acessar qualquer entregador
-        if (SecurityUtils.isAdmin()) {
-            return;
-        }
-        
-        // Verifica se o entregador pertence ao usuário autenticado
-        if (entregador.getUser() == null || !entregador.getUser().getId().equals(currentUser.getId())) {
-            throw new AccessDeniedException("Você não tem permissão para acessar este entregador");
-        }
+        SecurityUtils.validateEntregadorOwnership(entregador);
     }
 }
 

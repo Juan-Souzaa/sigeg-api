@@ -1,12 +1,8 @@
 package com.siseg.service;
 
 import com.siseg.dto.cardapio.CardapioResponseDTO;
-import com.siseg.dto.cardapio.CategoriaCardapioDTO;
-import com.siseg.dto.cardapio.PratoCardapioDTO;
-import com.siseg.dto.entregador.EntregadorSimplesDTO;
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
-import com.siseg.dto.pedido.PedidoItemResponseDTO;
 import com.siseg.dto.restaurante.RestauranteBuscaDTO;
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
@@ -16,8 +12,10 @@ import com.siseg.model.*;
 import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.*;
-import com.siseg.util.DistanceCalculator;
+import com.siseg.mapper.PedidoMapper;
 import com.siseg.util.SecurityUtils;
+import com.siseg.validator.PedidoValidator;
+import com.siseg.util.TempoEstimadoCalculator;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -46,12 +44,17 @@ public class PedidoService {
     private final RastreamentoService rastreamentoService;
     private final AvaliacaoService avaliacaoService;
     private final ModelMapper modelMapper;
+    private final TempoEstimadoCalculator tempoEstimadoCalculator;
+    private final PedidoMapper pedidoMapper;
+    private final PedidoValidator pedidoValidator;
 
     public PedidoService(PedidoRepository pedidoRepository, ClienteRepository clienteRepository,
                          RestauranteRepository restauranteRepository, PratoRepository pratoRepository,
                          EntregadorRepository entregadorRepository, NotificationService notificationService,
                          GeocodingService geocodingService, RastreamentoService rastreamentoService,
-                         AvaliacaoService avaliacaoService, ModelMapper modelMapper) {
+                         AvaliacaoService avaliacaoService, ModelMapper modelMapper,
+                         TempoEstimadoCalculator tempoEstimadoCalculator, PedidoMapper pedidoMapper,
+                         PedidoValidator pedidoValidator) {
         this.pedidoRepository = pedidoRepository;
         this.clienteRepository = clienteRepository;
         this.restauranteRepository = restauranteRepository;
@@ -62,32 +65,58 @@ public class PedidoService {
         this.rastreamentoService = rastreamentoService;
         this.avaliacaoService = avaliacaoService;
         this.modelMapper = modelMapper;
+        this.tempoEstimadoCalculator = tempoEstimadoCalculator;
+        this.pedidoMapper = pedidoMapper;
+        this.pedidoValidator = pedidoValidator;
     }
     
     @Transactional
     public PedidoResponseDTO criarPedido(Long clienteId, PedidoRequestDTO dto) {
         User currentUser = SecurityUtils.getCurrentUser();
+        Cliente cliente = obterOuValidarCliente(clienteId, currentUser);
+        Restaurante restaurante = buscarRestaurante(dto.getRestauranteId());
         
-        Cliente cliente;
+        Pedido pedido = criarPedidoBasico(cliente, restaurante, dto);
+        processarGeocodificacaoEndereco(pedido, cliente, dto.getEnderecoEntrega());
+        processarItensPedido(pedido, dto.getItens());
+        calcularValoresPedido(pedido);
         
-        // Se clienteId for fornecido, valida ownership. Senão, obtém automaticamente do usuário autenticado
-        if (clienteId != null) {
-            cliente = clienteRepository.findById(clienteId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + clienteId));
-            
-            // Valida se o clienteId pertence ao usuário autenticado
-            if (!SecurityUtils.isAdmin() && (cliente.getUser() == null || !cliente.getUser().getId().equals(currentUser.getId()))) {
-                throw new AccessDeniedException("Você não tem permissão para criar pedidos para este cliente");
-            }
-        } else {
-            // Obtém o cliente do usuário autenticado
-            cliente = clienteRepository.findByUserId(currentUser.getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado para o usuário autenticado"));
+        Pedido saved = pedidoRepository.save(pedido);
+        return pedidoMapper.toResponseDTO(saved);
+    }
+    
+    private Cliente obterOuValidarCliente(Long clienteId, User currentUser) {
+        if (clienteId == null) {
+            return buscarClientePorUsuario(currentUser);
         }
         
-        Restaurante restaurante = restauranteRepository.findById(dto.getRestauranteId())
-                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + dto.getRestauranteId()));
-        
+        Cliente cliente = buscarClientePorId(clienteId);
+        validarPermissaoCliente(cliente, currentUser);
+        return cliente;
+    }
+    
+    private Cliente buscarClientePorUsuario(User currentUser) {
+        return clienteRepository.findByUserId(currentUser.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado para o usuário autenticado"));
+    }
+    
+    private Cliente buscarClientePorId(Long clienteId) {
+        return clienteRepository.findById(clienteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + clienteId));
+    }
+    
+    private void validarPermissaoCliente(Cliente cliente, User currentUser) {
+        if (!SecurityUtils.isAdmin() && (cliente.getUser() == null || !cliente.getUser().getId().equals(currentUser.getId()))) {
+            throw new AccessDeniedException("Você não tem permissão para criar pedidos para este cliente");
+        }
+    }
+    
+    private Restaurante buscarRestaurante(Long restauranteId) {
+        return restauranteRepository.findById(restauranteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
+    }
+    
+    private Pedido criarPedidoBasico(Cliente cliente, Restaurante restaurante, PedidoRequestDTO dto) {
         Pedido pedido = new Pedido();
         pedido.setCliente(cliente);
         pedido.setRestaurante(restaurante);
@@ -96,53 +125,72 @@ public class PedidoService {
         pedido.setObservacoes(dto.getObservacoes());
         pedido.setEnderecoEntrega(dto.getEnderecoEntrega());
         pedido.setStatus(StatusPedido.CREATED);
-        
-        // Geocodificar endereço de entrega automaticamente
-        // Otimização: se o endereço for o mesmo do cliente e ele já tiver coordenadas, reutilizar
-        if (cliente.getEndereco() != null && cliente.getEndereco().equals(dto.getEnderecoEntrega()) 
-            && cliente.getLatitude() != null && cliente.getLongitude() != null) {
+        return pedido;
+    }
+    
+    private void processarGeocodificacaoEndereco(Pedido pedido, Cliente cliente, String enderecoEntrega) {
+        if (podeReutilizarCoordenadasCliente(cliente, enderecoEntrega)) {
             pedido.setLatitudeEntrega(cliente.getLatitude());
             pedido.setLongitudeEntrega(cliente.getLongitude());
             logger.info("Coordenadas reutilizadas do cliente para endereço de entrega");
-        } else {
-            geocodingService.geocodeAddress(dto.getEnderecoEntrega())
-                    .ifPresentOrElse(
-                        coords -> {
-                            pedido.setLatitudeEntrega(coords.getLatitude());
-                            pedido.setLongitudeEntrega(coords.getLongitude());
-                            logger.info("Coordenadas geocodificadas para endereço de entrega: " + dto.getEnderecoEntrega());
-                        },
-                        () -> logger.warning("Não foi possível geocodificar endereço de entrega: " + dto.getEnderecoEntrega())
-                    );
+            return;
         }
         
+        geocodingService.geocodeAddress(enderecoEntrega)
+                .ifPresentOrElse(
+                    coords -> {
+                        pedido.setLatitudeEntrega(coords.getLatitude());
+                        pedido.setLongitudeEntrega(coords.getLongitude());
+                        logger.info("Coordenadas geocodificadas para endereço de entrega: " + enderecoEntrega);
+                    },
+                    () -> logger.warning("Não foi possível geocodificar endereço de entrega: " + enderecoEntrega)
+                );
+    }
+    
+    private boolean podeReutilizarCoordenadasCliente(Cliente cliente, String enderecoEntrega) {
+        return cliente.getEndereco() != null && 
+               cliente.getEndereco().equals(enderecoEntrega) &&
+               cliente.getLatitude() != null && 
+               cliente.getLongitude() != null;
+    }
+    
+    private void processarItensPedido(Pedido pedido, java.util.List<com.siseg.dto.pedido.PedidoItemRequestDTO> itensDto) {
         BigDecimal subtotal = BigDecimal.ZERO;
         
-        for (var itemDto : dto.getItens()) {
-            Prato prato = pratoRepository.findById(itemDto.getPratoId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Prato não encontrado com ID: " + itemDto.getPratoId()));
-            
-            if (!prato.getDisponivel()) {
-                throw new PratoNotAvailableException("Prato não disponível: " + prato.getNome());
-            }
-            
-            PedidoItem item = new PedidoItem();
-            item.setPedido(pedido);
-            item.setPrato(prato);
-            item.setQuantidade(itemDto.getQuantidade());
-            item.setPrecoUnitario(prato.getPreco());
-            item.setSubtotal(prato.getPreco().multiply(BigDecimal.valueOf(itemDto.getQuantidade())));
-            
+        for (var itemDto : itensDto) {
+            Prato prato = buscarPratoDisponivel(itemDto.getPratoId());
+            PedidoItem item = criarPedidoItem(pedido, prato, itemDto);
             pedido.getItens().add(item);
             subtotal = subtotal.add(item.getSubtotal());
         }
         
         pedido.setSubtotal(subtotal);
-        pedido.setTaxaEntrega(calcularTaxaEntrega(subtotal));
-        pedido.setTotal(pedido.getSubtotal().add(pedido.getTaxaEntrega()));
+    }
+    
+    private Prato buscarPratoDisponivel(Long pratoId) {
+        Prato prato = pratoRepository.findById(pratoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Prato não encontrado com ID: " + pratoId));
         
-        Pedido saved = pedidoRepository.save(pedido);
-        return mapearParaResponse(saved);
+        if (!prato.getDisponivel()) {
+            throw new PratoNotAvailableException("Prato não disponível: " + prato.getNome());
+        }
+        
+        return prato;
+    }
+    
+    private PedidoItem criarPedidoItem(Pedido pedido, Prato prato, com.siseg.dto.pedido.PedidoItemRequestDTO itemDto) {
+        PedidoItem item = new PedidoItem();
+        item.setPedido(pedido);
+        item.setPrato(prato);
+        item.setQuantidade(itemDto.getQuantidade());
+        item.setPrecoUnitario(prato.getPreco());
+        item.setSubtotal(prato.getPreco().multiply(BigDecimal.valueOf(itemDto.getQuantidade())));
+        return item;
+    }
+    
+    private void calcularValoresPedido(Pedido pedido) {
+        pedido.setTaxaEntrega(calcularTaxaEntrega(pedido.getSubtotal()));
+        pedido.setTotal(pedido.getSubtotal().add(pedido.getTaxaEntrega()));
     }
     
     public PedidoResponseDTO buscarPorId(Long id) {
@@ -151,7 +199,7 @@ public class PedidoService {
         
         validatePedidoOwnership(pedido);
         
-        PedidoResponseDTO response = mapearParaResponse(pedido);
+        PedidoResponseDTO response = pedidoMapper.toResponseDTO(pedido);
         
         if (pedido.getStatus() == StatusPedido.OUT_FOR_DELIVERY) {
             try {
@@ -195,7 +243,7 @@ public class PedidoService {
             );
         }
         
-        return mapearParaResponse(saved);
+        return pedidoMapper.toResponseDTO(saved);
     }
 
     @Transactional
@@ -203,32 +251,25 @@ public class PedidoService {
         Pedido pedido = pedidoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
         
-        User currentUser = SecurityUtils.getCurrentUser();
-        
-        // Apenas o dono do restaurante pode marcar como preparando
-        if (!SecurityUtils.isAdmin() && (pedido.getRestaurante() == null || pedido.getRestaurante().getUser() == null ||
-            !pedido.getRestaurante().getUser().getId().equals(currentUser.getId()))) {
-            throw new AccessDeniedException("Você não tem permissão para atualizar este pedido");
-        }
-        
-        if (pedido.getStatus() != StatusPedido.CONFIRMED) {
-            throw new PedidoAlreadyProcessedException("Pedido deve estar CONFIRMED para ser marcado como PREPARING");
-        }
+        SecurityUtils.validateRestauranteOwnership(pedido.getRestaurante());
+        pedidoValidator.validateStatusPreparo(pedido);
         
         pedido.setStatus(StatusPedido.PREPARING);
         Pedido saved = pedidoRepository.save(pedido);
         
-        // Notificar cliente
-        if (saved.getCliente() != null) {
+        notificarClienteStatusPedido(saved, "PREPARING");
+        
+        return pedidoMapper.toResponseDTO(saved);
+    }
+    private void notificarClienteStatusPedido(Pedido pedido, String status) {
+        if (pedido.getCliente() != null) {
             notificationService.notifyOrderStatusChange(
-                saved.getId(),
-                saved.getCliente().getEmail(),
-                saved.getCliente().getTelefone(),
-                "PREPARING"
+                pedido.getId(),
+                pedido.getCliente().getEmail(),
+                pedido.getCliente().getTelefone(),
+                status
             );
         }
-        
-        return mapearParaResponse(saved);
     }
 
     @Transactional
@@ -238,7 +279,6 @@ public class PedidoService {
         
         User currentUser = SecurityUtils.getCurrentUser();
         
-        // Apenas o entregador associado ao pedido pode marcar como saiu para entrega
         if (!SecurityUtils.isAdmin()) {
             if (pedido.getEntregador() == null || pedido.getEntregador().getUser() == null ||
                 !pedido.getEntregador().getUser().getId().equals(currentUser.getId())) {
@@ -276,7 +316,7 @@ public class PedidoService {
             );
         }
         
-        return mapearParaResponse(saved);
+        return pedidoMapper.toResponseDTO(saved);
     }
 
     @Transactional
@@ -286,7 +326,6 @@ public class PedidoService {
         
         User currentUser = SecurityUtils.getCurrentUser();
         
-        // Apenas o entregador associado ao pedido pode marcar como entregue
         if (!SecurityUtils.isAdmin()) {
             if (pedido.getEntregador() == null || pedido.getEntregador().getUser() == null ||
                 !pedido.getEntregador().getUser().getId().equals(currentUser.getId())) {
@@ -303,7 +342,6 @@ public class PedidoService {
         
         logger.info("Pedido " + saved.getId() + " marcado como entregue. Cliente pode criar avaliação agora.");
         
-        // Notificar cliente e restaurante
         if (saved.getCliente() != null) {
             notificationService.notifyOrderStatusChange(
                 saved.getId(),
@@ -320,14 +358,13 @@ public class PedidoService {
             );
         }
         
-        return mapearParaResponse(saved);
+        return pedidoMapper.toResponseDTO(saved);
     }
 
     @Transactional(readOnly = true)
     public Page<PedidoResponseDTO> listarPedidosDisponiveis(Pageable pageable) {
         User currentUser = SecurityUtils.getCurrentUser();
         
-        // Verificar se usuário é entregador aprovado
         Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
                 .orElseThrow(() -> new AccessDeniedException("Usuário não é entregador"));
         
@@ -337,7 +374,6 @@ public class PedidoService {
         
         Page<Pedido> pedidos = pedidoRepository.findByStatusAndEntregadorIsNull(StatusPedido.PREPARING, pageable);
         
-        // Notificar entregadores sobre novos pedidos disponíveis (opcional - pode ser otimizado)
         pedidos.getContent().forEach(pedido -> {
             notificationService.notifyNewOrderAvailable(
                 pedido.getId(),
@@ -348,301 +384,197 @@ public class PedidoService {
             );
         });
         
-        return pedidos.map(this::mapearParaResponse);
+        return pedidos.map(pedidoMapper::toResponseDTO);
     }
 
     @Transactional
     public PedidoResponseDTO aceitarPedido(Long pedidoId) {
         User currentUser = SecurityUtils.getCurrentUser();
+        Entregador entregador = pedidoValidator.validateEntregadorAprovado(currentUser);
+        Pedido pedido = buscarPedidoValido(pedidoId);
         
-        // Verificar se usuário é entregador aprovado
-        Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
-                .orElseThrow(() -> new AccessDeniedException("Usuário não é entregador"));
-        
-        if (entregador.getStatus() != com.siseg.model.enumerations.StatusEntregador.APPROVED) {
-            throw new AccessDeniedException("Entregador não está aprovado");
-        }
-        
-        Pedido pedido = pedidoRepository.findById(pedidoId)
-                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + pedidoId));
-        
-        if (pedido.getStatus() != StatusPedido.PREPARING) {
-            throw new PedidoAlreadyProcessedException("Pedido deve estar PREPARING para ser aceito");
-        }
-        
-        if (pedido.getEntregador() != null) {
-            throw new PedidoAlreadyProcessedException("Pedido já foi aceito por outro entregador");
-        }
+        pedidoValidator.validatePedidoAceitavel(pedido);
         
         pedido.setEntregador(entregador);
-        
-        // Calcular tempo estimado de entrega baseado na distância real
-        // Distância = do restaurante até o endereço de entrega
-        if (pedido.getRestaurante() != null && 
-            pedido.getRestaurante().getLatitude() != null && 
-            pedido.getRestaurante().getLongitude() != null &&
-            pedido.getLatitudeEntrega() != null && 
-            pedido.getLongitudeEntrega() != null) {
-            
-            BigDecimal distanciaKm = null;
-            int tempoMinutos = 0;
-            
-            // Tentar calcular usando OSRM (rota real)
-            try {
-                String profile = "driving";
-                if (entregador.getTipoVeiculo() != null) {
-                    String tipoVeiculo = entregador.getTipoVeiculo().name();
-                    if ("BICICLETA".equalsIgnoreCase(tipoVeiculo)) {
-                        profile = "cycling";
-                    }
-                }
-                
-                java.util.Optional<GeocodingService.RouteResult> routeResult = 
-                    geocodingService.calculateRoute(
-                        pedido.getRestaurante().getLatitude(),
-                        pedido.getRestaurante().getLongitude(),
-                        pedido.getLatitudeEntrega(),
-                        pedido.getLongitudeEntrega(),
-                        profile
-                    );
-                
-                if (routeResult.isPresent()) {
-                    distanciaKm = routeResult.get().getDistanciaKm();
-                    tempoMinutos = routeResult.get().getTempoMinutos();
-                    logger.info("Marcar como preparando - Pedido ID " + pedido.getId() + ": Distância calculada via OSRM (profile=" + profile + ") = " + distanciaKm + " km, Tempo = " + tempoMinutos + " min");
-                }
-            } catch (Exception e) {
-                logger.fine("Erro ao calcular rota via OSRM, usando fallback Haversine: " + e.getMessage());
-            }
-            
-            // Fallback para Haversine se OSRM falhar ou não retornar resultado
-            if (distanciaKm == null) {
-                distanciaKm = DistanceCalculator.calculateDistance(
-                    pedido.getRestaurante().getLatitude(),
-                    pedido.getRestaurante().getLongitude(),
-                    pedido.getLatitudeEntrega(),
-                    pedido.getLongitudeEntrega()
-                );
-                
-                if (distanciaKm != null && distanciaKm.compareTo(BigDecimal.ZERO) > 0) {
-                    tempoMinutos = DistanceCalculator.estimateDeliveryTime(
-                        distanciaKm, 
-                        entregador.getTipoVeiculo() != null ? entregador.getTipoVeiculo().name() : "MOTO"
-                    );
-                    logger.info("Marcar como preparando - Pedido ID " + pedido.getId() + ": Distância calculada via Haversine = " + distanciaKm + " km, Tempo = " + tempoMinutos + " min");
-                }
-            }
-            
-            if (distanciaKm != null && distanciaKm.compareTo(BigDecimal.ZERO) > 0) {
-                java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(tempoMinutos);
-                pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
-                logger.info("Tempo estimado calculado: " + tempoMinutos + " minutos para distância de " + distanciaKm + " km");
-            } else {
-                // Fallback para 30 minutos se não conseguir calcular ou distância inválida
-                java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(30);
-                pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
-                logger.warning("Distância inválida ou zero, usando tempo padrão de 30 minutos");
-            }
-        } else {
-            // Fallback para 30 minutos se não houver coordenadas do restaurante ou do endereço de entrega
-            java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(30);
-            pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
-            logger.warning("Coordenadas não disponíveis para restaurante ou endereço de entrega, usando tempo padrão de 30 minutos");
-        }
+        calcularEAtualizarTempoEstimadoEntrega(pedido, entregador);
         
         Pedido saved = pedidoRepository.save(pedido);
+        enviarNotificacoesAceitePedido(saved);
         
-        // Notificar restaurante e cliente
-        if (saved.getRestaurante() != null) {
+        return pedidoMapper.toResponseDTO(saved);
+    }
+    
+    private Pedido buscarPedidoValido(Long pedidoId) {
+        return pedidoRepository.findById(pedidoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + pedidoId));
+    }
+    
+    private void calcularEAtualizarTempoEstimadoEntrega(Pedido pedido, Entregador entregador) {
+        if (!temCoordenadasCompletas(pedido)) {
+            aplicarTempoPadraoEntrega(pedido);
+            return;
+        }
+        
+        var resultado = tempoEstimadoCalculator.calculateDistanceAndTime(
+            pedido.getRestaurante().getLatitude(),
+            pedido.getRestaurante().getLongitude(),
+            pedido.getLatitudeEntrega(),
+            pedido.getLongitudeEntrega(),
+            entregador.getTipoVeiculo()
+        );
+        
+        if (resultado.getDistanciaKm() != null && resultado.getTempoMinutos() > 0) {
+            java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(resultado.getTempoMinutos());
+            pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
+            logger.info(String.format("Tempo estimado calculado: %d minutos para distância de %s km (OSRM: %s)",
+                resultado.getTempoMinutos(), resultado.getDistanciaKm(), resultado.isUsadoOSRM()));
+        } else {
+            aplicarTempoPadraoEntrega(pedido);
+        }
+    }
+    
+    private boolean temCoordenadasCompletas(Pedido pedido) {
+        return pedido.getRestaurante() != null && 
+               pedido.getRestaurante().getLatitude() != null && 
+               pedido.getRestaurante().getLongitude() != null &&
+               pedido.getLatitudeEntrega() != null && 
+               pedido.getLongitudeEntrega() != null;
+    }
+    
+    private void aplicarTempoPadraoEntrega(Pedido pedido) {
+        java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(
+            com.siseg.util.VehicleConstants.TEMPO_PADRAO_ENTREGA_MINUTOS);
+        pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
+        logger.warning("Coordenadas não disponíveis, usando tempo padrão de " 
+            + com.siseg.util.VehicleConstants.TEMPO_PADRAO_ENTREGA_MINUTOS + " minutos");
+    }
+    
+    private void enviarNotificacoesAceitePedido(Pedido pedido) {
+        if (pedido.getRestaurante() != null) {
             notificationService.notifyRestaurantNewOrder(
-                saved.getId(),
-                saved.getRestaurante().getEmail(),
-                saved.getTotal()
+                pedido.getId(),
+                pedido.getRestaurante().getEmail(),
+                pedido.getTotal()
             );
         }
-        if (saved.getCliente() != null) {
+        
+        if (pedido.getCliente() != null) {
             notificationService.notifyOrderStatusChange(
-                saved.getId(),
-                saved.getCliente().getEmail(),
-                saved.getCliente().getTelefone(),
+                pedido.getId(),
+                pedido.getCliente().getEmail(),
+                pedido.getCliente().getTelefone(),
                 "ACEITO_POR_ENTREGADOR"
             );
         }
-        
-        return mapearParaResponse(saved);
     }
     
-    /**
-     * Recusar pedido (apenas log, não persiste)
-     * Método opcional mencionado no plano
-     */
     public void recusarPedido(Long pedidoId) {
         User currentUser = SecurityUtils.getCurrentUser();
         
         Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
                 .orElseThrow(() -> new AccessDeniedException("Usuário não é entregador"));
         
-        // Verificar se pedido existe
         pedidoRepository.findById(pedidoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + pedidoId));
         
         logger.info(String.format("Entregador %s recusou o pedido %d", entregador.getNome(), pedidoId));
-        // Não persiste nada, apenas log para estatísticas futuras
     }
     
     private void validatePedidoOwnership(Pedido pedido) {
-        User currentUser = SecurityUtils.getCurrentUser();
-        
-        // Admin pode acessar qualquer pedido
-        if (SecurityUtils.isAdmin()) {
-            return;
-        }
-        
-        // Verifica se o pedido pertence ao cliente autenticado
-        if (pedido.getCliente() != null && pedido.getCliente().getUser() != null && 
-            pedido.getCliente().getUser().getId().equals(currentUser.getId())) {
-            return;
-        }
-        
-        // Verifica se é dono do restaurante
-        if (pedido.getRestaurante() != null && pedido.getRestaurante().getUser() != null &&
-            pedido.getRestaurante().getUser().getId().equals(currentUser.getId())) {
-            return;
-        }
-        
-        // Verifica se é o entregador associado ao pedido
-        if (pedido.getEntregador() != null && pedido.getEntregador().getUser() != null &&
-            pedido.getEntregador().getUser().getId().equals(currentUser.getId())) {
-            return;
-        }
-        
-        throw new AccessDeniedException("Você não tem permissão para acessar este pedido");
+        SecurityUtils.validatePedidoOwnership(pedido);
     }
     
     @Transactional(readOnly = true)
     public Page<RestauranteBuscaDTO> buscarRestaurantes(String cozinha, Pageable pageable) {
         Page<Restaurante> restaurantes = restauranteRepository.buscarRestaurantesAprovados(cozinha, pageable);
         
-        BigDecimal clienteLat = null;
-        BigDecimal clienteLon = null;
+        var coordenadasCliente = obterCoordenadasCliente();
         
-        try {
-            User currentUser = SecurityUtils.getCurrentUser();
-            if (currentUser != null) {
-                Cliente cliente = clienteRepository.findByUserId(currentUser.getId()).orElse(null);
-                if (cliente != null && cliente.getLatitude() != null && cliente.getLongitude() != null) {
-                    clienteLat = cliente.getLatitude();
-                    clienteLon = cliente.getLongitude();
-                }
-            }
-        } catch (Exception e) {
-            logger.warning("Erro ao obter coordenadas do cliente: " + e.getMessage());
-        }
-        
-        final BigDecimal finalClienteLat = clienteLat;
-        final BigDecimal finalClienteLon = clienteLon;
-        
-        return restaurantes.map(r -> {
-            RestauranteBuscaDTO dto = modelMapper.map(r, RestauranteBuscaDTO.class);
+        return restaurantes.map(restaurante -> {
+            RestauranteBuscaDTO dto = modelMapper.map(restaurante, RestauranteBuscaDTO.class);
             
-            if (finalClienteLat != null && finalClienteLon != null && 
-                r.getLatitude() != null && r.getLongitude() != null) {
-                
-                BigDecimal distanciaKm = null;
-                int tempoMinutos = 0;
-                
-                // Tentar calcular usando OSRM (rota real)
-                try {
-                    java.util.Optional<GeocodingService.RouteResult> routeResult = 
-                        geocodingService.calculateRoute(
-                            finalClienteLat,
-                            finalClienteLon,
-                            r.getLatitude(),
-                            r.getLongitude(),
-                            "driving"
-                        );
-                    
-                    if (routeResult.isPresent()) {
-                        distanciaKm = routeResult.get().getDistanciaKm();
-                        tempoMinutos = routeResult.get().getTempoMinutos();
-                        logger.info("Busca restaurantes - Restaurante ID " + r.getId() + ": Distância calculada via OSRM = " + distanciaKm + " km, Tempo = " + tempoMinutos + " min");
-                    }
-                } catch (Exception e) {
-                    logger.fine("Erro ao calcular rota via OSRM, usando fallback Haversine: " + e.getMessage());
-                }
-                
-                // Fallback para Haversine se OSRM falhar ou não retornar resultado
-                if (distanciaKm == null) {
-                    distanciaKm = DistanceCalculator.calculateDistance(
-                        finalClienteLat,
-                        finalClienteLon,
-                        r.getLatitude(),
-                        r.getLongitude()
-                    );
-                    
-                    if (distanciaKm != null) {
-                        tempoMinutos = DistanceCalculator.estimateDeliveryTime(distanciaKm, "MOTO");
-                        logger.info("Busca restaurantes - Restaurante ID " + r.getId() + ": Distância calculada via Haversine = " + distanciaKm + " km, Tempo = " + tempoMinutos + " min");
-                    }
-                }
-                
-                if (distanciaKm != null) {
-                    // Se a distância for muito pequena (< 0.1 km = 100 metros), tratar como 0.1 km
-                    if (distanciaKm.compareTo(new BigDecimal("0.1")) < 0) {
-                        distanciaKm = new BigDecimal("0.1");
-                        tempoMinutos = Math.max(1, tempoMinutos);
-                    }
-                    
-                    dto.setDistanciaKm(distanciaKm);
-                    dto.setTempoEstimadoMinutos(tempoMinutos);
-                } else {
-                    dto.setDistanciaKm(null);
-                    dto.setTempoEstimadoMinutos(null);
-                }
-            } else {
-                dto.setDistanciaKm(null);
-                dto.setTempoEstimadoMinutos(null);
+            if (coordenadasCliente != null && temCoordenadas(restaurante)) {
+                calcularDistanciaETempoRestaurante(dto, restaurante, coordenadasCliente);
             }
             
-            BigDecimal mediaAvaliacao = avaliacaoService.calcularMediaRestaurante(r.getId());
-            long totalAvaliacoes = avaliacaoService.contarAvaliacoesRestaurante(r.getId());
-            
-            dto.setMediaAvaliacao(mediaAvaliacao);
-            dto.setTotalAvaliacoes(totalAvaliacoes);
+            adicionarAvaliacoesRestaurante(dto, restaurante.getId());
             
             return dto;
         });
     }
     
+    private Coordenadas obterCoordenadasCliente() {
+        try {
+            User currentUser = SecurityUtils.getCurrentUser();
+            if (currentUser == null) {
+                return null;
+            }
+            
+            return buscarCoordenadasCliente(currentUser);
+        } catch (Exception e) {
+            logger.warning("Erro ao obter coordenadas do cliente: " + e.getMessage());
+            return null;
+        }
+    }
+    
+    private Coordenadas buscarCoordenadasCliente(User currentUser) {
+        Cliente cliente = clienteRepository.findByUserId(currentUser.getId()).orElse(null);
+        if (cliente == null) {
+            return null;
+        }
+        
+        if (temCoordenadasValidas(cliente)) {
+            return new Coordenadas(cliente.getLatitude(), cliente.getLongitude());
+        }
+        
+        return null;
+    }
+    
+    private boolean temCoordenadasValidas(Cliente cliente) {
+        return cliente.getLatitude() != null && cliente.getLongitude() != null;
+    }
+    
+    private boolean temCoordenadas(Restaurante restaurante) {
+        return restaurante.getLatitude() != null && restaurante.getLongitude() != null;
+    }
+    
+    private void calcularDistanciaETempoRestaurante(RestauranteBuscaDTO dto, Restaurante restaurante, Coordenadas coordenadasCliente) {
+        var resultado = tempoEstimadoCalculator.calculateDistanceAndTime(
+            coordenadasCliente.latitude(),
+            coordenadasCliente.longitude(),
+            restaurante.getLatitude(),
+            restaurante.getLongitude(),
+            null
+        );
+        
+        if (resultado.getDistanciaKm() != null) {
+            dto.setDistanciaKm(resultado.getDistanciaKm());
+            dto.setTempoEstimadoMinutos(resultado.getTempoMinutos());
+        }
+    }
+    
+    private void adicionarAvaliacoesRestaurante(RestauranteBuscaDTO dto, Long restauranteId) {
+        BigDecimal mediaAvaliacao = avaliacaoService.calcularMediaRestaurante(restauranteId);
+        long totalAvaliacoes = avaliacaoService.contarAvaliacoesRestaurante(restauranteId);
+        
+        dto.setMediaAvaliacao(mediaAvaliacao);
+        dto.setTotalAvaliacoes(totalAvaliacoes);
+    }
+    
+    private record Coordenadas(BigDecimal latitude, BigDecimal longitude) {}
+    
     public Page<CardapioResponseDTO> buscarCardapio(Long restauranteId, Pageable pageable) {
         Restaurante restaurante = restauranteRepository.findById(restauranteId)
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
         
-        // Buscar pratos com paginação
         Page<Prato> pratosPage = pratoRepository.findByRestauranteIdAndDisponivel(restauranteId, true, pageable);
         
-        // Agrupar por categoria
         Map<CategoriaMenu, List<Prato>> pratosPorCategoria = pratosPage.getContent().stream()
                 .collect(Collectors.groupingBy(Prato::getCategoria));
         
-        CardapioResponseDTO response = new CardapioResponseDTO();
-        response.setRestauranteId(restauranteId);
-        response.setRestauranteNome(restaurante.getNome());
+        CardapioResponseDTO response = pedidoMapper.toCardapioResponseDTO(
+            restauranteId, restaurante.getNome(), pratosPorCategoria);
         
-        List<CategoriaCardapioDTO> categorias = pratosPorCategoria.entrySet().stream()
-                .map(entry -> {
-                    CategoriaCardapioDTO categoria = new CategoriaCardapioDTO();
-                    categoria.setCategoria(entry.getKey());
-                    categoria.setPratos(entry.getValue().stream()
-                            .map(p -> modelMapper.map(p, PratoCardapioDTO.class))
-                            .toList());
-                    return categoria;
-                })
-                .toList();
-        
-        response.setCategorias(categorias);
-        
-        // Retornar como Page com os metadados corretos
         return new PageImpl<>(List.of(response), pageable, pratosPage.getTotalElements());
     }
     
@@ -653,32 +585,4 @@ public class PedidoService {
         return BigDecimal.valueOf(5.0);
     }
     
-    private PedidoResponseDTO mapearParaResponse(Pedido pedido) {
-        PedidoResponseDTO response = modelMapper.map(pedido, PedidoResponseDTO.class);
-        response.setClienteId(pedido.getCliente().getId());
-        response.setRestauranteId(pedido.getRestaurante().getId());
-        
-        // Incluir informações do entregador se houver
-        if (pedido.getEntregador() != null) {
-            EntregadorSimplesDTO entregadorDto = new EntregadorSimplesDTO();
-            entregadorDto.setId(pedido.getEntregador().getId());
-            entregadorDto.setNome(pedido.getEntregador().getNome());
-            entregadorDto.setTelefone(pedido.getEntregador().getTelefone());
-            response.setEntregador(entregadorDto);
-        }
-        
-        response.setTempoEstimadoEntrega(pedido.getTempoEstimadoEntrega());
-        
-        List<PedidoItemResponseDTO> itens = pedido.getItens().stream()
-                .map(item -> {
-                    PedidoItemResponseDTO itemDto = modelMapper.map(item, PedidoItemResponseDTO.class);
-                    itemDto.setPratoId(item.getPrato().getId());
-                    itemDto.setPratoNome(item.getPrato().getNome());
-                    return itemDto;
-                })
-                .toList();
-        
-        response.setItens(itens);
-        return response;
-    }
 }
