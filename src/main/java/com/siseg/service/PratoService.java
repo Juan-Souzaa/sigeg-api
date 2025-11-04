@@ -2,11 +2,9 @@ package com.siseg.service;
 
 import com.siseg.dto.prato.PratoRequestDTO;
 import com.siseg.dto.prato.PratoResponseDTO;
-import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Prato;
 import com.siseg.model.Restaurante;
-import com.siseg.model.User;
 import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.repository.PratoRepository;
 import com.siseg.repository.RestauranteRepository;
@@ -44,95 +42,93 @@ public class PratoService {
     }
     
     public PratoResponseDTO criarPrato(Long restauranteId, PratoRequestDTO dto) {
-        Restaurante restaurante = restauranteRepository.findById(restauranteId)
-                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
+        Restaurante restaurante = buscarRestaurante(restauranteId);
+        SecurityUtils.validateRestauranteOwnership(restaurante);
         
-        // Valida se o usuário é dono do restaurante
-        validateRestauranteOwnership(restaurante);
+        Prato prato = criarPratoBasico(restaurante, dto);
         
-        Prato prato = modelMapper.map(dto, Prato.class);
-        prato.setRestaurante(restaurante);
-        
-        // Upload da foto se fornecida
-        if (dto.getFoto() != null && !dto.getFoto().isEmpty()) {
-            String fotoUrl = salvarFoto(dto.getFoto());
-            prato.setFotoUrl(fotoUrl);
+        if (temFoto(dto)) {
+            prato.setFotoUrl(salvarFoto(dto.getFoto()));
         }
         
         Prato saved = pratoRepository.save(prato);
         return modelMapper.map(saved, PratoResponseDTO.class);
     }
     
+    private Restaurante buscarRestaurante(Long restauranteId) {
+        return restauranteRepository.findById(restauranteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
+    }
+    
+    private Prato criarPratoBasico(Restaurante restaurante, PratoRequestDTO dto) {
+        Prato prato = modelMapper.map(dto, Prato.class);
+        prato.setRestaurante(restaurante);
+        return prato;
+    }
+    
+    private boolean temFoto(PratoRequestDTO dto) {
+        return dto.getFoto() != null && !dto.getFoto().isEmpty();
+    }
+    
     public PratoResponseDTO atualizarPrato(Long id, PratoRequestDTO dto) {
-        Prato prato = pratoRepository.findById(id)
+        Prato prato = buscarPrato(id);
+        SecurityUtils.validateRestauranteOwnership(prato.getRestaurante());
+        
+        registrarAlteracoes(prato, dto);
+        modelMapper.map(dto, prato);
+        
+        if (temFoto(dto)) {
+            prato.setFotoUrl(salvarFoto(dto.getFoto()));
+        }
+        
+        Prato saved = pratoRepository.save(prato);
+        return modelMapper.map(saved, PratoResponseDTO.class);
+    }
+    
+    private Prato buscarPrato(Long id) {
+        return pratoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Prato não encontrado com ID: " + id));
-        
-        // Valida se o usuário é dono do restaurante do prato
-        validateRestauranteOwnership(prato.getRestaurante());
-        
-        // Registrar alterações antes de atualizar
+    }
+    
+    private void registrarAlteracoes(Prato prato, PratoRequestDTO dto) {
         registrarAlteracao(prato, "nome", prato.getNome(), dto.getNome());
         registrarAlteracao(prato, "descricao", prato.getDescricao(), dto.getDescricao());
         registrarAlteracao(prato, "preco", prato.getPreco().toString(), dto.getPreco().toString());
         registrarAlteracao(prato, "disponivel", prato.getDisponivel().toString(), dto.getDisponivel().toString());
-        
-        modelMapper.map(dto, prato);
-        
-        // Upload da nova foto se fornecida
-        if (dto.getFoto() != null && !dto.getFoto().isEmpty()) {
-            String fotoUrl = salvarFoto(dto.getFoto());
-            prato.setFotoUrl(fotoUrl);
-        }
-        
-        Prato saved = pratoRepository.save(prato);
-        return modelMapper.map(saved, PratoResponseDTO.class);
     }
     
     public PratoResponseDTO alternarDisponibilidade(Long id) {
-        Prato prato = pratoRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Prato não encontrado com ID: " + id));
-        
-        // Valida se o usuário é dono do restaurante do prato
-        validateRestauranteOwnership(prato.getRestaurante());
+        Prato prato = buscarPrato(id);
+        SecurityUtils.validateRestauranteOwnership(prato.getRestaurante());
         
         Boolean antigoStatus = prato.getDisponivel();
         prato.setDisponivel(!antigoStatus);
-        
         registrarAlteracao(prato, "disponivel", antigoStatus.toString(), prato.getDisponivel().toString());
         
         Prato saved = pratoRepository.save(prato);
         return modelMapper.map(saved, PratoResponseDTO.class);
     }
     
-    private void validateRestauranteOwnership(Restaurante restaurante) {
-        User currentUser = SecurityUtils.getCurrentUser();
-        
-        // Admin pode acessar qualquer restaurante
-        if (SecurityUtils.isAdmin()) {
-            return;
-        }
-        
-        // Verifica se o restaurante pertence ao usuário autenticado
-        if (restaurante.getUser() == null || !restaurante.getUser().getId().equals(currentUser.getId())) {
-            throw new AccessDeniedException("Você não tem permissão para gerenciar pratos deste restaurante");
-        }
-    }
-    
     @Transactional(readOnly = true)
     public Page<PratoResponseDTO> listarPorRestaurante(Long restauranteId, CategoriaMenu categoria, Boolean disponivel, Pageable pageable) {
-        Page<Prato> pratos;
-        
+        Page<Prato> pratos = buscarPratosPorFiltros(restauranteId, categoria, disponivel, pageable);
+        return pratos.map(p -> modelMapper.map(p, PratoResponseDTO.class));
+    }
+    
+    private Page<Prato> buscarPratosPorFiltros(Long restauranteId, CategoriaMenu categoria, Boolean disponivel, Pageable pageable) {
         if (categoria != null && disponivel != null) {
-            pratos = pratoRepository.findByRestauranteIdAndCategoriaAndDisponivel(restauranteId, categoria, disponivel, pageable);
-        } else if (disponivel != null) {
-            pratos = pratoRepository.findByRestauranteIdAndDisponivel(restauranteId, disponivel, pageable);
-        } else if (categoria != null) {
-            pratos = pratoRepository.findByRestauranteIdAndCategoria(restauranteId, categoria, pageable);
-        } else {
-            pratos = pratoRepository.findByRestauranteId(restauranteId, pageable);
+            return pratoRepository.findByRestauranteIdAndCategoriaAndDisponivel(restauranteId, categoria, disponivel, pageable);
         }
         
-        return pratos.map(p -> modelMapper.map(p, PratoResponseDTO.class));
+        if (disponivel != null) {
+            return pratoRepository.findByRestauranteIdAndDisponivel(restauranteId, disponivel, pageable);
+        }
+        
+        if (categoria != null) {
+            return pratoRepository.findByRestauranteIdAndCategoria(restauranteId, categoria, pageable);
+        }
+        
+        return pratoRepository.findByRestauranteId(restauranteId, pageable);
     }
     
     private String salvarFoto(MultipartFile foto) {

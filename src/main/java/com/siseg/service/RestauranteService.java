@@ -2,7 +2,6 @@ package com.siseg.service;
 
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
-import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
@@ -41,7 +40,6 @@ public class RestauranteService {
         restaurante.setStatus(StatusRestaurante.PENDING_APPROVAL);
         restaurante.setUser(currentUser);
         
-        // Geocodificar endereço automaticamente
         geocodingService.geocodeAddress(restaurante.getEndereco())
                 .ifPresentOrElse(
                     coords -> {
@@ -54,24 +52,9 @@ public class RestauranteService {
         
         Restaurante saved = restauranteRepository.save(restaurante);
         
-        // Simular envio de email
         logger.info("Email simulado enviado para: " + saved.getEmail() + " - Status: PENDING_APPROVAL");
         
         return modelMapper.map(saved, RestauranteResponseDTO.class);
-    }
-    
-    private void validateRestauranteOwnership(Restaurante restaurante) {
-        User currentUser = SecurityUtils.getCurrentUser();
-        
-        // Admin pode acessar qualquer restaurante
-        if (SecurityUtils.isAdmin()) {
-            return;
-        }
-        
-        // Verifica se o restaurante pertence ao usuário autenticado
-        if (restaurante.getUser() == null || !restaurante.getUser().getId().equals(currentUser.getId())) {
-            throw new AccessDeniedException("Você não tem permissão para acessar este restaurante");
-        }
     }
     
     public RestauranteResponseDTO buscarPorId(Long id) {

@@ -1,5 +1,7 @@
 package com.siseg.util;
 
+import com.siseg.exception.AccessDeniedException;
+import com.siseg.model.*;
 import com.siseg.model.User;
 import com.siseg.model.UserAuthenticated;
 import org.springframework.security.core.Authentication;
@@ -7,7 +9,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 /**
- * Utilitário para obter informações do usuário autenticado
+ * Utilitário para obter informações do usuário autenticado e validações de acesso
  */
 public class SecurityUtils {
     
@@ -62,6 +64,85 @@ public class SecurityUtils {
      */
     public static boolean isAdmin() {
         return hasRole("ADMIN");
+    }
+    
+    /**
+     * Valida se o usuário autenticado tem permissão para acessar o pedido.
+     * Permite acesso se o usuário for admin, dono do cliente, dono do restaurante ou entregador associado.
+     * @param pedido Pedido a ser validado
+     * @throws AccessDeniedException se o usuário não tiver permissão
+     */
+    public static void validatePedidoOwnership(Pedido pedido) {
+        if (pedido == null) {
+            throw new AccessDeniedException("Pedido não encontrado");
+        }
+        
+        if (isAdmin()) {
+            return;
+        }
+        
+        User currentUser = getCurrentUser();
+        
+        if (pedido.getCliente() != null && pedido.getCliente().getUser() != null && 
+            pedido.getCliente().getUser().getId().equals(currentUser.getId())) {
+            return;
+        }
+        
+        if (pedido.getRestaurante() != null && pedido.getRestaurante().getUser() != null &&
+            pedido.getRestaurante().getUser().getId().equals(currentUser.getId())) {
+            return;
+        }
+        
+        if (pedido.getEntregador() != null && pedido.getEntregador().getUser() != null &&
+            pedido.getEntregador().getUser().getId().equals(currentUser.getId())) {
+            return;
+        }
+        
+        throw new AccessDeniedException("Você não tem permissão para acessar este pedido");
+    }
+    
+    /**
+     * Valida se o usuário autenticado tem permissão para acessar o restaurante.
+     * Permite acesso se o usuário for admin ou dono do restaurante.
+     * @param restaurante Restaurante a ser validado
+     * @throws AccessDeniedException se o usuário não tiver permissão
+     */
+    public static void validateRestauranteOwnership(Restaurante restaurante) {
+        if (restaurante == null) {
+            throw new AccessDeniedException("Restaurante não encontrado");
+        }
+        
+        if (isAdmin()) {
+            return;
+        }
+        
+        User currentUser = getCurrentUser();
+        
+        if (restaurante.getUser() == null || !restaurante.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Você não tem permissão para acessar este restaurante");
+        }
+    }
+    
+    /**
+     * Valida se o usuário autenticado tem permissão para acessar o entregador.
+     * Permite acesso se o usuário for admin ou o próprio entregador.
+     * @param entregador Entregador a ser validado
+     * @throws AccessDeniedException se o usuário não tiver permissão
+     */
+    public static void validateEntregadorOwnership(Entregador entregador) {
+        if (entregador == null) {
+            throw new AccessDeniedException("Entregador não encontrado");
+        }
+        
+        if (isAdmin()) {
+            return;
+        }
+        
+        User currentUser = getCurrentUser();
+        
+        if (entregador.getUser() == null || !entregador.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Você não tem permissão para acessar este entregador");
+        }
     }
 }
 

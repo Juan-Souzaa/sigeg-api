@@ -1,5 +1,7 @@
 package com.siseg.util;
 
+import com.siseg.model.enumerations.TipoVeiculo;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
@@ -54,23 +56,28 @@ public class DistanceCalculator {
      */
     public static int estimateDeliveryTime(BigDecimal distanciaKm, String tipoVeiculo) {
         if (distanciaKm == null || distanciaKm.compareTo(BigDecimal.ZERO) <= 0) {
-            return 0; // Já chegou ou coordenadas inválidas
+            return 0;
         }
         
-        double velocidadeMediaKmh;
-        if ("BICICLETA".equalsIgnoreCase(tipoVeiculo)) {
-            velocidadeMediaKmh = 15.0;
-        } else {
-            // Moto ou carro
-            velocidadeMediaKmh = 30.0;
-        }
+        TipoVeiculo tipoVeiculoEnum = parseTipoVeiculo(tipoVeiculo);
+        double velocidadeMediaKmh = VehicleConstants.getVelocidadeMediaKmh(tipoVeiculoEnum);
         
         double tempoHoras = distanciaKm.doubleValue() / velocidadeMediaKmh;
         int tempoMinutos = (int) Math.ceil(tempoHoras * 60);
         
-        // Tempo mínimo de 1 minuto (para distâncias muito curtas) e máximo de 120 minutos
-        // Remove o mínimo de 15 minutos para permitir atualização dinâmica
-        return Math.max(1, Math.min(120, tempoMinutos));
+        return Math.max(VehicleConstants.TEMPO_MINIMO_ENTREGA_MINUTOS, 
+                       Math.min(VehicleConstants.TEMPO_MAXIMO_ENTREGA_MINUTOS, tempoMinutos));
+    }
+    
+    private static TipoVeiculo parseTipoVeiculo(String tipoVeiculo) {
+        if (tipoVeiculo == null || tipoVeiculo.isEmpty()) {
+            return null;
+        }
+        try {
+            return TipoVeiculo.valueOf(tipoVeiculo.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }
 
