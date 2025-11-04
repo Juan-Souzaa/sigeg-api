@@ -1,8 +1,12 @@
 package com.siseg.service;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.siseg.dto.geocoding.Coordinates;
+import com.siseg.dto.geocoding.NominatimResponse;
+import com.siseg.dto.geocoding.OsrmRoute;
+import com.siseg.dto.geocoding.OsrmRouteResponse;
+import com.siseg.dto.geocoding.RouteResult;
+import com.siseg.dto.geocoding.ViaCepResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -18,37 +22,32 @@ import java.util.logging.Logger;
 public class GeocodingService {
     
     private static final Logger logger = Logger.getLogger(GeocodingService.class.getName());
-    private static final String NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
-    private static final String VIACEP_BASE_URL = "https://viacep.com.br";
-    private static final String OSRM_BASE_URL = "https://router.project-osrm.org";
     
     private final WebClient nominatimClient;
     private final WebClient viacepClient;
     private final WebClient osrmClient;
     private final Map<String, Coordinates> cache = new ConcurrentHashMap<>();
     
-    // Última requisição para controlar rate limit (1 req/segundo)
     private volatile long lastRequestTime = 0;
     
-    public GeocodingService() {
-        // User-Agent obrigatório com email de contato (recomendação Nominatim)
-        // Para produção, substitua por um email real de contato
-        String userAgent = "SIGEG-API/1.0 (contact: sigeg@example.com)";
-        
+    public GeocodingService(@Value("${geocoding.nominatim.baseUrl}") String nominatimBaseUrl,
+                           @Value("${geocoding.viacep.baseUrl}") String viacepBaseUrl,
+                           @Value("${geocoding.osrm.baseUrl}") String osrmBaseUrl,
+                           @Value("${geocoding.nominatim.userAgent}") String nominatimUserAgent) {
         this.nominatimClient = WebClient.builder()
-                .baseUrl(NOMINATIM_BASE_URL)
-                .defaultHeader(HttpHeaders.USER_AGENT, userAgent)
+                .baseUrl(nominatimBaseUrl)
+                .defaultHeader(HttpHeaders.USER_AGENT, nominatimUserAgent)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, "pt-BR,pt;q=0.9")
                 .build();
         
         this.viacepClient = WebClient.builder()
-                .baseUrl(VIACEP_BASE_URL)
+                .baseUrl(viacepBaseUrl)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .build();
         
         this.osrmClient = WebClient.builder()
-                .baseUrl(OSRM_BASE_URL)
+                .baseUrl(osrmBaseUrl)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
@@ -302,108 +301,19 @@ public class GeocodingService {
     }
     
     /**
+     * Obtém o profile OSRM apropriado baseado no tipo de veículo
+     * @param tipoVeiculo Tipo de veículo do entregador
+     * @return Profile OSRM: "cycling" para bicicleta, "driving" para outros
+     */
+    public String obterProfileOSRM(com.siseg.model.enumerations.TipoVeiculo tipoVeiculo) {
+        return com.siseg.util.VehicleConstants.getOsrmProfile(tipoVeiculo);
+    }
+    
+    /**
      * Limpa o cache (útil para testes ou quando necessário)
      */
     public void clearCache() {
         cache.clear();
-    }
-    
-    // Classes internas para deserialização JSON
-    
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class ViaCepResponse {
-        @JsonProperty("logradouro")
-        private String logradouro;
-        
-        @JsonProperty("bairro")
-        private String bairro;
-        
-        @JsonProperty("localidade")
-        private String localidade;
-        
-        @JsonProperty("uf")
-        private String uf;
-        
-        @JsonProperty("erro")
-        private Boolean erro;
-        
-        public String getLogradouro() { return logradouro; }
-        public void setLogradouro(String logradouro) { this.logradouro = logradouro; }
-        public String getBairro() { return bairro; }
-        public void setBairro(String bairro) { this.bairro = bairro; }
-        public String getLocalidade() { return localidade; }
-        public void setLocalidade(String localidade) { this.localidade = localidade; }
-        public String getUf() { return uf; }
-        public void setUf(String uf) { this.uf = uf; }
-        public Boolean getErro() { return erro; }
-        public void setErro(Boolean erro) { this.erro = erro; }
-    }
-    
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class NominatimResponse {
-        @JsonProperty("lat")
-        private String lat;
-        
-        @JsonProperty("lon")
-        private String lon;
-        
-        @JsonProperty("display_name")
-        private String displayName;
-        
-        public String getLat() { return lat; }
-        public void setLat(String lat) { this.lat = lat; }
-        public String getLon() { return lon; }
-        public void setLon(String lon) { this.lon = lon; }
-        public String getDisplayName() { return displayName; }
-        public void setDisplayName(String displayName) { this.displayName = displayName; }
-    }
-    
-    // DTO para resultado de rota OSRM
-    public static class RouteResult {
-        private final BigDecimal distanciaKm;
-        private final int tempoMinutos;
-        
-        public RouteResult(BigDecimal distanciaKm, int tempoMinutos) {
-            this.distanciaKm = distanciaKm;
-            this.tempoMinutos = tempoMinutos;
-        }
-        
-        public BigDecimal getDistanciaKm() {
-            return distanciaKm;
-        }
-        
-        public int getTempoMinutos() {
-            return tempoMinutos;
-        }
-    }
-    
-    // Classes internas para deserialização JSON do OSRM
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class OsrmRouteResponse {
-        @JsonProperty("code")
-        private String code;
-        
-        @JsonProperty("routes")
-        private java.util.List<OsrmRoute> routes;
-        
-        public String getCode() { return code; }
-        public void setCode(String code) { this.code = code; }
-        public java.util.List<OsrmRoute> getRoutes() { return routes; }
-        public void setRoutes(java.util.List<OsrmRoute> routes) { this.routes = routes; }
-    }
-    
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class OsrmRoute {
-        @JsonProperty("distance")
-        private double distance;
-        
-        @JsonProperty("duration")
-        private double duration;
-        
-        public double getDistance() { return distance; }
-        public void setDistance(double distance) { this.distance = distance; }
-        public double getDuration() { return duration; }
-        public void setDuration(double duration) { this.duration = duration; }
     }
 }
 

@@ -8,6 +8,8 @@ import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.EntregadorRepository;
 import com.siseg.repository.PedidoRepository;
 import com.siseg.util.DistanceCalculator;
+import com.siseg.util.TempoEstimadoCalculator;
+import com.siseg.util.VehicleConstants;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,21 +20,36 @@ import java.util.logging.Logger;
 public class RastreamentoService {
     
     private static final Logger logger = Logger.getLogger(RastreamentoService.class.getName());
-    private static final BigDecimal DISTANCIA_PROXIMO_DESTINO = new BigDecimal("0.1"); // 100 metros
+    private static final BigDecimal DISTANCIA_PROXIMO_DESTINO = new BigDecimal("0.1");
     
     private final PedidoRepository pedidoRepository;
     private final EntregadorRepository entregadorRepository;
-    private final GeocodingService geocodingService;
+    private final TempoEstimadoCalculator tempoEstimadoCalculator;
     
     public RastreamentoService(PedidoRepository pedidoRepository, EntregadorRepository entregadorRepository,
-                               GeocodingService geocodingService) {
+                               TempoEstimadoCalculator tempoEstimadoCalculator) {
         this.pedidoRepository = pedidoRepository;
         this.entregadorRepository = entregadorRepository;
-        this.geocodingService = geocodingService;
+        this.tempoEstimadoCalculator = tempoEstimadoCalculator;
     }
     
     @Transactional(readOnly = true)
     public RastreamentoDTO obterRastreamento(Long pedidoId) {
+        Pedido pedido = buscarPedidoComEntregador(pedidoId);
+        Entregador entregador = buscarEntregador(pedido.getEntregador().getId());
+        
+        RastreamentoDTO rastreamento = criarRastreamentoDTO(pedido, entregador);
+        
+        if (!temCoordenadasValidas(pedido, entregador)) {
+            return rastreamento;
+        }
+        
+        calcularDistanciaETempoRastreamento(rastreamento, entregador, pedido);
+        
+        return rastreamento;
+    }
+    
+    private Pedido buscarPedidoComEntregador(Long pedidoId) {
         Pedido pedido = pedidoRepository.findById(pedidoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + pedidoId));
         
@@ -40,195 +57,227 @@ public class RastreamentoService {
             throw new ResourceNotFoundException("Pedido não possui entregador associado");
         }
         
-        Entregador entregador = pedido.getEntregador();
-        
+        return pedido;
+    }
+    
+    private Entregador buscarEntregador(Long entregadorId) {
+        return entregadorRepository.findById(entregadorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Entregador não encontrado"));
+    }
+    
+    private RastreamentoDTO criarRastreamentoDTO(Pedido pedido, Entregador entregador) {
         RastreamentoDTO rastreamento = new RastreamentoDTO();
         rastreamento.setStatusEntrega(pedido.getStatus());
-        
-        if (pedido.getLatitudeEntrega() == null || pedido.getLongitudeEntrega() == null) {
-            logger.warning("Pedido sem coordenadas de destino para rastreamento");
-            return rastreamento;
-        }
-        
         rastreamento.setPosicaoDestinoLat(pedido.getLatitudeEntrega());
         rastreamento.setPosicaoDestinoLon(pedido.getLongitudeEntrega());
+        rastreamento.setPosicaoAtualLat(entregador.getLatitude());
+        rastreamento.setPosicaoAtualLon(entregador.getLongitude());
+        return rastreamento;
+    }
+    
+    private boolean temCoordenadasValidas(Pedido pedido, Entregador entregador) {
+        if (pedido.getLatitudeEntrega() == null || pedido.getLongitudeEntrega() == null) {
+            logger.warning("Pedido sem coordenadas de destino para rastreamento");
+            return false;
+        }
         
         if (entregador.getLatitude() == null || entregador.getLongitude() == null) {
             logger.warning("Entregador sem coordenadas para rastreamento");
-            rastreamento.setPosicaoAtualLat(null);
-            rastreamento.setPosicaoAtualLon(null);
-            return rastreamento;
+            return false;
         }
         
-        rastreamento.setPosicaoAtualLat(entregador.getLatitude());
-        rastreamento.setPosicaoAtualLon(entregador.getLongitude());
+        return true;
+    }
+    
+    private void calcularDistanciaETempoRastreamento(RastreamentoDTO rastreamento, Entregador entregador, Pedido pedido) {
+        var resultado = tempoEstimadoCalculator.calculateDistanceAndTime(
+            entregador.getLatitude(),
+            entregador.getLongitude(),
+            pedido.getLatitudeEntrega(),
+            pedido.getLongitudeEntrega(),
+            entregador.getTipoVeiculo()
+        );
         
-        BigDecimal distanciaRestante = null;
-        int tempoEstimado = 0;
-        
-        // Tentar calcular usando OSRM (rota real)
-        try {
-            String profile = "driving";
-            if (entregador.getTipoVeiculo() != null) {
-                String tipoVeiculo = entregador.getTipoVeiculo().name();
-                if ("BICICLETA".equalsIgnoreCase(tipoVeiculo)) {
-                    profile = "cycling";
-                }
-            }
-            
-            java.util.Optional<GeocodingService.RouteResult> routeResult = 
-                geocodingService.calculateRoute(
-                    entregador.getLatitude(),
-                    entregador.getLongitude(),
-                    pedido.getLatitudeEntrega(),
-                    pedido.getLongitudeEntrega(),
-                    profile
-                );
-            
-            if (routeResult.isPresent()) {
-                distanciaRestante = routeResult.get().getDistanciaKm();
-                tempoEstimado = routeResult.get().getTempoMinutos();
-                logger.info("Rastreamento - Pedido ID " + pedidoId + ": Distância calculada via OSRM (profile=" + profile + ") = " + distanciaRestante + " km, Tempo = " + tempoEstimado + " min");
-            }
-        } catch (Exception e) {
-            logger.fine("Erro ao calcular rota via OSRM, usando fallback Haversine: " + e.getMessage());
-        }
-        
-        // Fallback para Haversine se OSRM falhar ou não retornar resultado
-        if (distanciaRestante == null) {
-            distanciaRestante = DistanceCalculator.calculateDistance(
-                entregador.getLatitude(),
-                entregador.getLongitude(),
-                pedido.getLatitudeEntrega(),
-                pedido.getLongitudeEntrega()
-            );
-            
-            if (distanciaRestante != null && distanciaRestante.compareTo(BigDecimal.ZERO) > 0) {
-                tempoEstimado = DistanceCalculator.estimateDeliveryTime(
-                    distanciaRestante,
-                    entregador.getTipoVeiculo() != null ? entregador.getTipoVeiculo().name() : "MOTO"
-                );
-                logger.info("Rastreamento - Pedido ID " + pedidoId + ": Distância calculada via Haversine = " + distanciaRestante + " km, Tempo = " + tempoEstimado + " min");
-            }
-        }
-        
-        if (distanciaRestante != null && distanciaRestante.compareTo(BigDecimal.ZERO) > 0) {
-            rastreamento.setDistanciaRestanteKm(distanciaRestante);
-            rastreamento.setProximoAoDestino(distanciaRestante.compareTo(DISTANCIA_PROXIMO_DESTINO) <= 0);
-            rastreamento.setTempoEstimadoMinutos(tempoEstimado);
+        if (resultado.getDistanciaKm() != null && resultado.getDistanciaKm().compareTo(BigDecimal.ZERO) > 0) {
+            rastreamento.setDistanciaRestanteKm(resultado.getDistanciaKm());
+            rastreamento.setProximoAoDestino(resultado.getDistanciaKm().compareTo(DISTANCIA_PROXIMO_DESTINO) <= 0);
+            rastreamento.setTempoEstimadoMinutos(resultado.getTempoMinutos());
         } else {
             rastreamento.setDistanciaRestanteKm(BigDecimal.ZERO);
             rastreamento.setProximoAoDestino(true);
             rastreamento.setTempoEstimadoMinutos(0);
         }
-        
-        return rastreamento;
     }
     
     @Transactional
     public void simularMovimento(Long pedidoId) {
+        Pedido pedido = buscarPedidoParaSimulacao(pedidoId);
+        Entregador entregador = buscarEntregador(pedido.getEntregador().getId());
+        
+        var coordenadas = obterCoordenadasOrigem(entregador, pedido);
+        if (coordenadas == null) {
+            return;
+        }
+        
+        BigDecimal distanciaParaDestino = calcularDistanciaParaDestino(coordenadas, pedido);
+        
+        if (devePosicionarNoDestino(distanciaParaDestino, entregador)) {
+            posicionarNoDestino(entregador, pedido);
+            return;
+        }
+        
+        processarMovimento(entregador, coordenadas, pedido, distanciaParaDestino);
+    }
+    
+    private BigDecimal calcularDistanciaParaDestino(CoordenadasOrigem origem, Pedido pedido) {
+        return DistanceCalculator.calculateDistance(
+            origem.origemLat(), origem.origemLon(),
+            pedido.getLatitudeEntrega(), pedido.getLongitudeEntrega()
+        );
+    }
+    
+    private boolean devePosicionarNoDestino(BigDecimal distanciaParaDestino, Entregador entregador) {
+        if (isProximoAoDestino(distanciaParaDestino)) {
+            return true;
+        }
+        
+        double velocidadeKmh = calcularVelocidade(entregador);
+        double distanciaPorIteracaoKm = calcularDistanciaPorIteracao(velocidadeKmh);
+        
+        if (distanciaParaDestino != null && distanciaParaDestino.doubleValue() <= distanciaPorIteracaoKm) {
+            logger.info("Entregador chegou ao destino");
+            return true;
+        }
+        
+        return false;
+    }
+    
+    private void processarMovimento(Entregador entregador, CoordenadasOrigem coordenadas, 
+                                    Pedido pedido, BigDecimal distanciaParaDestino) {
+        double velocidadeKmh = calcularVelocidade(entregador);
+        double distanciaPorIteracaoKm = calcularDistanciaPorIteracao(velocidadeKmh);
+        moverEmDirecaoAoDestino(entregador, coordenadas, pedido, distanciaParaDestino, distanciaPorIteracaoKm, velocidadeKmh);
+    }
+    
+    private Pedido buscarPedidoParaSimulacao(Long pedidoId) {
         Pedido pedido = pedidoRepository.findById(pedidoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + pedidoId));
         
+        validarStatusEntrega(pedido);
+        validarEntregadorAssociado(pedido);
+        validarCoordenadasDestino(pedido);
+        
+        return pedido;
+    }
+    
+    private void validarStatusEntrega(Pedido pedido) {
         if (pedido.getStatus() != StatusPedido.OUT_FOR_DELIVERY) {
-            logger.fine("Pedido não está em entrega, ignorando simulação: " + pedidoId);
-            return;
+            logger.fine("Pedido não está em entrega, ignorando simulação: " + pedido.getId());
+            throw new IllegalStateException("Pedido não está em entrega");
         }
-        
+    }
+    
+    private void validarEntregadorAssociado(Pedido pedido) {
         if (pedido.getEntregador() == null) {
-            logger.warning("Pedido sem entregador, ignorando simulação: " + pedidoId);
-            return;
+            logger.warning("Pedido sem entregador, ignorando simulação: " + pedido.getId());
+            throw new IllegalStateException("Pedido sem entregador");
         }
-        
+    }
+    
+    private void validarCoordenadasDestino(Pedido pedido) {
         if (pedido.getLatitudeEntrega() == null || pedido.getLongitudeEntrega() == null) {
-            logger.warning("Pedido sem coordenadas de destino, ignorando simulação: " + pedidoId);
-            return;
+            logger.warning("Pedido sem coordenadas de destino, ignorando simulação: " + pedido.getId());
+            throw new IllegalStateException("Pedido sem coordenadas de destino");
+        }
+    }
+    
+    private CoordenadasOrigem obterCoordenadasOrigem(Entregador entregador, Pedido pedido) {
+        if (temCoordenadasEntregador(entregador)) {
+            return new CoordenadasOrigem(entregador.getLatitude(), entregador.getLongitude());
         }
         
-        Entregador entregador = pedido.getEntregador();
-        
-        BigDecimal destinoLat = pedido.getLatitudeEntrega();
-        BigDecimal destinoLon = pedido.getLongitudeEntrega();
-        
-        BigDecimal origemLat;
-        BigDecimal origemLon;
-        
-        if (entregador.getLatitude() == null || entregador.getLongitude() == null) {
-            if (pedido.getRestaurante() != null && 
-                pedido.getRestaurante().getLatitude() != null && 
-                pedido.getRestaurante().getLongitude() != null) {
-                origemLat = pedido.getRestaurante().getLatitude();
-                origemLon = pedido.getRestaurante().getLongitude();
-                entregador.setLatitude(origemLat);
-                entregador.setLongitude(origemLon);
-                entregadorRepository.save(entregador);
-                logger.info("Inicializada posição do entregador com coordenadas do restaurante");
-            } else {
-                logger.warning("Não é possível inicializar posição do entregador: restaurante sem coordenadas");
-                return;
-            }
-        } else {
-            origemLat = entregador.getLatitude();
-            origemLon = entregador.getLongitude();
+        return inicializarCoordenadasDoRestaurante(entregador, pedido);
+    }
+    
+    private boolean temCoordenadasEntregador(Entregador entregador) {
+        return entregador.getLatitude() != null && entregador.getLongitude() != null;
+    }
+    
+    private CoordenadasOrigem inicializarCoordenadasDoRestaurante(Entregador entregador, Pedido pedido) {
+        if (!temCoordenadasRestaurante(pedido)) {
+            logger.warning("Não é possível inicializar posição do entregador: restaurante sem coordenadas");
+            return null;
         }
         
-        BigDecimal distanciaAtual = DistanceCalculator.calculateDistance(
-            origemLat, origemLon, destinoLat, destinoLon
-        );
+        BigDecimal origemLat = pedido.getRestaurante().getLatitude();
+        BigDecimal origemLon = pedido.getRestaurante().getLongitude();
         
-        if (distanciaAtual == null || distanciaAtual.compareTo(DISTANCIA_PROXIMO_DESTINO) <= 0) {
-            logger.fine("Entregador já está próximo ao destino (< 100m), não movendo");
-            return;
-        }
+        entregador.setLatitude(origemLat);
+        entregador.setLongitude(origemLon);
+        entregadorRepository.save(entregador);
+        logger.info("Inicializada posição do entregador com coordenadas do restaurante");
         
-        // Velocidade base por tipo de veículo
-        double velocidadeBaseKmh = entregador.getTipoVeiculo().name().equals("BICICLETA") ? 15.0 : 30.0;
+        return new CoordenadasOrigem(origemLat, origemLon);
+    }
+    
+    private boolean temCoordenadasRestaurante(Pedido pedido) {
+        return pedido.getRestaurante() != null && 
+               pedido.getRestaurante().getLatitude() != null && 
+               pedido.getRestaurante().getLongitude() != null;
+    }
+    
+    private boolean isProximoAoDestino(BigDecimal distancia) {
+        return distancia == null || distancia.compareTo(DISTANCIA_PROXIMO_DESTINO) <= 0;
+    }
+    
+    private void posicionarNoDestino(Entregador entregador, Pedido pedido) {
+        entregador.setLatitude(pedido.getLatitudeEntrega());
+        entregador.setLongitude(pedido.getLongitudeEntrega());
+        entregadorRepository.save(entregador);
+    }
+    
+    private double calcularVelocidade(Entregador entregador) {
+        double velocidadeBaseKmh = VehicleConstants.getVelocidadeMediaKmh(entregador.getTipoVeiculo());
         
-        // Variação aleatória de velocidade (±20% para simular trânsito, semáforos, etc)
-        double variacao = (Math.random() * 0.4) - 0.2; // -0.2 a +0.2 (20% para mais ou menos)
+        double variacao = (Math.random() * VehicleConstants.FATOR_VARIACAO_VELOCIDADE) 
+                         - VehicleConstants.FATOR_DESVIO_VELOCIDADE;
         double velocidadeKmh = velocidadeBaseKmh * (1.0 + variacao);
         
-        // Garantir velocidade mínima (não pode ser negativa ou muito baixa)
-        if (velocidadeKmh < velocidadeBaseKmh * 0.5) {
-            velocidadeKmh = velocidadeBaseKmh * 0.5; // Mínimo 50% da velocidade base
-        }
-        if (velocidadeKmh > velocidadeBaseKmh * 1.5) {
-            velocidadeKmh = velocidadeBaseKmh * 1.5; // Máximo 150% da velocidade base
-        }
+        double velocidadeMinima = velocidadeBaseKmh * VehicleConstants.FATOR_VELOCIDADE_MINIMA;
+        double velocidadeMaxima = velocidadeBaseKmh * VehicleConstants.FATOR_VELOCIDADE_MAXIMA;
         
-        double distanciaPorIteracao = (velocidadeKmh / 3600.0) * 10.0;
+        return Math.max(velocidadeMinima, Math.min(velocidadeMaxima, velocidadeKmh));
+    }
+    
+    private double calcularDistanciaPorIteracao(double velocidadeKmh) {
+        return (velocidadeKmh / VehicleConstants.SEGUNDOS_POR_SEGUNDO) 
+               * VehicleConstants.INTERVALO_SIMULACAO_SEGUNDOS;
+    }
+    
+    private void moverEmDirecaoAoDestino(Entregador entregador, CoordenadasOrigem origem, 
+                                         Pedido pedido, BigDecimal distanciaTotal, 
+                                         double distanciaPorIteracaoKm, double velocidadeKmh) {
+        double percentualProgresso = distanciaPorIteracaoKm / distanciaTotal.doubleValue();
         
-        if (distanciaAtual.doubleValue() <= distanciaPorIteracao) {
-            entregador.setLatitude(destinoLat);
-            entregador.setLongitude(destinoLon);
-            entregadorRepository.save(entregador);
-            logger.info("Entregador chegou ao destino");
-            return;
-        }
-        
-        double percentualProgresso = distanciaPorIteracao / distanciaAtual.doubleValue();
-        
-        BigDecimal novaLat = origemLat.add(
-            destinoLat.subtract(origemLat).multiply(BigDecimal.valueOf(percentualProgresso))
+        BigDecimal novaLat = origem.origemLat().add(
+            pedido.getLatitudeEntrega().subtract(origem.origemLat())
+                .multiply(BigDecimal.valueOf(percentualProgresso))
         );
-        BigDecimal novaLon = origemLon.add(
-            destinoLon.subtract(origemLon).multiply(BigDecimal.valueOf(percentualProgresso))
+        BigDecimal novaLon = origem.origemLon().add(
+            pedido.getLongitudeEntrega().subtract(origem.origemLon())
+                .multiply(BigDecimal.valueOf(percentualProgresso))
         );
         
         entregador.setLatitude(novaLat);
         entregador.setLongitude(novaLon);
         entregadorRepository.save(entregador);
         
-        BigDecimal novaDistancia = DistanceCalculator.calculateDistance(
-            novaLat, novaLon, destinoLat, destinoLon
-        );
-        
         logger.info(String.format(
-            "Simulação de movimento: Pedido %d - Distância restante: %.2f km -> %.2f km (Velocidade: %.1f km/h)",
-            pedidoId, distanciaAtual.doubleValue(), 
-            novaDistancia != null ? novaDistancia.doubleValue() : 0.0,
-            velocidadeKmh
+            "Simulação de movimento: Pedido %d - Entregador movido (Velocidade: %.1f km/h, Progresso: %.1f%%)",
+            pedido.getId(), velocidadeKmh, percentualProgresso * 100
         ));
     }
+    
+    private record CoordenadasOrigem(BigDecimal origemLat, BigDecimal origemLon) {}
 }
 
