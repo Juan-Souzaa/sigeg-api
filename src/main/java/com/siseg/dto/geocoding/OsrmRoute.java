@@ -1,0 +1,18 @@
+package com.siseg.dto.geocoding;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Getter;
+import lombok.Setter;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+@Getter
+@Setter
+public class OsrmRoute {
+    @JsonProperty("distance")
+    private double distance;
+    
+    @JsonProperty("duration")
+    private double duration;
+}
+
