@@ -1,5 +1,6 @@
 package com.siseg.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.siseg.dto.avaliacao.AvaliacaoRequestDTO;
 import com.siseg.dto.avaliacao.AvaliacaoResponseDTO;
 import com.siseg.dto.avaliacao.AvaliacaoRestauranteResponseDTO;
@@ -8,6 +9,7 @@ import com.siseg.model.Entregador;
 import com.siseg.model.Pedido;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
+import com.siseg.model.enumerations.ERole;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.repository.AvaliacaoRepository;
@@ -16,8 +18,7 @@ import com.siseg.repository.PedidoRepository;
 import com.siseg.service.AvaliacaoService;
 import com.siseg.util.TestJwtUtil;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;  
-import com.siseg.model.enumerations.ERole;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -48,6 +49,9 @@ class AvaliacaoControllerFunctionalTest {
     
     @Autowired
     private TestJwtUtil testJwtUtil;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
     
     @MockBean
     private AvaliacaoService avaliacaoService;
@@ -117,19 +121,10 @@ class AvaliacaoControllerFunctionalTest {
         
         when(avaliacaoService.criarAvaliacao(eq(1L), any(AvaliacaoRequestDTO.class))).thenReturn(responseDTO);
         
-        String json = """
-            {
-                "notaRestaurante": 5,
-                "notaEntregador": 4,
-                "notaPedido": 5,
-                "comentarioRestaurante": "Ótimo restaurante!"
-            }
-            """;
-        
         mockMvc.perform(post("/api/avaliacoes/pedidos/1")
                 .header("Authorization", "Bearer " + clienteToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.notaRestaurante").value(5))
@@ -144,17 +139,14 @@ class AvaliacaoControllerFunctionalTest {
         
         when(avaliacaoService.editarAvaliacao(eq(1L), any(AvaliacaoRequestDTO.class))).thenReturn(responseDTO);
         
-        String json = """
-            {
-                "notaRestaurante": 4,
-                "notaPedido": 5
-            }
-            """;
+        AvaliacaoRequestDTO editDTO = new AvaliacaoRequestDTO();
+        editDTO.setNotaRestaurante(4);
+        editDTO.setNotaPedido(5);
         
         mockMvc.perform(put("/api/avaliacoes/1")
                 .header("Authorization", "Bearer " + clienteToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(editDTO)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.notaRestaurante").value(4));

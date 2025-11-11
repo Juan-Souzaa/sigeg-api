@@ -1,5 +1,7 @@
 package com.siseg.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.util.TestJwtUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,9 @@ class RestauranteControllerFunctionalTest {
     @Autowired
     private TestJwtUtil testJwtUtil;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     private String userToken;
     private String adminToken;
 
@@ -49,19 +54,16 @@ class RestauranteControllerFunctionalTest {
 
     @Test
     void deveCriarRestauranteComSucesso() throws Exception {
-        String json = """
-                {
-                    "nome": "Restaurante de Teste",
-                    "email": "teste@restaurante.com",
-                    "telefone": "(11) 99999-9999",
-                    "endereco": "Rua Teste, 123"
-                }
-                """;
+        RestauranteRequestDTO requestDTO = new RestauranteRequestDTO();
+        requestDTO.setNome("Restaurante de Teste");
+        requestDTO.setEmail("teste@restaurante.com");
+        requestDTO.setTelefone("(11) 99999-9999");
+        requestDTO.setEndereco("Rua Teste, 123");
 
         mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nome").value("Restaurante de Teste"))
@@ -74,17 +76,14 @@ class RestauranteControllerFunctionalTest {
 
     @Test
     void deveRetornarErro422AoCriarRestauranteComCamposObrigatoriosFaltando() throws Exception {
-        String json = """
-                {
-                    "email": "teste@restaurante.com",
-                    "telefone": "(11) 99999-9999"
-                }
-                """;
+        RestauranteRequestDTO requestDTO = new RestauranteRequestDTO();
+        requestDTO.setEmail("teste@restaurante.com");
+        requestDTO.setTelefone("(11) 99999-9999");
 
         mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andDo(print())
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.status").value(422))
@@ -106,19 +105,16 @@ class RestauranteControllerFunctionalTest {
     @Test
     void deveListarRestaurantesComPaginacao() throws Exception {
         // Primeiro cria um restaurante
-        String json = """
-                {
-                    "nome": "Restaurante para Listagem",
-                    "email": "listagem@restaurante.com",
-                    "telefone": "(11) 88888-8888",
-                    "endereco": "Rua Listagem, 456"
-                }
-                """;
+        RestauranteRequestDTO requestDTO = new RestauranteRequestDTO();
+        requestDTO.setNome("Restaurante para Listagem");
+        requestDTO.setEmail("listagem@restaurante.com");
+        requestDTO.setTelefone("(11) 88888-8888");
+        requestDTO.setEndereco("Rua Listagem, 456");
 
         mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk());
 
         // Depois lista os restaurantes
@@ -134,19 +130,16 @@ class RestauranteControllerFunctionalTest {
     @Test
     void deveBuscarRestaurantePorIdComSucesso() throws Exception {
         // Primeiro cria um restaurante
-        String json = """
-                {
-                    "nome": "Restaurante para Busca",
-                    "email": "busca@restaurante.com",
-                    "telefone": "(11) 77777-7777",
-                    "endereco": "Rua Busca, 789"
-                }
-                """;
+        RestauranteRequestDTO requestDTO = new RestauranteRequestDTO();
+        requestDTO.setNome("Restaurante para Busca");
+        requestDTO.setEmail("busca@restaurante.com");
+        requestDTO.setTelefone("(11) 77777-7777");
+        requestDTO.setEndereco("Rua Busca, 789");
 
         String response = mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -168,19 +161,16 @@ class RestauranteControllerFunctionalTest {
     @Test
     void deveAprovarRestauranteComSucesso() throws Exception {
         // Primeiro cria um restaurante
-        String json = """
-                {
-                    "nome": "Restaurante para Aprovar",
-                    "email": "aprovar@restaurante.com",
-                    "telefone": "(11) 66666-6666",
-                    "endereco": "Rua Aprovar, 101"
-                }
-                """;
+        RestauranteRequestDTO requestDTO = new RestauranteRequestDTO();
+        requestDTO.setNome("Restaurante para Aprovar");
+        requestDTO.setEmail("aprovar@restaurante.com");
+        requestDTO.setTelefone("(11) 66666-6666");
+        requestDTO.setEndereco("Rua Aprovar, 101");
 
         String response = mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -201,19 +191,16 @@ class RestauranteControllerFunctionalTest {
     @Test
     void deveRejeitarRestauranteComSucesso() throws Exception {
         // Primeiro cria um restaurante
-        String json = """
-                {
-                    "nome": "Restaurante para Rejeitar",
-                    "email": "rejeitar@restaurante.com",
-                    "telefone": "(11) 55555-5555",
-                    "endereco": "Rua Rejeitar, 202"
-                }
-                """;
+        RestauranteRequestDTO requestDTO = new RestauranteRequestDTO();
+        requestDTO.setNome("Restaurante para Rejeitar");
+        requestDTO.setEmail("rejeitar@restaurante.com");
+        requestDTO.setTelefone("(11) 55555-5555");
+        requestDTO.setEndereco("Rua Rejeitar, 202");
 
         String response = mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -234,19 +221,16 @@ class RestauranteControllerFunctionalTest {
     @Test
     void deveRetornarForbiddenQuandoUsuarioTentaAprovarRestauranteSemSerAdmin() throws Exception {
         // Primeiro cria um restaurante
-        String json = """
-                {
-                    "nome": "Restaurante para Teste Admin",
-                    "email": "admin-test@restaurante.com",
-                    "telefone": "(11) 44444-4444",
-                    "endereco": "Rua Admin Test, 303"
-                }
-                """;
+        RestauranteRequestDTO requestDTO = new RestauranteRequestDTO();
+        requestDTO.setNome("Restaurante para Teste Admin");
+        requestDTO.setEmail("admin-test@restaurante.com");
+        requestDTO.setTelefone("(11) 44444-4444");
+        requestDTO.setEndereco("Rua Admin Test, 303");
 
         String response = mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

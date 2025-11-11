@@ -1,5 +1,8 @@
 package com.siseg.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.siseg.dto.entregador.EntregadorRequestDTO;
+import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.util.TestJwtUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,6 +12,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.math.BigDecimal;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
@@ -24,6 +29,9 @@ class EntregadorControllerFunctionalTest {
 
     @Autowired
     private TestJwtUtil testJwtUtil;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private String userToken;
     private String adminToken;
@@ -46,24 +54,21 @@ class EntregadorControllerFunctionalTest {
 
     @Test
     void deveCriarEntregadorComSucesso() throws Exception {
-        String json = """
-                {
-                    "nome": "Entregador de Teste",
-                    "email": "entregador.teste@teste.com",
-                    "cpf": "12345678901",
-                    "telefone": "(11) 99999-9999",
-                    "tipoVeiculo": "MOTO",
-                    "placaVeiculo": "ABC1234",
-                    "latitude": -23.5505,
-                    "longitude": -46.6333,
-                    "password": "senha123"
-                }
-                """;
+        EntregadorRequestDTO requestDTO = new EntregadorRequestDTO();
+        requestDTO.setNome("Entregador de Teste");
+        requestDTO.setEmail("entregador.teste@teste.com");
+        requestDTO.setCpf("12345678901");
+        requestDTO.setTelefone("(11) 99999-9999");
+        requestDTO.setTipoVeiculo(TipoVeiculo.MOTO);
+        requestDTO.setPlacaVeiculo("ABC1234");
+        requestDTO.setLatitude(new BigDecimal("-23.5505"));
+        requestDTO.setLongitude(new BigDecimal("-46.6333"));
+        requestDTO.setPassword("senha123");
 
         mockMvc.perform(post("/api/entregadores")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nome").value("Entregador de Teste"))
@@ -76,17 +81,14 @@ class EntregadorControllerFunctionalTest {
 
     @Test
     void deveRetornarErro422AoCriarEntregadorComCamposObrigatoriosFaltando() throws Exception {
-        String json = """
-                {
-                    "email": "entregador@teste.com",
-                    "telefone": "(11) 99999-9999"
-                }
-                """;
+        EntregadorRequestDTO requestDTO = new EntregadorRequestDTO();
+        requestDTO.setEmail("entregador@teste.com");
+        requestDTO.setTelefone("(11) 99999-9999");
 
         mockMvc.perform(post("/api/entregadores")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andDo(print())
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.status").value(422))
@@ -107,24 +109,21 @@ class EntregadorControllerFunctionalTest {
     @Test
     void deveListarEntregadoresComPaginacao() throws Exception {
         // Primeiro cria um entregador
-        String json = """
-                {
-                    "nome": "Entregador para Listagem",
-                    "email": "listagem.entregador@teste.com",
-                    "cpf": "98765432109",
-                    "telefone": "(11) 88888-8888",
-                    "tipoVeiculo": "CARRO",
-                    "placaVeiculo": "XYZ9876",
-                    "latitude": -23.5505,
-                    "longitude": -46.6333,
-                    "password": "senha123"
-                }
-                """;
+        EntregadorRequestDTO requestDTO = new EntregadorRequestDTO();
+        requestDTO.setNome("Entregador para Listagem");
+        requestDTO.setEmail("listagem.entregador@teste.com");
+        requestDTO.setCpf("98765432109");
+        requestDTO.setTelefone("(11) 88888-8888");
+        requestDTO.setTipoVeiculo(TipoVeiculo.CARRO);
+        requestDTO.setPlacaVeiculo("XYZ9876");
+        requestDTO.setLatitude(new BigDecimal("-23.5505"));
+        requestDTO.setLongitude(new BigDecimal("-46.6333"));
+        requestDTO.setPassword("senha123");
 
         mockMvc.perform(post("/api/entregadores")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk());
 
         // Depois lista os entregadores
@@ -140,24 +139,21 @@ class EntregadorControllerFunctionalTest {
     @Test
     void deveBuscarEntregadorPorIdComSucesso() throws Exception {
         // Primeiro cria um entregador
-        String json = """
-                {
-                    "nome": "Entregador para Busca",
-                    "email": "busca.entregador@teste.com",
-                    "cpf": "11122233344",
-                    "telefone": "(11) 77777-7777",
-                    "tipoVeiculo": "BICICLETA",
-                    "placaVeiculo": "BIKE123",
-                    "latitude": -23.5505,
-                    "longitude": -46.6333,
-                    "password": "senha123"
-                }
-                """;
+        EntregadorRequestDTO requestDTO = new EntregadorRequestDTO();
+        requestDTO.setNome("Entregador para Busca");
+        requestDTO.setEmail("busca.entregador@teste.com");
+        requestDTO.setCpf("11122233344");
+        requestDTO.setTelefone("(11) 77777-7777");
+        requestDTO.setTipoVeiculo(TipoVeiculo.BICICLETA);
+        requestDTO.setPlacaVeiculo("BIKE123");
+        requestDTO.setLatitude(new BigDecimal("-23.5505"));
+        requestDTO.setLongitude(new BigDecimal("-46.6333"));
+        requestDTO.setPassword("senha123");
 
         String response = mockMvc.perform(post("/api/entregadores")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -179,24 +175,21 @@ class EntregadorControllerFunctionalTest {
     @Test
     void deveAprovarEntregadorComSucesso() throws Exception {
         // Primeiro cria um entregador
-        String json = """
-                {
-                    "nome": "Entregador para Aprovar",
-                    "email": "aprovar.entregador@teste.com",
-                    "cpf": "55566677788",
-                    "telefone": "(11) 66666-6666",
-                    "tipoVeiculo": "MOTO",
-                    "placaVeiculo": "APR1234",
-                    "latitude": -23.5505,
-                    "longitude": -46.6333,
-                    "password": "senha123"
-                }
-                """;
+        EntregadorRequestDTO requestDTO = new EntregadorRequestDTO();
+        requestDTO.setNome("Entregador para Aprovar");
+        requestDTO.setEmail("aprovar.entregador@teste.com");
+        requestDTO.setCpf("55566677788");
+        requestDTO.setTelefone("(11) 66666-6666");
+        requestDTO.setTipoVeiculo(TipoVeiculo.MOTO);
+        requestDTO.setPlacaVeiculo("APR1234");
+        requestDTO.setLatitude(new BigDecimal("-23.5505"));
+        requestDTO.setLongitude(new BigDecimal("-46.6333"));
+        requestDTO.setPassword("senha123");
 
         String response = mockMvc.perform(post("/api/entregadores")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -217,24 +210,21 @@ class EntregadorControllerFunctionalTest {
     @Test
     void deveRejeitarEntregadorComSucesso() throws Exception {
         // Primeiro cria um entregador
-        String json = """
-                {
-                    "nome": "Entregador para Rejeitar",
-                    "email": "rejeitar.entregador@teste.com",
-                    "cpf": "33344455566",
-                    "telefone": "(11) 55555-5555",
-                    "tipoVeiculo": "CARRO",
-                    "placaVeiculo": "REJ1234",
-                    "latitude": -23.5505,
-                    "longitude": -46.6333,
-                    "password": "senha123"
-                }
-                """;
+        EntregadorRequestDTO requestDTO = new EntregadorRequestDTO();
+        requestDTO.setNome("Entregador para Rejeitar");
+        requestDTO.setEmail("rejeitar.entregador@teste.com");
+        requestDTO.setCpf("33344455566");
+        requestDTO.setTelefone("(11) 55555-5555");
+        requestDTO.setTipoVeiculo(TipoVeiculo.CARRO);
+        requestDTO.setPlacaVeiculo("REJ1234");
+        requestDTO.setLatitude(new BigDecimal("-23.5505"));
+        requestDTO.setLongitude(new BigDecimal("-46.6333"));
+        requestDTO.setPassword("senha123");
 
         String response = mockMvc.perform(post("/api/entregadores")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -255,24 +245,21 @@ class EntregadorControllerFunctionalTest {
     @Test
     void deveRetornarForbiddenQuandoUsuarioTentaAprovarEntregadorSemSerAdmin() throws Exception {
         // Primeiro cria um entregador
-        String json = """
-                {
-                    "nome": "Entregador para Teste Admin",
-                    "email": "admin.test.entregador@teste.com",
-                    "cpf": "99988877766",
-                    "telefone": "(11) 44444-4444",
-                    "tipoVeiculo": "MOTO",
-                    "placaVeiculo": "ADM1234",
-                    "latitude": -23.5505,
-                    "longitude": -46.6333,
-                    "password": "senha123"
-                }
-                """;
+        EntregadorRequestDTO requestDTO = new EntregadorRequestDTO();
+        requestDTO.setNome("Entregador para Teste Admin");
+        requestDTO.setEmail("admin.test.entregador@teste.com");
+        requestDTO.setCpf("99988877766");
+        requestDTO.setTelefone("(11) 44444-4444");
+        requestDTO.setTipoVeiculo(TipoVeiculo.MOTO);
+        requestDTO.setPlacaVeiculo("ADM1234");
+        requestDTO.setLatitude(new BigDecimal("-23.5505"));
+        requestDTO.setLongitude(new BigDecimal("-46.6333"));
+        requestDTO.setPassword("senha123");
 
         String response = mockMvc.perform(post("/api/entregadores")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -291,24 +278,21 @@ class EntregadorControllerFunctionalTest {
     @Test
     void deveListarEntregadoresPorStatus() throws Exception {
         // Primeiro cria um entregador
-        String json = """
-                {
-                    "nome": "Entregador Status Test",
-                    "email": "status.entregador@teste.com",
-                    "cpf": "77788899900",
-                    "telefone": "(11) 33333-3333",
-                    "tipoVeiculo": "BICICLETA",
-                    "placaVeiculo": "STS1234",
-                    "latitude": -23.5505,
-                    "longitude": -46.6333,
-                    "password": "senha123"
-                }
-                """;
+        EntregadorRequestDTO requestDTO = new EntregadorRequestDTO();
+        requestDTO.setNome("Entregador Status Test");
+        requestDTO.setEmail("status.entregador@teste.com");
+        requestDTO.setCpf("77788899900");
+        requestDTO.setTelefone("(11) 33333-3333");
+        requestDTO.setTipoVeiculo(TipoVeiculo.BICICLETA);
+        requestDTO.setPlacaVeiculo("STS1234");
+        requestDTO.setLatitude(new BigDecimal("-23.5505"));
+        requestDTO.setLongitude(new BigDecimal("-46.6333"));
+        requestDTO.setPassword("senha123");
 
         mockMvc.perform(post("/api/entregadores")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk());
 
         // Lista entregadores por status (requer admin)
