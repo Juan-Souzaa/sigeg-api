@@ -2,8 +2,11 @@ package com.siseg.validator;
 
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.PedidoAlreadyProcessedException;
+import com.siseg.exception.PratoNotAvailableException;
+import com.siseg.model.Cliente;
 import com.siseg.model.Entregador;
 import com.siseg.model.Pedido;
+import com.siseg.model.Prato;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
@@ -55,6 +58,37 @@ public class PedidoValidator {
         }
         
         SecurityUtils.validateEntregadorOwnership(pedido.getEntregador());
+    }
+    
+    public void validateStatusParaConfirmacao(Pedido pedido) {
+        if (pedido.getStatus() != StatusPedido.CREATED) {
+            throw new PedidoAlreadyProcessedException("Pedido já foi processado");
+        }
+    }
+    
+    public void validateStatusParaSaiuEntrega(Pedido pedido) {
+        if (pedido.getStatus() != StatusPedido.PREPARING) {
+            throw new PedidoAlreadyProcessedException("Pedido deve estar PREPARING para ser marcado como OUT_FOR_DELIVERY");
+        }
+    }
+    
+    public void validateStatusParaEntrega(Pedido pedido) {
+        if (pedido.getStatus() != StatusPedido.OUT_FOR_DELIVERY) {
+            throw new PedidoAlreadyProcessedException("Pedido deve estar OUT_FOR_DELIVERY para ser marcado como DELIVERED");
+        }
+    }
+    
+    public void validatePermissaoCliente(Cliente cliente, User currentUser) {
+        if (!SecurityUtils.isAdmin() && (cliente.getUser() == null || !cliente.getUser().getId().equals(currentUser.getId()))) {
+            throw new AccessDeniedException("Você não tem permissão para criar pedidos para este cliente");
+        }
+    }
+    
+    public Prato validatePratoDisponivel(Prato prato) {
+        if (!prato.getDisponivel()) {
+            throw new PratoNotAvailableException("Prato não disponível: " + prato.getNome());
+        }
+        return prato;
     }
 }
 

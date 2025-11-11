@@ -27,4 +27,6 @@ public class PedidoRequestDTO {
     
     @NotBlank(message = "Endereço de entrega é obrigatório")
     private String enderecoEntrega;
+    
+    private Long carrinhoId;
 }

@@ -1,38 +1,38 @@
 package com.siseg.service;
 
-import com.siseg.dto.cardapio.CardapioResponseDTO;
+import com.siseg.dto.pedido.PedidoItemRequestDTO;
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
-import com.siseg.dto.restaurante.RestauranteBuscaDTO;
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
-import com.siseg.exception.PedidoAlreadyProcessedException;
-import com.siseg.exception.PratoNotAvailableException;
 import com.siseg.model.*;
-import com.siseg.model.enumerations.CategoriaMenu;
+import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
+import com.siseg.model.enumerations.TipoDesconto;
 import com.siseg.repository.*;
 import com.siseg.mapper.PedidoMapper;
 import com.siseg.util.SecurityUtils;
-import com.siseg.validator.PedidoValidator;
 import com.siseg.util.TempoEstimadoCalculator;
-import org.modelmapper.ModelMapper;
+import com.siseg.util.CalculadoraFinanceira;
+import com.siseg.util.VehicleConstants;
+import com.siseg.validator.PedidoValidator;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 @Service
 public class PedidoService {
     
     private static final Logger logger = Logger.getLogger(PedidoService.class.getName());
+    private static final BigDecimal VALOR_MINIMO_TAXA_ENTREGA = new BigDecimal("50.00");
+    private static final BigDecimal TAXA_ENTREGA_PADRAO = new BigDecimal("5.00");
     
     private final PedidoRepository pedidoRepository;
     private final ClienteRepository clienteRepository;
@@ -42,19 +42,20 @@ public class PedidoService {
     private final NotificationService notificationService;
     private final GeocodingService geocodingService;
     private final RastreamentoService rastreamentoService;
-    private final AvaliacaoService avaliacaoService;
-    private final ModelMapper modelMapper;
     private final TempoEstimadoCalculator tempoEstimadoCalculator;
     private final PedidoMapper pedidoMapper;
     private final PedidoValidator pedidoValidator;
+    private final CarrinhoService carrinhoService;
+    private final CupomService cupomService;
+    private final TaxaCalculoService taxaCalculoService;
 
     public PedidoService(PedidoRepository pedidoRepository, ClienteRepository clienteRepository,
                          RestauranteRepository restauranteRepository, PratoRepository pratoRepository,
                          EntregadorRepository entregadorRepository, NotificationService notificationService,
                          GeocodingService geocodingService, RastreamentoService rastreamentoService,
-                         AvaliacaoService avaliacaoService, ModelMapper modelMapper,
                          TempoEstimadoCalculator tempoEstimadoCalculator, PedidoMapper pedidoMapper,
-                         PedidoValidator pedidoValidator) {
+                         PedidoValidator pedidoValidator, CarrinhoService carrinhoService, CupomService cupomService,
+                         TaxaCalculoService taxaCalculoService) {
         this.pedidoRepository = pedidoRepository;
         this.clienteRepository = clienteRepository;
         this.restauranteRepository = restauranteRepository;
@@ -63,11 +64,12 @@ public class PedidoService {
         this.notificationService = notificationService;
         this.geocodingService = geocodingService;
         this.rastreamentoService = rastreamentoService;
-        this.avaliacaoService = avaliacaoService;
-        this.modelMapper = modelMapper;
         this.tempoEstimadoCalculator = tempoEstimadoCalculator;
         this.pedidoMapper = pedidoMapper;
         this.pedidoValidator = pedidoValidator;
+        this.carrinhoService = carrinhoService;
+        this.cupomService = cupomService;
+        this.taxaCalculoService = taxaCalculoService;
     }
     
     @Transactional
@@ -78,10 +80,21 @@ public class PedidoService {
         
         Pedido pedido = criarPedidoBasico(cliente, restaurante, dto);
         processarGeocodificacaoEndereco(pedido, cliente, dto.getEnderecoEntrega());
-        processarItensPedido(pedido, dto.getItens());
+        
+        if (dto.getCarrinhoId() != null) {
+            processarCarrinhoParaPedido(pedido, dto.getCarrinhoId(), cliente.getId());
+        } else {
+            processarItensPedido(pedido, dto.getItens());
+        }
+        
         calcularValoresPedido(pedido);
         
         Pedido saved = pedidoRepository.save(pedido);
+        
+        if (dto.getCarrinhoId() != null) {
+            carrinhoService.limparCarrinho();
+        }
+        
         return pedidoMapper.toResponseDTO(saved);
     }
     
@@ -91,7 +104,7 @@ public class PedidoService {
         }
         
         Cliente cliente = buscarClientePorId(clienteId);
-        validarPermissaoCliente(cliente, currentUser);
+        pedidoValidator.validatePermissaoCliente(cliente, currentUser);
         return cliente;
     }
     
@@ -105,11 +118,6 @@ public class PedidoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + clienteId));
     }
     
-    private void validarPermissaoCliente(Cliente cliente, User currentUser) {
-        if (!SecurityUtils.isAdmin() && (cliente.getUser() == null || !cliente.getUser().getId().equals(currentUser.getId()))) {
-            throw new AccessDeniedException("Você não tem permissão para criar pedidos para este cliente");
-        }
-    }
     
     private Restaurante buscarRestaurante(Long restauranteId) {
         return restauranteRepository.findById(restauranteId)
@@ -154,7 +162,7 @@ public class PedidoService {
                cliente.getLongitude() != null;
     }
     
-    private void processarItensPedido(Pedido pedido, java.util.List<com.siseg.dto.pedido.PedidoItemRequestDTO> itensDto) {
+    private void processarItensPedido(Pedido pedido, List<PedidoItemRequestDTO> itensDto) {
         BigDecimal subtotal = BigDecimal.ZERO;
         
         for (var itemDto : itensDto) {
@@ -171,14 +179,10 @@ public class PedidoService {
         Prato prato = pratoRepository.findById(pratoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Prato não encontrado com ID: " + pratoId));
         
-        if (!prato.getDisponivel()) {
-            throw new PratoNotAvailableException("Prato não disponível: " + prato.getNome());
-        }
-        
-        return prato;
+        return pedidoValidator.validatePratoDisponivel(prato);
     }
     
-    private PedidoItem criarPedidoItem(Pedido pedido, Prato prato, com.siseg.dto.pedido.PedidoItemRequestDTO itemDto) {
+    private PedidoItem criarPedidoItem(Pedido pedido, Prato prato, PedidoItemRequestDTO itemDto) {
         PedidoItem item = new PedidoItem();
         item.setPedido(pedido);
         item.setPrato(prato);
@@ -191,6 +195,70 @@ public class PedidoService {
     private void calcularValoresPedido(Pedido pedido) {
         pedido.setTaxaEntrega(calcularTaxaEntrega(pedido.getSubtotal()));
         pedido.setTotal(pedido.getSubtotal().add(pedido.getTaxaEntrega()));
+    }
+    
+    private void processarCarrinhoParaPedido(Pedido pedido, Long carrinhoId, Long clienteId) {
+        Carrinho carrinho = validarECarregarCarrinho(carrinhoId, clienteId);
+        BigDecimal subtotal = processarItensDoCarrinho(pedido, carrinho);
+        aplicarCupomSeExistir(pedido, carrinho, subtotal);
+    }
+    
+    private Carrinho validarECarregarCarrinho(Long carrinhoId, Long clienteId) {
+        Carrinho carrinho = carrinhoService.obterCarrinhoParaPedido(clienteId);
+        
+        if (!carrinho.getId().equals(carrinhoId)) {
+            throw new ResourceNotFoundException("Carrinho não encontrado ou não pertence ao cliente");
+        }
+        
+        if (carrinho.getItens().isEmpty()) {
+            throw new IllegalArgumentException("Carrinho está vazio");
+        }
+        
+        return carrinho;
+    }
+    
+    private BigDecimal processarItensDoCarrinho(Pedido pedido, Carrinho carrinho) {
+        BigDecimal subtotal = BigDecimal.ZERO;
+        
+        for (CarrinhoItem itemCarrinho : carrinho.getItens()) {
+            Prato prato = pedidoValidator.validatePratoDisponivel(itemCarrinho.getPrato());
+            PedidoItem item = criarPedidoItemDoCarrinho(pedido, prato, itemCarrinho);
+            pedido.getItens().add(item);
+            subtotal = subtotal.add(item.getSubtotal());
+        }
+        
+        pedido.setSubtotal(subtotal);
+        return subtotal;
+    }
+    
+    
+    private void aplicarCupomSeExistir(Pedido pedido, Carrinho carrinho, BigDecimal subtotal) {
+        if (carrinho.getCupom() != null) {
+            BigDecimal desconto = calcularDescontoCupom(carrinho.getCupom(), subtotal);
+            BigDecimal taxaEntrega = calcularTaxaEntrega(subtotal);
+            pedido.setTotal(subtotal.subtract(desconto).add(taxaEntrega));
+            cupomService.incrementarUsoCupom(carrinho.getCupom());
+        } else {
+            pedido.setTotal(subtotal.add(calcularTaxaEntrega(subtotal)));
+        }
+    }
+    
+    private PedidoItem criarPedidoItemDoCarrinho(Pedido pedido, Prato prato, CarrinhoItem itemCarrinho) {
+        PedidoItem item = new PedidoItem();
+        item.setPedido(pedido);
+        item.setPrato(prato);
+        item.setQuantidade(itemCarrinho.getQuantidade());
+        item.setPrecoUnitario(itemCarrinho.getPrecoUnitario());
+        item.setSubtotal(itemCarrinho.getSubtotal());
+        return item;
+    }
+    
+    private BigDecimal calcularDescontoCupom(Cupom cupom, BigDecimal subtotal) {
+        if (cupom.getTipoDesconto() == TipoDesconto.PERCENTUAL) {
+            return CalculadoraFinanceira.calcularTaxaPlataforma(subtotal, cupom.getValorDesconto());
+        }
+        BigDecimal desconto = cupom.getValorDesconto();
+        return desconto.compareTo(subtotal) > 0 ? subtotal : desconto;
     }
     
     public PedidoResponseDTO buscarPorId(Long id) {
@@ -214,36 +282,31 @@ public class PedidoService {
     
     @Transactional
     public PedidoResponseDTO confirmarPedido(Long id) {
-        Pedido pedido = pedidoRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
-        
+        Pedido pedido = buscarPedidoValido(id);
         validatePedidoOwnership(pedido);
-        
-        if (pedido.getStatus() != StatusPedido.CREATED) {
-            throw new PedidoAlreadyProcessedException("Pedido já foi processado");
-        }
+        pedidoValidator.validateStatusParaConfirmacao(pedido);
         
         pedido.setStatus(StatusPedido.CONFIRMED);
         Pedido saved = pedidoRepository.save(pedido);
         
-        // Notificar cliente e restaurante
-        if (saved.getCliente() != null) {
-            notificationService.notifyOrderStatusChange(
-                saved.getId(), 
-                saved.getCliente().getEmail(),
-                saved.getCliente().getTelefone(),
-                "CONFIRMED"
-            );
-        }
-        if (saved.getRestaurante() != null) {
-            notificationService.notifyRestaurantNewOrder(
-                saved.getId(),
-                saved.getRestaurante().getEmail(),
-                saved.getTotal()
-            );
-        }
+        enviarNotificacoesConfirmacaoPedido(saved);
         
         return pedidoMapper.toResponseDTO(saved);
+    }
+    
+    private void enviarNotificacoesConfirmacaoPedido(Pedido pedido) {
+        notificarClienteStatusPedido(pedido, "CONFIRMED");
+        notificarRestauranteNovoPedido(pedido);
+    }
+    
+    private void notificarRestauranteNovoPedido(Pedido pedido) {
+        if (pedido.getRestaurante() != null) {
+            notificationService.notifyRestaurantNewOrder(
+                pedido.getId(),
+                pedido.getRestaurante().getEmail(),
+                pedido.getTotal()
+            );
+        }
     }
 
     @Transactional
@@ -274,77 +337,64 @@ public class PedidoService {
 
     @Transactional
     public PedidoResponseDTO marcarSaiuEntrega(Long id) {
-        Pedido pedido = pedidoRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
-        
+        Pedido pedido = buscarPedidoValido(id);
         pedidoValidator.validateEntregadorDoPedido(pedido, "Apenas o entregador associado pode atualizar este status");
-        
-        if (pedido.getStatus() != StatusPedido.PREPARING) {
-            throw new PedidoAlreadyProcessedException("Pedido deve estar PREPARING para ser marcado como OUT_FOR_DELIVERY");
-        }
+        pedidoValidator.validateStatusParaSaiuEntrega(pedido);
         
         pedido.setStatus(StatusPedido.OUT_FOR_DELIVERY);
-        
-        if (pedido.getEntregador() != null) {
-            Entregador entregador = pedido.getEntregador();
-            if ((entregador.getLatitude() == null || entregador.getLongitude() == null) &&
-                pedido.getRestaurante() != null &&
-                pedido.getRestaurante().getLatitude() != null &&
-                pedido.getRestaurante().getLongitude() != null) {
-                entregador.setLatitude(pedido.getRestaurante().getLatitude());
-                entregador.setLongitude(pedido.getRestaurante().getLongitude());
-                entregadorRepository.save(entregador);
-                logger.info("Posição inicial do entregador definida com coordenadas do restaurante");
-            }
-        }
+        inicializarPosicaoEntregadorSeNecessario(pedido);
         
         Pedido saved = pedidoRepository.save(pedido);
-        
-        if (saved.getCliente() != null) {
-            notificationService.notifyOrderStatusChange(
-                saved.getId(),
-                saved.getCliente().getEmail(),
-                saved.getCliente().getTelefone(),
-                "OUT_FOR_DELIVERY"
-            );
-        }
+        notificarClienteStatusPedido(saved, "OUT_FOR_DELIVERY");
         
         return pedidoMapper.toResponseDTO(saved);
+    }
+    
+    private void inicializarPosicaoEntregadorSeNecessario(Pedido pedido) {
+        if (pedido.getEntregador() == null) {
+            return;
+        }
+        
+        Entregador entregador = pedido.getEntregador();
+        if (precisaInicializarPosicao(entregador, pedido.getRestaurante())) {
+            definirPosicaoInicialEntregador(entregador, pedido.getRestaurante());
+        }
+    }
+    
+    private boolean precisaInicializarPosicao(Entregador entregador, Restaurante restaurante) {
+        return (entregador.getLatitude() == null || entregador.getLongitude() == null) &&
+               restaurante != null &&
+               restaurante.getLatitude() != null &&
+               restaurante.getLongitude() != null;
+    }
+    
+    private void definirPosicaoInicialEntregador(Entregador entregador, Restaurante restaurante) {
+        entregador.setLatitude(restaurante.getLatitude());
+        entregador.setLongitude(restaurante.getLongitude());
+        entregadorRepository.save(entregador);
+        logger.info("Posição inicial do entregador definida com coordenadas do restaurante");
     }
 
     @Transactional
     public PedidoResponseDTO marcarComoEntregue(Long id) {
-        Pedido pedido = pedidoRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
-        
+        Pedido pedido = buscarPedidoValido(id);
         pedidoValidator.validateEntregadorDoPedido(pedido, "Apenas o entregador associado pode marcar como entregue");
-        
-        if (pedido.getStatus() != StatusPedido.OUT_FOR_DELIVERY) {
-            throw new PedidoAlreadyProcessedException("Pedido deve estar OUT_FOR_DELIVERY para ser marcado como DELIVERED");
-        }
+        pedidoValidator.validateStatusParaEntrega(pedido);
         
         pedido.setStatus(StatusPedido.DELIVERED);
+        taxaCalculoService.calcularEAtualizarValoresFinanceiros(pedido);
         Pedido saved = pedidoRepository.save(pedido);
         
         logger.info("Pedido " + saved.getId() + " marcado como entregue. Cliente pode criar avaliação agora.");
         
-        if (saved.getCliente() != null) {
-            notificationService.notifyOrderStatusChange(
-                saved.getId(),
-                saved.getCliente().getEmail(),
-                saved.getCliente().getTelefone(),
-                "DELIVERED"
-            );
-        }
-        if (saved.getRestaurante() != null) {
-            notificationService.notifyRestaurantNewOrder(
-                saved.getId(),
-                saved.getRestaurante().getEmail(),
-                saved.getTotal()
-            );
-        }
+        enviarNotificacoesEntregaPedido(saved);
         
         return pedidoMapper.toResponseDTO(saved);
+    }
+    
+    private void enviarNotificacoesEntregaPedido(Pedido pedido) {
+        notificarClienteStatusPedido(pedido, "DELIVERED");
+        notificarRestauranteNovoPedido(pedido);
     }
 
     @Transactional(readOnly = true)
@@ -354,7 +404,7 @@ public class PedidoService {
         Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
                 .orElseThrow(() -> new AccessDeniedException("Usuário não é entregador"));
         
-        if (entregador.getStatus() != com.siseg.model.enumerations.StatusEntregador.APPROVED) {
+        if (entregador.getStatus() != StatusEntregador.APPROVED) {
             throw new AccessDeniedException("Entregador não está aprovado");
         }
         
@@ -410,8 +460,8 @@ public class PedidoService {
         );
         
         if (resultado.getDistanciaKm() != null && resultado.getTempoMinutos() > 0) {
-            java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(resultado.getTempoMinutos());
-            pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
+            Duration tempoEstimado = Duration.ofMinutes(resultado.getTempoMinutos());
+            pedido.setTempoEstimadoEntrega(Instant.now().plus(tempoEstimado));
             logger.info(String.format("Tempo estimado calculado: %d minutos para distância de %s km (OSRM: %s)",
                 resultado.getTempoMinutos(), resultado.getDistanciaKm(), resultado.isUsadoOSRM()));
         } else {
@@ -428,11 +478,10 @@ public class PedidoService {
     }
     
     private void aplicarTempoPadraoEntrega(Pedido pedido) {
-        java.time.Duration tempoEstimado = java.time.Duration.ofMinutes(
-            com.siseg.util.VehicleConstants.TEMPO_PADRAO_ENTREGA_MINUTOS);
-        pedido.setTempoEstimadoEntrega(java.time.Instant.now().plus(tempoEstimado));
+        Duration tempoEstimado = Duration.ofMinutes(VehicleConstants.TEMPO_PADRAO_ENTREGA_MINUTOS);
+        pedido.setTempoEstimadoEntrega(Instant.now().plus(tempoEstimado));
         logger.warning("Coordenadas não disponíveis, usando tempo padrão de " 
-            + com.siseg.util.VehicleConstants.TEMPO_PADRAO_ENTREGA_MINUTOS + " minutos");
+            + VehicleConstants.TEMPO_PADRAO_ENTREGA_MINUTOS + " minutos");
     }
     
     private void enviarNotificacoesAceitePedido(Pedido pedido) {
@@ -470,105 +519,11 @@ public class PedidoService {
         SecurityUtils.validatePedidoOwnership(pedido);
     }
     
-    @Transactional(readOnly = true)
-    public Page<RestauranteBuscaDTO> buscarRestaurantes(String cozinha, Pageable pageable) {
-        Page<Restaurante> restaurantes = restauranteRepository.buscarRestaurantesAprovados(cozinha, pageable);
-        
-        var coordenadasCliente = obterCoordenadasCliente();
-        
-        return restaurantes.map(restaurante -> {
-            RestauranteBuscaDTO dto = modelMapper.map(restaurante, RestauranteBuscaDTO.class);
-            
-            if (coordenadasCliente != null && temCoordenadas(restaurante)) {
-                calcularDistanciaETempoRestaurante(dto, restaurante, coordenadasCliente);
-            }
-            
-            adicionarAvaliacoesRestaurante(dto, restaurante.getId());
-            
-            return dto;
-        });
-    }
-    
-    private Coordenadas obterCoordenadasCliente() {
-        try {
-            User currentUser = SecurityUtils.getCurrentUser();
-            if (currentUser == null) {
-                return null;
-            }
-            
-            return buscarCoordenadasCliente(currentUser);
-        } catch (Exception e) {
-            logger.warning("Erro ao obter coordenadas do cliente: " + e.getMessage());
-            return null;
-        }
-    }
-    
-    private Coordenadas buscarCoordenadasCliente(User currentUser) {
-        Cliente cliente = clienteRepository.findByUserId(currentUser.getId()).orElse(null);
-        if (cliente == null) {
-            return null;
-        }
-        
-        if (temCoordenadasValidas(cliente)) {
-            return new Coordenadas(cliente.getLatitude(), cliente.getLongitude());
-        }
-        
-        return null;
-    }
-    
-    private boolean temCoordenadasValidas(Cliente cliente) {
-        return cliente.getLatitude() != null && cliente.getLongitude() != null;
-    }
-    
-    private boolean temCoordenadas(Restaurante restaurante) {
-        return restaurante.getLatitude() != null && restaurante.getLongitude() != null;
-    }
-    
-    private void calcularDistanciaETempoRestaurante(RestauranteBuscaDTO dto, Restaurante restaurante, Coordenadas coordenadasCliente) {
-        var resultado = tempoEstimadoCalculator.calculateDistanceAndTime(
-            coordenadasCliente.latitude(),
-            coordenadasCliente.longitude(),
-            restaurante.getLatitude(),
-            restaurante.getLongitude(),
-            null
-        );
-        
-        if (resultado.getDistanciaKm() != null) {
-            dto.setDistanciaKm(resultado.getDistanciaKm());
-            dto.setTempoEstimadoMinutos(resultado.getTempoMinutos());
-        }
-    }
-    
-    private void adicionarAvaliacoesRestaurante(RestauranteBuscaDTO dto, Long restauranteId) {
-        BigDecimal mediaAvaliacao = avaliacaoService.calcularMediaRestaurante(restauranteId);
-        long totalAvaliacoes = avaliacaoService.contarAvaliacoesRestaurante(restauranteId);
-        
-        dto.setMediaAvaliacao(mediaAvaliacao);
-        dto.setTotalAvaliacoes(totalAvaliacoes);
-    }
-    
-    private record Coordenadas(BigDecimal latitude, BigDecimal longitude) {}
-    
-    public Page<CardapioResponseDTO> buscarCardapio(Long restauranteId, Pageable pageable) {
-        Restaurante restaurante = restauranteRepository.findById(restauranteId)
-                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
-        
-        Page<Prato> pratosPage = pratoRepository.findByRestauranteIdAndDisponivel(restauranteId, true, pageable);
-        
-        Map<CategoriaMenu, List<Prato>> pratosPorCategoria = pratosPage.getContent().stream()
-                .collect(Collectors.groupingBy(Prato::getCategoria));
-        
-        CardapioResponseDTO response = pedidoMapper.toCardapioResponseDTO(
-            restauranteId, restaurante.getNome(), pratosPorCategoria);
-        
-        return new PageImpl<>(List.of(response), pageable, pratosPage.getTotalElements());
-    }
-    
     private BigDecimal calcularTaxaEntrega(BigDecimal subtotal) {
-        if (subtotal.compareTo(BigDecimal.valueOf(50)) >= 0) {
+        if (subtotal.compareTo(VALOR_MINIMO_TAXA_ENTREGA) >= 0) {
             return BigDecimal.ZERO;
         }
-        return BigDecimal.valueOf(5.0);
+        return TAXA_ENTREGA_PADRAO;
     }
     
 }

@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Instant;
 import java.util.List;
 
 public interface PedidoRepository extends JpaRepository<Pedido, Long> {
@@ -14,4 +15,6 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
     List<Pedido> findByStatus(StatusPedido status);
     List<Pedido> findByEntregadorId(Long entregadorId);
     Page<Pedido> findByStatusAndEntregadorIsNull(StatusPedido status, Pageable pageable);
+    List<Pedido> findByStatusAndRestauranteIdAndCriadoEmBetween(StatusPedido status, Long restauranteId, Instant inicio, Instant fim);
+    List<Pedido> findByStatusAndEntregadorIdAndCriadoEmBetween(StatusPedido status, Long entregadorId, Instant inicio, Instant fim);
 }
