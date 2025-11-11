@@ -67,6 +67,16 @@ public class SecurityUtils {
     }
     
     /**
+     * Valida se o usuário autenticado é admin.
+     * @throws AccessDeniedException se o usuário não for admin
+     */
+    public static void validateAdminAccess() {
+        if (!isAdmin()) {
+            throw new AccessDeniedException("Apenas administradores podem realizar esta operacao");
+        }
+    }
+    
+    /**
      * Valida se o usuário autenticado tem permissão para acessar o pedido.
      * Permite acesso se o usuário for admin, dono do cliente, dono do restaurante ou entregador associado.
      * @param pedido Pedido a ser validado
