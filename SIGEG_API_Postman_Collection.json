@@ -738,14 +738,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"restauranteId\": {{restaurante_id}},\n  \"metodoPagamento\": \"PIX\",\n  \"troco\": 0,\n  \"observacoes\": \"Sem cebola\",\n  \"enderecoEntrega\": \"01310-100\",\n  \"itens\": [\n    {\n      \"pratoId\": {{prato_id}},\n      \"quantidade\": 2\n    }\n  ]\n}",
+							"raw": "{\n  \"restauranteId\": {{restaurante_id}},\n  \"metodoPagamento\": \"PIX\",\n  \"troco\": 0,\n  \"observacoes\": \"Sem cebola\",\n  \"enderecoEntrega\": \"01310-100\",\n  \"carrinhoId\": null,\n  \"itens\": [\n    {\n      \"pratoId\": {{prato_id}},\n      \"quantidade\": 2\n    }\n  ]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
 								}
 							}
 						},
-						"description": "Cria um novo pedido.\n\nGeocodificação Automática:\n- O clienteId é obtido automaticamente do usuário autenticado\n- O endereço de entrega pode ser CEP (12345678 ou 12345-678) ou endereço completo\n- Coordenadas (latitudeEntrega/longitudeEntrega) são calculadas automaticamente\n- Se o endereço for igual ao do cliente, as coordenadas são reutilizadas (otimização)\n- Ao aceitar pedido, a distância e tempo estimado são calculados usando coordenadas reais do restaurante → endereço de entrega\n- Exemplo com CEP: \"01310-100\"\n- Exemplo com endereço: \"Avenida Paulista, 1578, Bela Vista, São Paulo, SP\"",
+						"description": "Cria um novo pedido.\n\nOpções:\n- Se fornecer 'carrinhoId', os itens serão obtidos do carrinho e o cupom será aplicado automaticamente\n- Se 'carrinhoId' for null, use 'itens' para especificar os pratos manualmente\n- O clienteId é obtido automaticamente do usuário autenticado\n- O endereço de entrega pode ser CEP (12345678 ou 12345-678) ou endereço completo\n- Coordenadas (latitudeEntrega/longitudeEntrega) são calculadas automaticamente\n- Se o endereço for igual ao do cliente, as coordenadas são reutilizadas (otimização)\n- Ao aceitar pedido, a distância e tempo estimado são calculados usando coordenadas reais do restaurante → endereço de entrega\n- Exemplo com CEP: \"01310-100\"\n- Exemplo com endereço: \"Avenida Paulista, 1578, Bela Vista, São Paulo, SP\"",
 						"url": {
 							"raw": "{{baseUrl}}/api/pedidos",
 							"host": [
@@ -1839,6 +1839,613 @@
 							}
 						}
 					]
+				}
+			]
+		},
+		{
+			"name": "Ganhos",
+			"item": [
+				{
+					"name": "Obter Ganhos do Restaurante",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/ganhos?periodo=MES",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"ganhos"
+							],
+							"query": [
+								{
+									"key": "periodo",
+									"value": "MES",
+									"description": "HOJE, SEMANA, MES"
+								}
+							]
+						},
+						"description": "Obtém ganhos do restaurante para um período específico. Requer role RESTAURANTE ou ADMIN."
+					}
+				},
+				{
+					"name": "Obter Ganhos do Entregador",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/{{entregador_id}}/ganhos?periodo=MES",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"{{entregador_id}}",
+								"ganhos"
+							],
+							"query": [
+								{
+									"key": "periodo",
+									"value": "MES",
+									"description": "HOJE, SEMANA, MES"
+								}
+							]
+						},
+						"description": "Obtém ganhos do entregador para um período específico. Requer role ENTREGADOR ou ADMIN."
+					}
+				},
+				{
+					"name": "Listar Ganhos por Entrega",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/{{entregador_id}}/ganhos/entregas?periodo=MES",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"{{entregador_id}}",
+								"ganhos",
+								"entregas"
+							],
+							"query": [
+								{
+									"key": "periodo",
+									"value": "MES",
+									"description": "HOJE, SEMANA, MES"
+								}
+							]
+						},
+						"description": "Lista ganhos por entrega individual do entregador. Requer role ENTREGADOR ou ADMIN."
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Listar Pedidos em Andamento",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/pedidos/andamento?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"pedidos",
+								"andamento"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista pedidos com status PREPARING. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Relatório de Vendas",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/relatorios/vendas?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"relatorios",
+								"vendas"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Relatório básico de vendas (pedidos entregues). Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Relatório de Distribuição",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/relatorios/distribuicao?periodo=MES",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"relatorios",
+								"distribuicao"
+							],
+							"query": [
+								{
+									"key": "periodo",
+									"value": "MES",
+									"description": "HOJE, SEMANA, MES"
+								}
+							]
+						},
+						"description": "Relatório de distribuição de valores entre restaurantes, entregadores e plataforma. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Criar Configuração de Taxa",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tipoTaxa\": \"TAXA_RESTAURANTE\",\n  \"percentual\": 10.00\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/configuracoes/taxas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"configuracoes",
+								"taxas"
+							]
+						},
+						"description": "Cria uma nova configuração de taxa. Desativa automaticamente as taxas anteriores do mesmo tipo. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Listar Histórico de Taxas",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/configuracoes/taxas?tipoTaxa=TAXA_RESTAURANTE",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"configuracoes",
+								"taxas"
+							],
+							"query": [
+								{
+									"key": "tipoTaxa",
+									"value": "TAXA_RESTAURANTE",
+									"description": "TAXA_RESTAURANTE ou TAXA_ENTREGADOR"
+								}
+							]
+						},
+						"description": "Lista histórico de configurações de taxa. Requer role ADMIN."
+					}
+				}
+			]
+		},
+		{
+			"name": "Carrinho",
+			"item": [
+				{
+					"name": "Obter Carrinho",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/carrinho",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"carrinho"
+							]
+						},
+						"description": "Obtém o carrinho ativo do cliente autenticado. Requer role CLIENTE."
+					}
+				},
+				{
+					"name": "Adicionar Item ao Carrinho",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"pratoId\": {{prato_id}},\n  \"quantidade\": 2\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/carrinho/itens",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"carrinho",
+								"itens"
+							]
+						},
+						"description": "Adiciona um item ao carrinho ou atualiza a quantidade se o item já existir. Requer role CLIENTE."
+					}
+				},
+				{
+					"name": "Atualizar Quantidade do Item",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/carrinho/itens/{{item_id}}?quantidade=3",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"carrinho",
+								"itens",
+								"{{item_id}}"
+							],
+							"query": [
+								{
+									"key": "quantidade",
+									"value": "3"
+								}
+							]
+						},
+						"description": "Atualiza a quantidade de um item específico no carrinho. Requer role CLIENTE."
+					}
+				},
+				{
+					"name": "Remover Item do Carrinho",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/carrinho/itens/{{item_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"carrinho",
+								"itens",
+								"{{item_id}}"
+							]
+						},
+						"description": "Remove um item do carrinho. Requer role CLIENTE."
+					}
+				},
+				{
+					"name": "Aplicar Cupom",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"codigoCupom\": \"DESCONTO10\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/carrinho/cupom",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"carrinho",
+								"cupom"
+							]
+						},
+						"description": "Aplica um cupom de desconto ao carrinho. Requer role CLIENTE."
+					}
+				},
+				{
+					"name": "Remover Cupom",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/carrinho/cupom",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"carrinho",
+								"cupom"
+							]
+						},
+						"description": "Remove o cupom aplicado ao carrinho. Requer role CLIENTE."
+					}
+				},
+				{
+					"name": "Limpar Carrinho",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/carrinho",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"carrinho"
+							]
+						},
+						"description": "Limpa todos os itens e remove o cupom do carrinho. Requer role CLIENTE."
+					}
+				}
+			]
+		},
+		{
+			"name": "Cupons",
+			"item": [
+				{
+					"name": "Criar Cupom (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"codigo\": \"DESCONTO10\",\n  \"tipoDesconto\": \"PERCENTUAL\",\n  \"valorDesconto\": 10.00,\n  \"valorMinimo\": 50.00,\n  \"dataInicio\": \"2025-01-01\",\n  \"dataFim\": \"2025-12-31\",\n  \"usosMaximos\": 100\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/cupons",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cupons"
+							]
+						},
+						"description": "Cria um novo cupom de desconto. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Buscar Cupom por Código",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/cupons/DESCONTO10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cupons",
+								"DESCONTO10"
+							]
+						},
+						"description": "Busca um cupom por código. Disponível para CLIENTE e ADMIN."
+					}
+				},
+				{
+					"name": "Listar Cupons Ativos (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/cupons?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cupons"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista cupons ativos. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Desativar Cupom (Admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/cupons/{{cupom_id}}/desativar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cupons",
+								"{{cupom_id}}",
+								"desativar"
+							]
+						},
+						"description": "Desativa um cupom. Requer role ADMIN."
+					}
 				}
 			]
 		},
