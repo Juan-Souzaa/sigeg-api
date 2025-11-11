@@ -57,7 +57,7 @@ public class PagamentoService {
     }
     
     @Transactional
-    public PagamentoResponseDTO criarPagamento(Long pedidoId) {
+    public PagamentoResponseDTO criarPagamento(Long pedidoId, CartaoCreditoRequestDTO cartaoDTO) {
         Pedido pedido = buscarPedidoValido(pedidoId);
         validatePedidoOwnership(pedido);
         pagamentoValidator.validateStatusPedido(pedido);
@@ -66,6 +66,11 @@ public class PagamentoService {
         
         if (pedido.getMetodoPagamento() == MetodoPagamento.PIX) {
             processarPagamentoPix(pagamento);
+        } else if (pedido.getMetodoPagamento() == MetodoPagamento.CREDIT_CARD) {
+            if (cartaoDTO == null) {
+                throw new IllegalArgumentException("Dados do cartão são obrigatórios para pagamento com cartão de crédito");
+            }
+            processarPagamentoCartao(pagamento, cartaoDTO);
         } else {
             processarPagamentoDinheiro(pagamento, pedido);
         }
@@ -73,7 +78,14 @@ public class PagamentoService {
         Pagamento saved = pagamentoRepository.save(pagamento);
         pedidoRepository.save(pedido);
         
-        return modelMapper.map(saved, PagamentoResponseDTO.class);
+        PagamentoResponseDTO response = modelMapper.map(saved, PagamentoResponseDTO.class);
+        response.setPedidoId(saved.getPedido().getId());
+        return response;
+    }
+    
+    @Transactional
+    public PagamentoResponseDTO criarPagamento(Long pedidoId) {
+        return criarPagamento(pedidoId, null);
     }
     
     private Pedido buscarPedidoValido(Long pedidoId) {
@@ -114,6 +126,41 @@ public class PagamentoService {
         }
     }
     
+    private void processarPagamentoCartao(Pagamento pagamento, CartaoCreditoRequestDTO cartaoDTO) {
+        try {
+            String asaasCustomerId = buscarOuCriarClienteAsaas(pagamento.getPedido().getCliente());
+            AsaasPaymentResponseDTO response = criarPagamentoAsaasComCartao(pagamento, asaasCustomerId, cartaoDTO);
+            
+            validarRespostaAsaas(response);
+            atualizarPagamentoComRespostaAsaas(pagamento, asaasCustomerId, response);
+            
+            if (response.getStatus() != null && "CONFIRMED".equals(response.getStatus())) {
+                pagamento.setStatus(StatusPagamento.AUTHORIZED);
+                pagamento.getPedido().setStatus(StatusPedido.CONFIRMED);
+            } else {
+                pagamento.setStatus(StatusPagamento.PENDING);
+            }
+            
+        } catch (org.springframework.web.reactive.function.client.WebClientException e) {
+            logger.severe("Erro de conexão com API Asaas: " + e.getMessage());
+            throw new PaymentGatewayException("Erro de conexão com o gateway de pagamento. Verifique sua conexão com a internet.", e);
+        } catch (Exception e) {
+            logger.severe("Erro ao criar pagamento com cartão: " + e.getMessage());
+            throw new PaymentGatewayException("Erro ao processar pagamento com cartão de crédito: " + e.getMessage());
+        }
+    }
+    
+    private AsaasPaymentResponseDTO criarPagamentoAsaasComCartao(Pagamento pagamento, String asaasCustomerId, CartaoCreditoRequestDTO cartaoDTO) {
+        AsaasPaymentRequestDTO request = criarRequestPagamentoAsaas(pagamento, asaasCustomerId, cartaoDTO);
+        
+        return webClient.post()
+                .uri("payments")
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(AsaasPaymentResponseDTO.class)
+                .block();
+    }
+    
     private void validarRespostaAsaas(AsaasPaymentResponseDTO response) {
         if (response == null) {
             throw new PaymentGatewayException("Resposta nula da API Asaas");
@@ -131,8 +178,18 @@ public class PagamentoService {
                 .block();
     }
     
+    private AsaasPaymentRequestDTO criarRequestPagamentoAsaas(Pagamento pagamento, String asaasCustomerId, CartaoCreditoRequestDTO cartaoDTO) {
+        Cliente cliente = pagamento.getPedido().getCliente();
+        String cpfCnpj = obterCpfCnpjCliente(cliente);
+        return pagamentoMapper.toAsaasPaymentRequest(pagamento, asaasCustomerId, cartaoDTO, cliente, cpfCnpj);
+    }
+    
     private AsaasPaymentRequestDTO criarRequestPagamentoAsaas(Pagamento pagamento, String asaasCustomerId) {
-        return pagamentoMapper.toAsaasPaymentRequest(pagamento, asaasCustomerId);
+        return criarRequestPagamentoAsaas(pagamento, asaasCustomerId, null);
+    }
+    
+    private String obterCpfCnpjCliente(Cliente cliente) {
+        return "24971563792";
     }
     
     private void atualizarPagamentoComRespostaAsaas(Pagamento pagamento, String asaasCustomerId, AsaasPaymentResponseDTO response) {
@@ -238,24 +295,37 @@ public class PagamentoService {
     
     @Transactional
     public void processarWebhook(AsaasWebhookDTO webhook) {
-        if (!isPagamentoRecebido(webhook)) {
+        if (!isEventoPagamentoValido(webhook)) {
             return;
         }
         
         String asaasPaymentId = webhook.getPayment().getId();
         Pagamento pagamento = buscarPagamentoPorAsaasId(asaasPaymentId);
         
-        atualizarPagamentoConfirmado(pagamento);
-        atualizarPedidoConfirmado(pagamento.getPedido());
+        String evento = webhook.getEvent();
+        if ("PAYMENT_RECEIVED".equals(evento) || "PAYMENT_CONFIRMED".equals(evento)) {
+            atualizarPagamentoConfirmado(pagamento);
+            atualizarPedidoConfirmado(pagamento.getPedido());
+            logger.info("Pagamento confirmado via webhook: " + asaasPaymentId + " - Pedido: " + pagamento.getPedido().getId());
+        } else if ("PAYMENT_REFUSED".equals(evento)) {
+            pagamento.setStatus(StatusPagamento.REFUSED);
+            logger.warning("Pagamento recusado via webhook: " + asaasPaymentId + " - Pedido: " + pagamento.getPedido().getId());
+        }
         
         pagamentoRepository.save(pagamento);
-        pedidoRepository.save(pagamento.getPedido());
-        
-        logger.info("Pagamento confirmado via webhook: " + asaasPaymentId + " - Pedido: " + pagamento.getPedido().getId());
+        if (pagamento.getPedido() != null) {
+            pedidoRepository.save(pagamento.getPedido());
+        }
     }
     
-    private boolean isPagamentoRecebido(AsaasWebhookDTO webhook) {
-        return "PAYMENT_RECEIVED".equals(webhook.getEvent());
+    private boolean isEventoPagamentoValido(AsaasWebhookDTO webhook) {
+        if (webhook == null || webhook.getEvent() == null || webhook.getPayment() == null) {
+            return false;
+        }
+        String evento = webhook.getEvent();
+        return "PAYMENT_RECEIVED".equals(evento) || 
+               "PAYMENT_CONFIRMED".equals(evento) || 
+               "PAYMENT_REFUSED".equals(evento);
     }
     
     private Pagamento buscarPagamentoPorAsaasId(String asaasPaymentId) {
@@ -275,7 +345,9 @@ public class PagamentoService {
     public PagamentoResponseDTO buscarPagamentoPorPedido(Long pedidoId) {
         Pagamento pagamento = buscarPagamentoPorPedidoId(pedidoId);
         validatePedidoOwnership(pagamento.getPedido());
-        return modelMapper.map(pagamento, PagamentoResponseDTO.class);
+        PagamentoResponseDTO response = modelMapper.map(pagamento, PagamentoResponseDTO.class);
+        response.setPedidoId(pagamento.getPedido().getId());
+        return response;
     }
     
     private Pagamento buscarPagamentoPorPedidoId(Long pedidoId) {

@@ -2,5 +2,6 @@ package com.siseg.model.enumerations;
 
 public enum MetodoPagamento {
     CASH,
-    PIX
+    PIX,
+    CREDIT_CARD
 }
