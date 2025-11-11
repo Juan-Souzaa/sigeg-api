@@ -10,10 +10,12 @@ import com.siseg.model.User;
 import com.siseg.model.enumerations.ERole;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.TipoVeiculo;
+import com.siseg.mapper.EntregadorMapper;
 import com.siseg.repository.EntregadorRepository;
 import com.siseg.repository.RoleRepository;
 import com.siseg.repository.UserRepository;
 import com.siseg.util.SecurityUtils;
+import com.siseg.validator.EntregadorValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,6 +55,12 @@ class EntregadorServiceUnitTest {
 
     @Mock
     private ModelMapper modelMapper;
+
+    @Mock
+    private EntregadorMapper entregadorMapper;
+
+    @Mock
+    private EntregadorValidator entregadorValidator;
 
     @InjectMocks
     private EntregadorService entregadorService;
@@ -105,14 +113,14 @@ class EntregadorServiceUnitTest {
     @Test
     void deveCriarEntregadorComSucesso() {
         // Given
-        when(userRepository.findByUsername(entregadorRequestDTO.getEmail())).thenReturn(Optional.empty());
-        when(entregadorRepository.findByCpf(entregadorRequestDTO.getCpf())).thenReturn(Optional.empty());
+        doNothing().when(entregadorValidator).validateEmailUnico(anyString());
+        doNothing().when(entregadorValidator).validateCpfUnico(anyString());
         when(roleRepository.findByRoleName(ERole.ROLE_ENTREGADOR)).thenReturn(Optional.of(roleEntregador));
         when(passwordEncoder.encode(anyString())).thenReturn("encoded_password");
         when(userRepository.save(any(User.class))).thenReturn(user);
         when(modelMapper.map(entregadorRequestDTO, Entregador.class)).thenReturn(entregador);
         when(entregadorRepository.save(any(Entregador.class))).thenReturn(entregador);
-        when(modelMapper.map(entregador, EntregadorResponseDTO.class)).thenReturn(entregadorResponseDTO);
+        when(entregadorMapper.toResponseDTO(any(Entregador.class), anyLong())).thenReturn(entregadorResponseDTO);
 
         // When
         EntregadorResponseDTO result = entregadorService.criarEntregador(entregadorRequestDTO);
@@ -129,7 +137,8 @@ class EntregadorServiceUnitTest {
     @Test
     void deveLancarExcecaoAoCriarEntregadorComEmailExistente() {
         // Given
-        when(userRepository.findByUsername(entregadorRequestDTO.getEmail())).thenReturn(Optional.of(user));
+        doThrow(new IllegalArgumentException("Já existe um usuário com este email."))
+                .when(entregadorValidator).validateEmailUnico(anyString());
 
         // When & Then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -140,8 +149,9 @@ class EntregadorServiceUnitTest {
     @Test
     void deveLancarExcecaoAoCriarEntregadorComCpfExistente() {
         // Given
-        when(userRepository.findByUsername(entregadorRequestDTO.getEmail())).thenReturn(Optional.empty());
-        when(entregadorRepository.findByCpf(entregadorRequestDTO.getCpf())).thenReturn(Optional.of(entregador));
+        doNothing().when(entregadorValidator).validateEmailUnico(anyString());
+        doThrow(new IllegalArgumentException("Já existe um entregador com este CPF."))
+                .when(entregadorValidator).validateCpfUnico(anyString());
 
         // When & Then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -154,7 +164,7 @@ class EntregadorServiceUnitTest {
         // Given
         Long id = 1L;
         when(entregadorRepository.findById(id)).thenReturn(Optional.of(entregador));
-        when(modelMapper.map(entregador, EntregadorResponseDTO.class)).thenReturn(entregadorResponseDTO);
+        when(entregadorMapper.toResponseDTO(any(Entregador.class), anyLong())).thenReturn(entregadorResponseDTO);
 
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
@@ -203,6 +213,8 @@ class EntregadorServiceUnitTest {
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
             mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(false);
+            mockedSecurityUtils.when(() -> SecurityUtils.validateEntregadorOwnership(any(Entregador.class)))
+                    .thenThrow(new AccessDeniedException("Você não tem permissão para acessar este entregador"));
 
             // When & Then
             AccessDeniedException exception = assertThrows(AccessDeniedException.class,
@@ -217,7 +229,7 @@ class EntregadorServiceUnitTest {
         Pageable pageable = PageRequest.of(0, 10);
         Page<Entregador> page = new PageImpl<>(List.of(entregador), pageable, 1);
         when(entregadorRepository.findAll(pageable)).thenReturn(page);
-        when(modelMapper.map(entregador, EntregadorResponseDTO.class)).thenReturn(entregadorResponseDTO);
+        when(entregadorMapper.toResponseDTO(any(Entregador.class), anyLong())).thenReturn(entregadorResponseDTO);
 
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
@@ -240,7 +252,7 @@ class EntregadorServiceUnitTest {
         Pageable pageable = PageRequest.of(0, 10);
         Page<Entregador> page = new PageImpl<>(List.of(entregador), pageable, 1);
         when(entregadorRepository.findByStatus(status, pageable)).thenReturn(page);
-        when(modelMapper.map(entregador, EntregadorResponseDTO.class)).thenReturn(entregadorResponseDTO);
+        when(entregadorMapper.toResponseDTO(any(Entregador.class), anyLong())).thenReturn(entregadorResponseDTO);
 
         // When
         Page<EntregadorResponseDTO> result = entregadorService.findByStatus(status, pageable);
@@ -258,7 +270,7 @@ class EntregadorServiceUnitTest {
         entregador.setStatus(StatusEntregador.APPROVED);
         when(entregadorRepository.findById(id)).thenReturn(Optional.of(entregador));
         when(entregadorRepository.save(any(Entregador.class))).thenReturn(entregador);
-        when(modelMapper.map(entregador, EntregadorResponseDTO.class)).thenReturn(entregadorResponseDTO);
+        when(entregadorMapper.toResponseDTO(any(Entregador.class), anyLong())).thenReturn(entregadorResponseDTO);
 
         // When
         EntregadorResponseDTO result = entregadorService.aprovarEntregador(id);
@@ -277,7 +289,7 @@ class EntregadorServiceUnitTest {
         entregador.setStatus(StatusEntregador.REJECTED);
         when(entregadorRepository.findById(id)).thenReturn(Optional.of(entregador));
         when(entregadorRepository.save(any(Entregador.class))).thenReturn(entregador);
-        when(modelMapper.map(entregador, EntregadorResponseDTO.class)).thenReturn(entregadorResponseDTO);
+        when(entregadorMapper.toResponseDTO(any(Entregador.class), anyLong())).thenReturn(entregadorResponseDTO);
 
         // When
         EntregadorResponseDTO result = entregadorService.rejeitarEntregador(id);

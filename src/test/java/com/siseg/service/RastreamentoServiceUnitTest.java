@@ -1,5 +1,6 @@
 package com.siseg.service;
 
+import com.siseg.dto.geocoding.ResultadoCalculo;
 import com.siseg.dto.rastreamento.RastreamentoDTO;
 import com.siseg.model.Entregador;
 import com.siseg.model.Pedido;
@@ -8,6 +9,7 @@ import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.repository.EntregadorRepository;
 import com.siseg.repository.PedidoRepository;
+import com.siseg.util.TempoEstimadoCalculator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +32,9 @@ class RastreamentoServiceUnitTest {
     
     @Mock
     private EntregadorRepository entregadorRepository;
+
+    @Mock
+    private TempoEstimadoCalculator tempoEstimadoCalculator;
     
     @InjectMocks
     private RastreamentoService rastreamentoService;
@@ -63,6 +68,14 @@ class RastreamentoServiceUnitTest {
     @Test
     void deveObterRastreamentoComSucesso() {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+        when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
+        
+        ResultadoCalculo resultado = new ResultadoCalculo(
+            new BigDecimal("1.5"), 15, false
+        );
+        when(tempoEstimadoCalculator.calculateDistanceAndTime(
+            any(), any(), any(), any(), any()
+        )).thenReturn(resultado);
         
         RastreamentoDTO rastreamento = rastreamentoService.obterRastreamento(1L);
         
@@ -90,6 +103,7 @@ class RastreamentoServiceUnitTest {
     @Test
     void deveSimularMovimentoQuandoEntregadorTemCoordenadas() {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+        when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
         when(entregadorRepository.save(any(Entregador.class))).thenReturn(entregador);
         
         rastreamentoService.simularMovimento(1L);
@@ -104,6 +118,7 @@ class RastreamentoServiceUnitTest {
         entregador.setLatitude(null);
         entregador.setLongitude(null);
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+        when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
         when(entregadorRepository.save(any(Entregador.class))).thenAnswer(invocation -> {
             Entregador saved = invocation.getArgument(0);
             entregador.setLatitude(saved.getLatitude());
@@ -124,10 +139,16 @@ class RastreamentoServiceUnitTest {
         entregador.setLatitude(new BigDecimal("-23.5630"));
         entregador.setLongitude(new BigDecimal("-46.6541"));
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+        when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
+        when(entregadorRepository.save(any(Entregador.class))).thenReturn(entregador);
         
         rastreamentoService.simularMovimento(1L);
         
-        verify(entregadorRepository, never()).save(any(Entregador.class));
+        // Quando próximo ao destino, o entregador é posicionado no destino e salvo
+        verify(entregadorRepository, times(1)).save(argThat(e -> 
+            e.getLatitude().equals(pedido.getLatitudeEntrega()) &&
+            e.getLongitude().equals(pedido.getLongitudeEntrega())
+        ));
     }
     
     @Test
@@ -135,7 +156,9 @@ class RastreamentoServiceUnitTest {
         pedido.setStatus(StatusPedido.PREPARING);
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         
-        rastreamentoService.simularMovimento(1L);
+        assertThrows(IllegalStateException.class, () -> {
+            rastreamentoService.simularMovimento(1L);
+        });
         
         verify(entregadorRepository, never()).save(any(Entregador.class));
     }

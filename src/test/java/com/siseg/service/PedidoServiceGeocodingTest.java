@@ -1,6 +1,7 @@
 package com.siseg.service;
 
 import com.siseg.dto.geocoding.Coordinates;
+import com.siseg.dto.geocoding.ResultadoCalculo;
 import com.siseg.dto.pedido.PedidoItemResponseDTO;
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
@@ -10,8 +11,11 @@ import com.siseg.model.enumerations.MetodoPagamento;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.TipoVeiculo;
+import com.siseg.mapper.PedidoMapper;
 import com.siseg.repository.*;
 import com.siseg.util.SecurityUtils;
+import com.siseg.util.TempoEstimadoCalculator;
+import com.siseg.validator.PedidoValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,6 +61,15 @@ class PedidoServiceGeocodingTest {
 
     @Mock
     private ModelMapper modelMapper;
+
+    @Mock
+    private PedidoMapper pedidoMapper;
+
+    @Mock
+    private PedidoValidator pedidoValidator;
+
+    @Mock
+    private TempoEstimadoCalculator tempoEstimadoCalculator;
 
     @InjectMocks
     private PedidoService pedidoService;
@@ -135,21 +148,12 @@ class PedidoServiceGeocodingTest {
             when(geocodingService.geocodeAddress(pedidoRequestDTO.getEnderecoEntrega()))
                     .thenReturn(Optional.of(coordsEntrega));
 
-            // Mock ModelMapper para retornar DTO
+            // Mock PedidoMapper para retornar DTO
             PedidoResponseDTO responseDTO = new PedidoResponseDTO();
             responseDTO.setId(1L);
             responseDTO.setClienteId(cliente.getId());
             responseDTO.setRestauranteId(restaurante.getId());
-            when(modelMapper.map(any(Pedido.class), eq(PedidoResponseDTO.class))).thenReturn(responseDTO);
-            
-            // Mock mapeamento de itens
-            PedidoItemResponseDTO itemDTO = new PedidoItemResponseDTO();
-            itemDTO.setPratoId(prato.getId());
-            itemDTO.setPratoNome(prato.getNome());
-            itemDTO.setQuantidade(2);
-            itemDTO.setPrecoUnitario(prato.getPreco());
-            itemDTO.setSubtotal(prato.getPreco().multiply(new BigDecimal("2")));
-            when(modelMapper.map(any(PedidoItem.class), eq(PedidoItemResponseDTO.class))).thenReturn(itemDTO);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(responseDTO);
 
             // When
             PedidoResponseDTO result = pedidoService.criarPedido(null, pedidoRequestDTO);
@@ -195,21 +199,12 @@ class PedidoServiceGeocodingTest {
                 return pedido;
             });
 
-            // Mock ModelMapper para retornar DTO
+            // Mock PedidoMapper para retornar DTO
             PedidoResponseDTO responseDTO = new PedidoResponseDTO();
             responseDTO.setId(1L);
             responseDTO.setClienteId(cliente.getId());
             responseDTO.setRestauranteId(restaurante.getId());
-            when(modelMapper.map(any(Pedido.class), eq(PedidoResponseDTO.class))).thenReturn(responseDTO);
-            
-            // Mock mapeamento de itens
-            PedidoItemResponseDTO itemDTO = new PedidoItemResponseDTO();
-            itemDTO.setPratoId(prato.getId());
-            itemDTO.setPratoNome(prato.getNome());
-            itemDTO.setQuantidade(2);
-            itemDTO.setPrecoUnitario(prato.getPreco());
-            itemDTO.setSubtotal(prato.getPreco().multiply(new BigDecimal("2")));
-            when(modelMapper.map(any(PedidoItem.class), eq(PedidoItemResponseDTO.class))).thenReturn(itemDTO);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(responseDTO);
 
             // When
             PedidoResponseDTO result = pedidoService.criarPedido(null, pedidoRequestDTO);
@@ -252,16 +247,25 @@ class PedidoServiceGeocodingTest {
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
 
-            when(entregadorRepository.findByUserId(user.getId())).thenReturn(Optional.of(entregador));
             when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
             when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
 
-            // Mock ModelMapper para retornar DTO
+            when(pedidoValidator.validateEntregadorAprovado(any(User.class))).thenReturn(entregador);
+            doNothing().when(pedidoValidator).validatePedidoAceitavel(any(Pedido.class));
+            
+            ResultadoCalculo resultado = new ResultadoCalculo(
+                new BigDecimal("2.0"), 20, false
+            );
+            when(tempoEstimadoCalculator.calculateDistanceAndTime(
+                any(), any(), any(), any(), any()
+            )).thenReturn(resultado);
+
+            // Mock PedidoMapper para retornar DTO
             PedidoResponseDTO responseDTO = new PedidoResponseDTO();
             responseDTO.setId(1L);
             responseDTO.setClienteId(cliente.getId());
             responseDTO.setRestauranteId(restaurante.getId());
-            when(modelMapper.map(any(Pedido.class), eq(PedidoResponseDTO.class))).thenReturn(responseDTO);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(responseDTO);
 
             // When
             PedidoResponseDTO result = pedidoService.aceitarPedido(1L);

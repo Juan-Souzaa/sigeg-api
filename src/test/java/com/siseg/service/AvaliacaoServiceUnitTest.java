@@ -12,10 +12,12 @@ import com.siseg.model.Restaurante;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.TipoVeiculo;
+import com.siseg.mapper.AvaliacaoMapper;
 import com.siseg.repository.AvaliacaoRepository;
 import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.PedidoRepository;
 import com.siseg.util.SecurityUtils;
+import com.siseg.validator.AvaliacaoValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +48,12 @@ class AvaliacaoServiceUnitTest {
     
     @Mock
     private ModelMapper modelMapper;
+
+    @Mock
+    private AvaliacaoMapper avaliacaoMapper;
+
+    @Mock
+    private AvaliacaoValidator avaliacaoValidator;
     
     @InjectMocks
     private AvaliacaoService avaliacaoService;
@@ -97,7 +105,10 @@ class AvaliacaoServiceUnitTest {
             
             when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
             when(clienteRepository.findByUserId(1L)).thenReturn(Optional.of(cliente));
-            when(avaliacaoRepository.existsByClienteIdAndPedidoId(1L, 1L)).thenReturn(false);
+            
+            doNothing().when(avaliacaoValidator).validatePermissaoAvaliacao(any(Pedido.class));
+            doNothing().when(avaliacaoValidator).validatePedidoEntregue(any(Pedido.class));
+            doNothing().when(avaliacaoValidator).validateAvaliacaoNaoExistente(anyLong(), anyLong());
             
             Avaliacao avaliacao = new Avaliacao();
             avaliacao.setId(1L);
@@ -113,7 +124,7 @@ class AvaliacaoServiceUnitTest {
             
             AvaliacaoResponseDTO responseDTO = new AvaliacaoResponseDTO();
             responseDTO.setId(1L);
-            when(modelMapper.map(any(Avaliacao.class), eq(AvaliacaoResponseDTO.class))).thenReturn(responseDTO);
+            when(avaliacaoMapper.toResponseDTO(any(Avaliacao.class))).thenReturn(responseDTO);
             
             AvaliacaoResponseDTO result = avaliacaoService.criarAvaliacao(1L, requestDTO);
             
@@ -132,6 +143,10 @@ class AvaliacaoServiceUnitTest {
             when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
             when(clienteRepository.findByUserId(1L)).thenReturn(Optional.of(cliente));
             
+            doNothing().when(avaliacaoValidator).validatePermissaoAvaliacao(any(Pedido.class));
+            doThrow(new IllegalStateException("Pedido não está entregue"))
+                    .when(avaliacaoValidator).validatePedidoEntregue(any(Pedido.class));
+            
             assertThrows(IllegalStateException.class, () -> {
                 avaliacaoService.criarAvaliacao(1L, requestDTO);
             });
@@ -146,7 +161,11 @@ class AvaliacaoServiceUnitTest {
             
             when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
             when(clienteRepository.findByUserId(1L)).thenReturn(Optional.of(cliente));
-            when(avaliacaoRepository.existsByClienteIdAndPedidoId(1L, 1L)).thenReturn(true);
+            
+            doNothing().when(avaliacaoValidator).validatePermissaoAvaliacao(any(Pedido.class));
+            doNothing().when(avaliacaoValidator).validatePedidoEntregue(any(Pedido.class));
+            doThrow(new AvaliacaoAlreadyExistsException("Avaliação já existe para este pedido"))
+                    .when(avaliacaoValidator).validateAvaliacaoNaoExistente(anyLong(), anyLong());
             
             assertThrows(AvaliacaoAlreadyExistsException.class, () -> {
                 avaliacaoService.criarAvaliacao(1L, requestDTO);
@@ -170,8 +189,10 @@ class AvaliacaoServiceUnitTest {
             when(avaliacaoRepository.findById(1L)).thenReturn(Optional.of(avaliacao));
             when(avaliacaoRepository.save(any(Avaliacao.class))).thenReturn(avaliacao);
             
+            doNothing().when(avaliacaoValidator).validateOwnership(any(Avaliacao.class), any(User.class));
+            
             AvaliacaoResponseDTO responseDTO = new AvaliacaoResponseDTO();
-            when(modelMapper.map(any(Avaliacao.class), eq(AvaliacaoResponseDTO.class))).thenReturn(responseDTO);
+            when(avaliacaoMapper.toResponseDTO(any(Avaliacao.class))).thenReturn(responseDTO);
             
             AvaliacaoRequestDTO editDTO = new AvaliacaoRequestDTO();
             editDTO.setNotaRestaurante(5);
@@ -203,6 +224,9 @@ class AvaliacaoServiceUnitTest {
             avaliacao.setCliente(outroCliente);
             
             when(avaliacaoRepository.findById(1L)).thenReturn(Optional.of(avaliacao));
+            
+            doThrow(new AccessDeniedException("Você não tem permissão para editar esta avaliação"))
+                    .when(avaliacaoValidator).validateOwnership(any(Avaliacao.class), any(User.class));
             
             assertThrows(AccessDeniedException.class, () -> {
                 avaliacaoService.editarAvaliacao(1L, requestDTO);
