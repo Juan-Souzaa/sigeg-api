@@ -104,7 +104,7 @@ class CupomServiceUnitTest {
     @Test
     void deveBuscarCupomPorCodigoComSucesso() {
         LocalDate hoje = LocalDate.now();
-        when(cupomRepository.findByCodigoAndAtivoTrueAndDataValida("DESCONTO10", hoje))
+        when(cupomRepository.findByCodigoAndAtivoTrueAndDataValida("DESCONTO10", true, hoje))
                 .thenReturn(Optional.of(cupom));
 
         Cupom resultado = cupomService.buscarPorCodigo("DESCONTO10");
@@ -116,7 +116,7 @@ class CupomServiceUnitTest {
     @Test
     void deveLancarExcecaoQuandoCupomNaoEncontrado() {
         LocalDate hoje = LocalDate.now();
-        when(cupomRepository.findByCodigoAndAtivoTrueAndDataValida("INVALIDO", hoje))
+        when(cupomRepository.findByCodigoAndAtivoTrueAndDataValida("INVALIDO", true, hoje))
                 .thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> cupomService.buscarPorCodigo("INVALIDO"));
