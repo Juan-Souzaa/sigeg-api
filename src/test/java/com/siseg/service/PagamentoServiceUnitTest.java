@@ -23,9 +23,6 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -54,24 +51,7 @@ class PagamentoServiceUnitTest {
     private PagamentoValidator pagamentoValidator;
 
     @Mock
-    private WebClient webClient;
-
-    @SuppressWarnings("rawtypes")
-    @Mock
-    private WebClient.RequestBodyUriSpec requestBodyUriSpec;
-
-    @Mock
-    private WebClient.RequestBodySpec requestBodySpec;
-
-    @Mock
-    private WebClient.RequestHeadersSpec requestHeadersSpec;
-
-    @SuppressWarnings("rawtypes")
-    @Mock
-    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
-
-    @Mock
-    private WebClient.ResponseSpec responseSpec;
+    private AsaasService asaasService;
 
     @InjectMocks
     private PagamentoService pagamentoService;
@@ -87,8 +67,6 @@ class PagamentoServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(pagamentoService, "webhookSecret", "test-secret");
-        ReflectionTestUtils.setField(pagamentoService, "webClient", webClient);
 
         user = new User();
         user.setId(1L);
@@ -149,9 +127,11 @@ class PagamentoServiceUnitTest {
             });
             when(modelMapper.map(any(Pagamento.class), eq(PagamentoResponseDTO.class))).thenReturn(pagamentoResponseDTO);
 
-            mockWebClientForPix();
+            when(asaasService.buscarOuCriarCliente(any(Cliente.class))).thenReturn("cus_123456");
+            when(asaasService.criarPagamentoPix(any(Pagamento.class), anyString())).thenReturn(asaasPaymentResponse);
+            when(asaasService.buscarQrCodePix(anyString())).thenReturn(asaasQrCodeResponse);
 
-            PagamentoResponseDTO result = pagamentoService.criarPagamento(1L);
+            PagamentoResponseDTO result = pagamentoService.criarPagamento(1L, null, null);
 
             assertNotNull(result);
             verify(pagamentoRepository, times(1)).save(any(Pagamento.class));
@@ -168,7 +148,7 @@ class PagamentoServiceUnitTest {
             when(pedidoRepository.findById(1L)).thenReturn(Optional.empty());
 
             assertThrows(ResourceNotFoundException.class, 
-                    () -> pagamentoService.criarPagamento(1L));
+                    () -> pagamentoService.criarPagamento(1L, null, null));
         }
     }
 
@@ -185,7 +165,7 @@ class PagamentoServiceUnitTest {
                     .when(pagamentoValidator).validateStatusPedido(any(Pedido.class));
 
             assertThrows(RuntimeException.class, 
-                    () -> pagamentoService.criarPagamento(1L));
+                    () -> pagamentoService.criarPagamento(1L, null, null));
         }
     }
 
@@ -205,9 +185,11 @@ class PagamentoServiceUnitTest {
             });
             when(modelMapper.map(any(Pagamento.class), eq(PagamentoResponseDTO.class))).thenReturn(pagamentoResponseDTO);
 
-            mockWebClientForPix();
+            when(asaasService.buscarOuCriarCliente(any(Cliente.class))).thenReturn("cus_123456");
+            when(asaasService.criarPagamentoPix(any(Pagamento.class), anyString())).thenReturn(asaasPaymentResponse);
+            when(asaasService.buscarQrCodePix(anyString())).thenReturn(asaasQrCodeResponse);
 
-            PagamentoResponseDTO result = pagamentoService.criarPagamento(1L);
+            PagamentoResponseDTO result = pagamentoService.criarPagamento(1L, null, null);
 
             assertNotNull(result);
             verify(pagamentoRepository, times(1)).save(any(Pagamento.class));
@@ -228,15 +210,11 @@ class PagamentoServiceUnitTest {
                 return p;
             });
 
-            lenient().when(webClient.post()).thenReturn(requestBodyUriSpec);
-            lenient().when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-            lenient().when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
-            lenient().when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-            lenient().when(responseSpec.bodyToMono(AsaasCustomerResponseDTO.class))
-                    .thenReturn(Mono.error(new RuntimeException("Connection error")));
+            when(asaasService.buscarOuCriarCliente(any(Cliente.class)))
+                    .thenThrow(new PaymentGatewayException("Erro de conexão com o gateway de pagamento. Verifique sua conexão com a internet."));
 
             assertThrows(PaymentGatewayException.class, 
-                    () -> pagamentoService.criarPagamento(1L));
+                    () -> pagamentoService.criarPagamento(1L, null, null));
         }
     }
 
@@ -255,9 +233,11 @@ class PagamentoServiceUnitTest {
             });
             when(modelMapper.map(any(Pagamento.class), eq(PagamentoResponseDTO.class))).thenReturn(pagamentoResponseDTO);
 
-            mockWebClientForPix();
+            when(asaasService.buscarOuCriarCliente(any(Cliente.class))).thenReturn("cus_123456");
+            when(asaasService.criarPagamentoPix(any(Pagamento.class), anyString())).thenReturn(asaasPaymentResponse);
+            when(asaasService.buscarQrCodePix(anyString())).thenReturn(asaasQrCodeResponse);
 
-            PagamentoResponseDTO result = pagamentoService.criarPagamento(1L);
+            PagamentoResponseDTO result = pagamentoService.criarPagamento(1L, null, null);
 
             assertNotNull(result);
             verify(pagamentoRepository, times(1)).save(argThat(p -> 
@@ -265,54 +245,6 @@ class PagamentoServiceUnitTest {
         }
     }
 
-    @Test
-    void deveProcessarWebhookComPagamentoConfirmado() {
-        AsaasWebhookDTO webhook = new AsaasWebhookDTO();
-        webhook.setEvent("PAYMENT_RECEIVED");
-        AsaasWebhookDTO.PaymentData paymentData = new AsaasWebhookDTO.PaymentData();
-        paymentData.setId("pay_123456");
-        paymentData.setStatus("RECEIVED");
-        webhook.setPayment(paymentData);
-
-        pagamento.setAsaasPaymentId("pay_123456");
-        pagamento.setStatus(StatusPagamento.AUTHORIZED);
-
-        when(pagamentoRepository.findByAsaasPaymentId("pay_123456")).thenReturn(Optional.of(pagamento));
-        when(pagamentoRepository.save(any(Pagamento.class))).thenReturn(pagamento);
-        when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
-
-        pagamentoService.processarWebhook(webhook);
-
-        assertEquals(StatusPagamento.PAID, pagamento.getStatus());
-        assertEquals(StatusPedido.CONFIRMED, pedido.getStatus());
-        verify(pagamentoRepository, times(1)).save(pagamento);
-        verify(pedidoRepository, times(1)).save(pedido);
-    }
-
-    @Test
-    void deveIgnorarWebhookQuandoEventoNaoEhPaymentReceived() {
-        AsaasWebhookDTO webhook = new AsaasWebhookDTO();
-        webhook.setEvent("PAYMENT_OVERDUE");
-
-        pagamentoService.processarWebhook(webhook);
-
-        verify(pagamentoRepository, never()).findByAsaasPaymentId(anyString());
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoAssinaturaInvalida() {
-        boolean result = pagamentoService.validarWebhookSignature("invalid-signature", "payload");
-
-        assertFalse(result);
-    }
-
-    @Test
-    void deveValidarAssinaturaValida() {
-        ReflectionTestUtils.setField(pagamentoService, "webhookSecret", "test-secret");
-        boolean result = pagamentoService.validarWebhookSignature("test-secret", "payload");
-
-        assertTrue(result);
-    }
 
     @Test
     void deveBuscarPagamentoPorPedidoComSucesso() {
@@ -352,9 +284,11 @@ class PagamentoServiceUnitTest {
             when(modelMapper.map(any(Pagamento.class), eq(PagamentoResponseDTO.class))).thenReturn(pagamentoResponseDTO);
             lenient().doNothing().when(pagamentoValidator).validateStatusPedido(any(Pedido.class));
 
-            mockWebClientForCartao();
+            when(asaasService.buscarOuCriarCliente(any(Cliente.class))).thenReturn("cus_123456");
+            when(asaasService.criarPagamentoCartao(any(Pagamento.class), anyString(), any(CartaoCreditoRequestDTO.class), any()))
+                    .thenReturn(asaasPaymentResponse);
 
-            PagamentoResponseDTO result = pagamentoService.criarPagamento(1L, cartaoDTO);
+            PagamentoResponseDTO result = pagamentoService.criarPagamento(1L, cartaoDTO, null);
 
             assertNotNull(result);
             verify(pagamentoRepository, times(1)).save(any(Pagamento.class));
@@ -374,37 +308,11 @@ class PagamentoServiceUnitTest {
             lenient().doNothing().when(pagamentoValidator).validateStatusPedido(any(Pedido.class));
 
             assertThrows(IllegalArgumentException.class, 
-                    () -> pagamentoService.criarPagamento(1L, null));
+                    () -> pagamentoService.criarPagamento(1L, null, null));
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private void mockWebClientForPix() {
-        when(webClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(AsaasPaymentResponseDTO.class)).thenReturn(Mono.just(asaasPaymentResponse));
-        when(responseSpec.bodyToMono(AsaasCustomerResponseDTO.class)).thenReturn(Mono.just(asaasCustomerResponse));
-        when(responseSpec.bodyToMono(AsaasQrCodeResponseDTO.class)).thenReturn(Mono.just(asaasQrCodeResponse));
-
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        lenient().when(requestHeadersUriSpec.uri(anyString(), anyString())).thenReturn(requestHeadersSpec);
-        lenient().when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestHeadersSpec);
-    }
-
-    @SuppressWarnings("unchecked")
-    private void mockWebClientForCartao() {
-        when(webClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(AsaasPaymentResponseDTO.class)).thenReturn(Mono.just(asaasPaymentResponse));
-        when(responseSpec.bodyToMono(AsaasCustomerResponseDTO.class)).thenReturn(Mono.just(asaasCustomerResponse));
-
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        lenient().when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestHeadersSpec);
-    }
 
 }
+
 
