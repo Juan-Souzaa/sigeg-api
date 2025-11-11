@@ -5,10 +5,8 @@ import com.siseg.dto.cardapio.CardapioResponseDTO;
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
 import com.siseg.dto.restaurante.RestauranteBuscaDTO;
-import com.siseg.dto.pagamento.PagamentoResponseDTO;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.service.PedidoService;
-import com.siseg.service.PagamentoService;
 import com.siseg.service.RestauranteService;
 import com.siseg.service.PratoService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,14 +26,12 @@ import java.time.Instant;
 public class BuscaPedidoController {
     
     private final PedidoService pedidoService;
-    private final PagamentoService pagamentoService;
     private final RestauranteService restauranteService;
     private final PratoService pratoService;
     
-    public BuscaPedidoController(PedidoService pedidoService, PagamentoService pagamentoService,
+    public BuscaPedidoController(PedidoService pedidoService,
                                  RestauranteService restauranteService, PratoService pratoService) {
         this.pedidoService = pedidoService;
-        this.pagamentoService = pagamentoService;
         this.restauranteService = restauranteService;
         this.pratoService = pratoService;
     }
@@ -101,10 +97,4 @@ public class BuscaPedidoController {
         return ResponseEntity.ok(response);
     }
     
-    @PostMapping("/pedidos/{id}/pagamento")
-    @Operation(summary = "Criar pagamento para pedido")
-    public ResponseEntity<PagamentoResponseDTO> criarPagamento(@PathVariable Long id) {
-        PagamentoResponseDTO response = pagamentoService.criarPagamento(id);
-        return ResponseEntity.ok(response);
-    }
 }

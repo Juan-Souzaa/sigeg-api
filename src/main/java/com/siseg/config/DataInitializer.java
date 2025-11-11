@@ -1,18 +1,19 @@
 package com.siseg.config;
 
-import com.siseg.model.Cliente;
-import com.siseg.model.Role;
-import com.siseg.model.User;
+import com.siseg.model.*;
+import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.model.enumerations.ERole;
-import com.siseg.repository.ClienteRepository;
-import com.siseg.repository.RoleRepository;
-import com.siseg.repository.UserRepository;
+import com.siseg.model.enumerations.MetodoPagamento;
+import com.siseg.model.enumerations.StatusPedido;
+import com.siseg.model.enumerations.StatusRestaurante;
+import com.siseg.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -28,6 +29,18 @@ public class DataInitializer implements CommandLineRunner {
 
     @Autowired
     private ClienteRepository clienteRepository;
+
+    @Autowired
+    private RestauranteRepository restauranteRepository;
+
+    @Autowired
+    private PratoRepository pratoRepository;
+
+    @Autowired
+    private CarrinhoRepository carrinhoRepository;
+
+    @Autowired
+    private PedidoRepository pedidoRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -47,6 +60,11 @@ public class DataInitializer implements CommandLineRunner {
         // Criar clientes de exemplo se não existirem
         if (clienteRepository.count() == 0) {
             createSampleClients();
+        }
+
+        // Criar restaurante, prato, carrinho e pedido para testes
+        if (restauranteRepository.count() == 0) {
+            createTestRestaurantAndData();
         }
     }
 
@@ -111,7 +129,7 @@ public class DataInitializer implements CommandLineRunner {
         cliente1.setNome("João Silva");
         cliente1.setEmail("joao.silva@email.com");
         cliente1.setTelefone("11987654321");
-        cliente1.setEndereco("Rua das Flores, 123 - São Paulo/SP");
+        cliente1.setEndereco("Rua das Flores, 123 - São Paulo/SP - CEP: 01310-100");
         clienteRepository.save(cliente1);
 
         // Cliente 2
@@ -130,7 +148,7 @@ public class DataInitializer implements CommandLineRunner {
         cliente2.setNome("Maria Santos");
         cliente2.setEmail("maria.santos@email.com");
         cliente2.setTelefone("11912345678");
-        cliente2.setEndereco("Av. Paulista, 456 - São Paulo/SP");
+        cliente2.setEndereco("Av. Paulista, 456 - São Paulo/SP - CEP: 01310-200");
         clienteRepository.save(cliente2);
 
         // Cliente 3
@@ -149,12 +167,97 @@ public class DataInitializer implements CommandLineRunner {
         cliente3.setNome("Pedro Oliveira");
         cliente3.setEmail("pedro.oliveira@email.com");
         cliente3.setTelefone("11955554444");
-        cliente3.setEndereco("Rua Augusta, 789 - São Paulo/SP");
+        cliente3.setEndereco("Rua Augusta, 789 - São Paulo/SP - CEP: 01305-100");
         clienteRepository.save(cliente3);
 
         System.out.println("✅ Clientes de exemplo criados com sucesso!");
         System.out.println("   Cliente 1: João Silva (ID: 1) - Email: joao.silva@email.com - Senha: 123456");
         System.out.println("   Cliente 2: Maria Santos (ID: 2) - Email: maria.santos@email.com - Senha: 123456");
         System.out.println("   Cliente 3: Pedro Oliveira (ID: 3) - Email: pedro.oliveira@email.com - Senha: 123456");
+    }
+
+    private void createTestRestaurantAndData() {
+        // Criar usuário do restaurante
+        User restauranteUser = new User();
+        restauranteUser.setUsername("restaurante@teste.com");
+        restauranteUser.setPassword(passwordEncoder.encode("123456"));
+        
+        Set<Role> restauranteRoles = new HashSet<>();
+        Role restauranteRole = roleRepository.findByRoleName(ERole.ROLE_RESTAURANTE)
+                .orElseThrow(() -> new RuntimeException("Role RESTAURANTE não encontrado"));
+        restauranteRoles.add(restauranteRole);
+        restauranteUser.setRoles(restauranteRoles);
+        
+        User savedRestauranteUser = userRepository.save(restauranteUser);
+
+        // Criar restaurante aprovado
+        Restaurante restaurante = new Restaurante();
+        restaurante.setNome("Restaurante Teste");
+        restaurante.setEmail("restaurante@teste.com");
+        restaurante.setTelefone("(11) 99999-9999");
+        restaurante.setEndereco("Rua Teste, 123, São Paulo, SP");
+        restaurante.setStatus(StatusRestaurante.APPROVED);
+        restaurante.setUser(savedRestauranteUser);
+        restaurante.setLatitude(new BigDecimal("-23.5505"));
+        restaurante.setLongitude(new BigDecimal("-46.6333"));
+        restaurante = restauranteRepository.save(restaurante);
+
+        // Criar prato
+        Prato prato = new Prato();
+        prato.setNome("Hambúrguer Artesanal");
+        prato.setDescricao("Hambúrguer com carne artesanal, queijo, alface e tomate");
+        prato.setPreco(new BigDecimal("25.90"));
+        prato.setCategoria(CategoriaMenu.MAIN);
+        prato.setDisponivel(true);
+        prato.setRestaurante(restaurante);
+        prato = pratoRepository.save(prato);
+
+        // Buscar primeiro cliente
+        Cliente cliente = clienteRepository.findAll().stream().findFirst()
+                .orElseThrow(() -> new RuntimeException("Nenhum cliente encontrado"));
+
+        // Criar carrinho com item
+        Carrinho carrinho = new Carrinho();
+        carrinho.setCliente(cliente);
+        carrinho.setSubtotal(new BigDecimal("25.90"));
+        carrinho.setTotal(new BigDecimal("25.90"));
+        carrinho = carrinhoRepository.save(carrinho);
+
+        CarrinhoItem item = new CarrinhoItem();
+        item.setCarrinho(carrinho);
+        item.setPrato(prato);
+        item.setQuantidade(1);
+        item.setPrecoUnitario(prato.getPreco());
+        item.setSubtotal(prato.getPreco());
+        carrinho.getItens().add(item);
+        carrinhoRepository.save(carrinho);
+
+        // Criar pedido com CREDIT_CARD
+        Pedido pedido = new Pedido();
+        pedido.setCliente(cliente);
+        pedido.setRestaurante(restaurante);
+        pedido.setStatus(StatusPedido.CREATED);
+        pedido.setMetodoPagamento(MetodoPagamento.CREDIT_CARD);
+        pedido.setEnderecoEntrega(cliente.getEndereco());
+        pedido.setSubtotal(new BigDecimal("25.90"));
+        pedido.setTaxaEntrega(new BigDecimal("5.00"));
+        pedido.setTotal(new BigDecimal("30.90"));
+        pedido = pedidoRepository.save(pedido);
+
+        PedidoItem pedidoItem = new PedidoItem();
+        pedidoItem.setPedido(pedido);
+        pedidoItem.setPrato(prato);
+        pedidoItem.setQuantidade(1);
+        pedidoItem.setPrecoUnitario(prato.getPreco());
+        pedidoItem.setSubtotal(prato.getPreco());
+        pedido.getItens().add(pedidoItem);
+        pedidoRepository.save(pedido);
+
+        System.out.println("✅ Dados de teste criados com sucesso!");
+        System.out.println("   Restaurante: " + restaurante.getNome() + " (ID: " + restaurante.getId() + ") - Status: APPROVED");
+        System.out.println("   Prato: " + prato.getNome() + " (ID: " + prato.getId() + ") - Preço: R$ " + prato.getPreco());
+        System.out.println("   Carrinho: ID " + carrinho.getId() + " - Cliente: " + cliente.getNome());
+        System.out.println("   Pedido: ID " + pedido.getId() + " - Método: CREDIT_CARD - Total: R$ " + pedido.getTotal());
+        System.out.println("   Use o pedido ID " + pedido.getId() + " para testar pagamento com cartão!");
     }
 }
