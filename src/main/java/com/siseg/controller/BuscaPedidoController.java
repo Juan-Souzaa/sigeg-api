@@ -2,13 +2,14 @@ package com.siseg.controller;
 
 
 import com.siseg.dto.cardapio.CardapioResponseDTO;
-
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
 import com.siseg.dto.restaurante.RestauranteBuscaDTO;
 import com.siseg.dto.pagamento.PagamentoResponseDTO;
 import com.siseg.service.PedidoService;
 import com.siseg.service.PagamentoService;
+import com.siseg.service.RestauranteService;
+import com.siseg.service.PratoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,10 +27,15 @@ public class BuscaPedidoController {
     
     private final PedidoService pedidoService;
     private final PagamentoService pagamentoService;
+    private final RestauranteService restauranteService;
+    private final PratoService pratoService;
     
-    public BuscaPedidoController(PedidoService pedidoService, PagamentoService pagamentoService) {
+    public BuscaPedidoController(PedidoService pedidoService, PagamentoService pagamentoService,
+                                 RestauranteService restauranteService, PratoService pratoService) {
         this.pedidoService = pedidoService;
         this.pagamentoService = pagamentoService;
+        this.restauranteService = restauranteService;
+        this.pratoService = pratoService;
     }
     
     @GetMapping("/restaurantes/busca")
@@ -37,14 +43,14 @@ public class BuscaPedidoController {
     public ResponseEntity<Page<RestauranteBuscaDTO>> buscarRestaurantes(
             @RequestParam(required = false) String cozinha,
             Pageable pageable) {
-        Page<RestauranteBuscaDTO> response = pedidoService.buscarRestaurantes(cozinha, pageable);
+        Page<RestauranteBuscaDTO> response = restauranteService.buscarRestaurantes(cozinha, pageable);
         return ResponseEntity.ok(response);
     }
     
     @GetMapping("/restaurantes/{id}/cardapio")
     @Operation(summary = "Buscar cardápio do restaurante")
-    public ResponseEntity<Page<CardapioResponseDTO>> buscarCardapio(@PathVariable Long id, Pageable pageable) {
-        Page<CardapioResponseDTO> response = pedidoService.buscarCardapio(id, pageable);
+    public ResponseEntity<CardapioResponseDTO> buscarCardapio(@PathVariable Long id, Pageable pageable) {
+        CardapioResponseDTO response = pratoService.buscarCardapio(id, pageable);
         return ResponseEntity.ok(response);
     }
     

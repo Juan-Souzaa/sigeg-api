@@ -1,8 +1,10 @@
 package com.siseg.service;
 
+import com.siseg.dto.cardapio.CardapioResponseDTO;
 import com.siseg.dto.prato.PratoRequestDTO;
 import com.siseg.dto.prato.PratoResponseDTO;
 import com.siseg.exception.ResourceNotFoundException;
+import com.siseg.mapper.PedidoMapper;
 import com.siseg.model.Prato;
 import com.siseg.model.Restaurante;
 import com.siseg.model.enumerations.CategoriaMenu;
@@ -21,8 +23,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -36,11 +41,14 @@ public class PratoService {
     private final PratoRepository pratoRepository;
     private final RestauranteRepository restauranteRepository;
     private final ModelMapper modelMapper;
+    private final PedidoMapper pedidoMapper;
     
-    public PratoService(PratoRepository pratoRepository, RestauranteRepository restauranteRepository, ModelMapper modelMapper) {
+    public PratoService(PratoRepository pratoRepository, RestauranteRepository restauranteRepository, 
+                        ModelMapper modelMapper, PedidoMapper pedidoMapper) {
         this.pratoRepository = pratoRepository;
         this.restauranteRepository = restauranteRepository;
         this.modelMapper = modelMapper;
+        this.pedidoMapper = pedidoMapper;
     }
     
     public PratoResponseDTO criarPrato(Long restauranteId, PratoRequestDTO dto) {
@@ -153,5 +161,16 @@ public class PratoService {
             logger.info(String.format("Prato ID %d - Campo: %s - Antigo: %s - Novo: %s", 
                 prato.getId(), campo, valorAntigo, valorNovo));
         }
+    }
+    
+    @Transactional(readOnly = true)
+    public CardapioResponseDTO buscarCardapio(Long restauranteId, Pageable pageable) {
+        Restaurante restaurante = buscarRestaurante(restauranteId);
+        List<Prato> pratos = pratoRepository.findByRestauranteId(restauranteId, pageable).getContent();
+        
+        Map<CategoriaMenu, List<Prato>> pratosPorCategoria = pratos.stream()
+                .collect(Collectors.groupingBy(Prato::getCategoria));
+        
+        return pedidoMapper.toCardapioResponseDTO(restauranteId, restaurante.getNome(), pratosPorCategoria);
     }
 }
