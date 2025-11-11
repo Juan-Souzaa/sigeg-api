@@ -173,3 +173,74 @@ CREATE TABLE IF NOT EXISTS avaliacoes (
     FOREIGN KEY (entregador_id) REFERENCES entregadores(id),
     CONSTRAINT uk_avaliacao_cliente_pedido UNIQUE (cliente_id, pedido_id)
 );
+
+-- Tabela de cupons
+CREATE TABLE IF NOT EXISTS cupons (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    codigo VARCHAR(50) NOT NULL UNIQUE,
+    tipo_desconto VARCHAR(20) NOT NULL,
+    valor_desconto DECIMAL(10,2) NOT NULL,
+    valor_minimo DECIMAL(10,2) NOT NULL,
+    data_inicio DATE NOT NULL,
+    data_fim DATE NOT NULL,
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    usos_maximos INT NOT NULL,
+    usos_atuais INT NOT NULL DEFAULT 0,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_tipo_desconto CHECK (tipo_desconto IN ('PERCENTUAL', 'VALOR_FIXO')),
+    CONSTRAINT chk_valor_desconto CHECK (valor_desconto >= 0),
+    CONSTRAINT chk_valor_minimo CHECK (valor_minimo >= 0),
+    CONSTRAINT chk_usos_maximos CHECK (usos_maximos > 0),
+    CONSTRAINT chk_usos_atuais CHECK (usos_atuais >= 0),
+    CONSTRAINT chk_data_validade CHECK (data_fim >= data_inicio)
+);
+
+-- Tabela de carrinhos
+CREATE TABLE IF NOT EXISTS carrinhos (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    cliente_id BIGINT NOT NULL,
+    cupom_id BIGINT NULL,
+    subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    desconto DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+    FOREIGN KEY (cupom_id) REFERENCES cupons(id) ON DELETE SET NULL
+);
+
+-- Tabela de itens do carrinho
+CREATE TABLE IF NOT EXISTS carrinho_itens (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    carrinho_id BIGINT NOT NULL,
+    prato_id BIGINT NOT NULL,
+    quantidade INT NOT NULL,
+    preco_unitario DECIMAL(10,2) NOT NULL,
+    subtotal DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (carrinho_id) REFERENCES carrinhos(id) ON DELETE CASCADE,
+    FOREIGN KEY (prato_id) REFERENCES pratos(id) ON DELETE CASCADE,
+    CONSTRAINT chk_quantidade CHECK (quantidade > 0),
+    CONSTRAINT chk_preco_unitario CHECK (preco_unitario >= 0),
+    CONSTRAINT chk_subtotal CHECK (subtotal >= 0)
+);
+
+-- Tabela de configurações de taxa
+CREATE TABLE IF NOT EXISTS configuracoes_taxa (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tipo_taxa VARCHAR(50) NOT NULL,
+    percentual DECIMAL(5,2) NOT NULL,
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_tipo_taxa CHECK (tipo_taxa IN ('TAXA_RESTAURANTE', 'TAXA_ENTREGADOR')),
+    CONSTRAINT chk_percentual CHECK (percentual >= 0 AND percentual <= 100)
+);
+
+-- Inserir taxas padrão
+INSERT INTO configuracoes_taxa (tipo_taxa, percentual, ativo, criado_em, atualizado_em)
+SELECT 'TAXA_RESTAURANTE', 10.00, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM configuracoes_taxa WHERE tipo_taxa = 'TAXA_RESTAURANTE');
+
+INSERT INTO configuracoes_taxa (tipo_taxa, percentual, ativo, criado_em, atualizado_em)
+SELECT 'TAXA_ENTREGADOR', 15.00, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM configuracoes_taxa WHERE tipo_taxa = 'TAXA_ENTREGADOR');
