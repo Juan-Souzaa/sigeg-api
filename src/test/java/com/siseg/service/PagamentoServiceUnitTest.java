@@ -330,6 +330,54 @@ class PagamentoServiceUnitTest {
         }
     }
 
+    @Test
+    void deveProcessarPagamentoComCartaoCreditoComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            pedido.setMetodoPagamento(MetodoPagamento.CREDIT_CARD);
+            pagamento.setMetodo(MetodoPagamento.CREDIT_CARD);
+
+            CartaoCreditoRequestDTO cartaoDTO = new CartaoCreditoRequestDTO();
+            cartaoDTO.setNumero("4111111111111111");
+            cartaoDTO.setNomeTitular("Cliente Teste");
+            cartaoDTO.setValidade("12/25");
+            cartaoDTO.setCvv("123");
+
+            asaasPaymentResponse.setStatus("CONFIRMED");
+
+            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+            when(pagamentoRepository.save(any(Pagamento.class))).thenReturn(pagamento);
+            when(modelMapper.map(any(Pagamento.class), eq(PagamentoResponseDTO.class))).thenReturn(pagamentoResponseDTO);
+            lenient().doNothing().when(pagamentoValidator).validateStatusPedido(any(Pedido.class));
+
+            mockWebClientForCartao();
+
+            PagamentoResponseDTO result = pagamentoService.criarPagamento(1L, cartaoDTO);
+
+            assertNotNull(result);
+            verify(pagamentoRepository, times(1)).save(any(Pagamento.class));
+            verify(pedidoRepository, times(1)).save(any(Pedido.class));
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoCartaoNaoFornecidoParaPagamentoCartao() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            pedido.setMetodoPagamento(MetodoPagamento.CREDIT_CARD);
+
+            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+            lenient().doNothing().when(pagamentoValidator).validateStatusPedido(any(Pedido.class));
+
+            assertThrows(IllegalArgumentException.class, 
+                    () -> pagamentoService.criarPagamento(1L, null));
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private void mockWebClientForPix() {
         when(webClient.post()).thenReturn(requestBodyUriSpec);
@@ -342,6 +390,19 @@ class PagamentoServiceUnitTest {
 
         when(webClient.get()).thenReturn(requestHeadersUriSpec);
         lenient().when(requestHeadersUriSpec.uri(anyString(), anyString())).thenReturn(requestHeadersSpec);
+        lenient().when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestHeadersSpec);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void mockWebClientForCartao() {
+        when(webClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(AsaasPaymentResponseDTO.class)).thenReturn(Mono.just(asaasPaymentResponse));
+        when(responseSpec.bodyToMono(AsaasCustomerResponseDTO.class)).thenReturn(Mono.just(asaasCustomerResponse));
+
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
         lenient().when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestHeadersSpec);
     }
 

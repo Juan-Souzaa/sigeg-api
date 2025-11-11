@@ -1034,16 +1034,11 @@
 						},
 						"description": "Marca pedido como PREPARING. Apenas o dono do restaurante."
 					}
-				}
-			]
-		},
-		{
-			"name": "Pagamentos",
-			"item": [
+				},
 				{
-					"name": "Criar Pagamento para Pedido",
+					"name": "Listar Meus Pedidos (Histórico)",
 					"request": {
-						"method": "POST",
+						"method": "GET",
 						"header": [
 							{
 								"key": "Authorization",
@@ -1051,15 +1046,143 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/pedidos/{{pedido_id}}/pagamento",
+							"raw": "{{baseUrl}}/api/pedidos/meus-pedidos?page=0&size=10&sort=criadoEm,desc",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
 								"pedidos",
-								"{{pedido_id}}",
-								"pagamento"
+								"meus-pedidos"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0",
+									"description": "Número da página (0-indexed)"
+								},
+								{
+									"key": "size",
+									"value": "10",
+									"description": "Tamanho da página"
+								},
+								{
+									"key": "sort",
+									"value": "criadoEm,desc",
+									"description": "Ordenação (padrão: mais recente primeiro)"
+								},
+								{
+									"key": "status",
+									"value": "",
+									"description": "Filtro por status (CREATED, CONFIRMED, PREPARING, OUT_FOR_DELIVERY, DELIVERED, CANCELED)",
+									"disabled": true
+								},
+								{
+									"key": "dataInicio",
+									"value": "",
+									"description": "Data início (ISO 8601: 2024-01-01T00:00:00Z)",
+									"disabled": true
+								},
+								{
+									"key": "dataFim",
+									"value": "",
+									"description": "Data fim (ISO 8601: 2024-12-31T23:59:59Z)",
+									"disabled": true
+								},
+								{
+									"key": "restauranteId",
+									"value": "",
+									"description": "Filtro por ID do restaurante",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"description": "Lista os pedidos do cliente autenticado com paginação e filtros opcionais.\n\nFiltros disponíveis:\n- status: Filtrar por status do pedido\n- dataInicio/dataFim: Filtrar por período\n- restauranteId: Filtrar por restaurante específico\n\nExemplos:\n- Todos os pedidos: /api/pedidos/meus-pedidos\n- Apenas entregues: /api/pedidos/meus-pedidos?status=DELIVERED\n- Último mês: /api/pedidos/meus-pedidos?dataInicio=2024-10-01T00:00:00Z&dataFim=2024-11-01T00:00:00Z\n- De um restaurante: /api/pedidos/meus-pedidos?restauranteId=5"
+				}
+			]
+		},
+		{
+			"name": "Pagamentos",
+			"item": [
+				{
+					"name": "Criar Pagamento para Pedido (PIX/Dinheiro)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/pagamentos/pedidos/{{pedido_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pagamentos",
+								"pedidos",
+								"{{pedido_id}}"
+							]
+						},
+						"description": "Cria pagamento para pedido com método PIX ou DINHEIRO.\n\nPara PIX: retorna QR Code para pagamento.\nPara DINHEIRO: pedido é confirmado imediatamente.\n\nBody vazio (ou omitido) para PIX/Dinheiro."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('pagamento_id', response.id);",
+									"    console.log('Pagamento ID salvo:', response.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Criar Pagamento com Cartão de Crédito",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"numero\": \"4111111111111111\",\n  \"nomeTitular\": \"CLIENTE TESTE\",\n  \"validade\": \"12/25\",\n  \"cvv\": \"123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"description": "Cria pagamento com cartão de crédito para pedido.\n\nIMPORTANTE:\n- O pedido deve ter metodoPagamento=CREDIT_CARD\n- Use dados de teste do Asaas para ambiente sandbox\n- Dados do cartão são enviados diretamente ao backend e depois ao Asaas\n- NUNCA são armazenados no banco de dados\n- Pagamento é único (à vista, sem parcelamento)\n\nDados de teste Asaas (sandbox):\n- Número: 4111111111111111 (Visa)\n- Validade: qualquer data futura (MM/YY)\n- CVV: qualquer 3 dígitos\n- Nome: qualquer nome",
+						"url": {
+							"raw": "{{baseUrl}}/api/pagamentos/pedidos/{{pedido_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pagamentos",
+								"pedidos",
+								"{{pedido_id}}"
 							]
 						}
 					},
@@ -1071,7 +1194,7 @@
 									"if (pm.response.code === 200) {",
 									"    const response = pm.response.json();",
 									"    pm.environment.set('pagamento_id', response.id);",
-									"    console.log('Pagamento ID salvo:', response.id);",
+									"    console.log('Pagamento com cartão ID salvo:', response.id);",
 									"}"
 								],
 								"type": "text/javascript"
