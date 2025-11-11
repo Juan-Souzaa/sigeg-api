@@ -675,5 +675,71 @@ class PedidoServiceUnitTest {
                 p.getTaxaEntrega().compareTo(BigDecimal.ZERO) == 0));
         }
     }
+
+    @Test
+    void deveListarMeusPedidosSemFiltros() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+
+            when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
+            when(pedidoRepository.findByClienteId(cliente.getId(), pageable)).thenReturn(pedidosPage);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+
+            Page<PedidoResponseDTO> result = pedidoService.listarMeusPedidos(null, null, null, null, pageable);
+
+            assertNotNull(result);
+            assertEquals(1, result.getTotalElements());
+            verify(pedidoRepository, times(1)).findByClienteId(cliente.getId(), pageable);
+        }
+    }
+
+    @Test
+    void deveListarMeusPedidosComFiltroStatus() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+
+            when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
+            when(pedidoRepository.findByClienteIdAndStatus(cliente.getId(), StatusPedido.DELIVERED, pageable))
+                    .thenReturn(pedidosPage);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+
+            Page<PedidoResponseDTO> result = pedidoService.listarMeusPedidos(
+                    StatusPedido.DELIVERED, null, null, null, pageable);
+
+            assertNotNull(result);
+            assertEquals(1, result.getTotalElements());
+            verify(pedidoRepository, times(1))
+                    .findByClienteIdAndStatus(cliente.getId(), StatusPedido.DELIVERED, pageable);
+        }
+    }
+
+    @Test
+    void deveListarMeusPedidosComFiltroRestaurante() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+
+            when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
+            when(pedidoRepository.findByClienteIdAndRestauranteId(cliente.getId(), 1L, pageable))
+                    .thenReturn(pedidosPage);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+
+            Page<PedidoResponseDTO> result = pedidoService.listarMeusPedidos(
+                    null, null, null, 1L, pageable);
+
+            assertNotNull(result);
+            assertEquals(1, result.getTotalElements());
+            verify(pedidoRepository, times(1))
+                    .findByClienteIdAndRestauranteId(cliente.getId(), 1L, pageable);
+        }
+    }
 }
 
