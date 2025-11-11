@@ -19,7 +19,7 @@ public class PagamentoMapper {
     private static final String BILLING_TYPE_CREDIT_CARD = "CREDIT_CARD";
     private static final int DIAS_VENCIMENTO = 1;
     
-    public AsaasPaymentRequestDTO toAsaasPaymentRequest(Pagamento pagamento, String asaasCustomerId, CartaoCreditoRequestDTO cartaoDTO, Cliente cliente, String cpfCnpj) {
+    public AsaasPaymentRequestDTO toAsaasPaymentRequest(Pagamento pagamento, String asaasCustomerId, CartaoCreditoRequestDTO cartaoDTO, Cliente cliente, String cpfCnpj, String remoteIp) {
         AsaasPaymentRequestDTO request = new AsaasPaymentRequestDTO();
         request.setCustomer(asaasCustomerId);
         request.setValue(pagamento.getValor().toString());
@@ -33,11 +33,18 @@ public class PagamentoMapper {
             if (cliente != null) {
                 request.setCreditCardHolderInfo(toAsaasCreditCardHolderInfo(cliente, cpfCnpj));
             }
+            if (remoteIp != null && !remoteIp.isEmpty()) {
+                request.setRemoteIp(remoteIp);
+            }
         } else {
             request.setBillingType(BILLING_TYPE_PIX);
         }
         
         return request;
+    }
+    
+    public AsaasPaymentRequestDTO toAsaasPaymentRequest(Pagamento pagamento, String asaasCustomerId, CartaoCreditoRequestDTO cartaoDTO, Cliente cliente, String cpfCnpj) {
+        return toAsaasPaymentRequest(pagamento, asaasCustomerId, cartaoDTO, cliente, cpfCnpj, null);
     }
     
     public AsaasPaymentRequestDTO toAsaasPaymentRequest(Pagamento pagamento, String asaasCustomerId, CartaoCreditoRequestDTO cartaoDTO) {
@@ -70,11 +77,28 @@ public class PagamentoMapper {
         holderInfo.setMobilePhone(extrairTelefoneNumerico(cliente.getTelefone()));
         
         EnderecoParseado endereco = parsearEndereco(cliente.getEndereco());
-        holderInfo.setPostalCode(endereco.cep);
-        holderInfo.setAddressNumber(endereco.numero);
+        holderInfo.setPostalCode(obterCepValido(endereco.cep));
+        holderInfo.setAddressNumber(obterNumeroValido(endereco.numero));
         holderInfo.setAddressComplement(endereco.complemento);
         
         return holderInfo;
+    }
+    
+    private String obterCepValido(String cep) {
+        if (cep != null && !cep.isEmpty()) {
+            String cepLimpo = cep.replaceAll("[^0-9]", "");
+            if (cepLimpo.length() == 8) {
+                return cepLimpo;
+            }
+        }
+        return "01310100";
+    }
+    
+    private String obterNumeroValido(String numero) {
+        if (numero != null && !numero.isEmpty()) {
+            return numero;
+        }
+        return "0";
     }
     
     private String extrairTelefoneNumerico(String telefone) {
@@ -96,11 +120,15 @@ public class PagamentoMapper {
         java.util.regex.Pattern cepPattern = java.util.regex.Pattern.compile("(\\d{5}-?\\d{3})");
         java.util.regex.Matcher cepMatcher = cepPattern.matcher(enderecoLimpo);
         if (cepMatcher.find()) {
-            String cep = cepMatcher.group(1).replace("-", "");
+            String cep = cepMatcher.group(1).replaceAll("[^0-9]", "");
             if (cep.length() == 8) {
-                resultado.cep = cep.substring(0, 5) + "-" + cep.substring(5);
-            } else {
                 resultado.cep = cep;
+            }
+        } else {
+            java.util.regex.Pattern cepPatternSimples = java.util.regex.Pattern.compile("(\\d{8})");
+            java.util.regex.Matcher cepMatcherSimples = cepPatternSimples.matcher(enderecoLimpo);
+            if (cepMatcherSimples.find()) {
+                resultado.cep = cepMatcherSimples.group(1);
             }
         }
         
