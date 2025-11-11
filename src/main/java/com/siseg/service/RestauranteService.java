@@ -1,20 +1,28 @@
 package com.siseg.service;
 
+import com.siseg.dto.restaurante.RestauranteBuscaDTO;
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
 import com.siseg.exception.ResourceNotFoundException;
+import com.siseg.model.Cliente;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.StatusRestaurante;
+import com.siseg.repository.AvaliacaoRepository;
+import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.RestauranteRepository;
+import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.util.SecurityUtils;
+import com.siseg.util.TempoEstimadoCalculator;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-
+import java.math.BigDecimal;
+import java.util.List;
 import java.util.logging.Logger;
 
 @Service
@@ -26,11 +34,19 @@ public class RestauranteService {
     private final RestauranteRepository restauranteRepository;
     private final ModelMapper modelMapper;
     private final GeocodingService geocodingService;
+    private final ClienteRepository clienteRepository;
+    private final AvaliacaoRepository avaliacaoRepository;
+    private final TempoEstimadoCalculator tempoEstimadoCalculator;
     
-    public RestauranteService(RestauranteRepository restauranteRepository, ModelMapper modelMapper, GeocodingService geocodingService) {
+    public RestauranteService(RestauranteRepository restauranteRepository, ModelMapper modelMapper, 
+                              GeocodingService geocodingService, ClienteRepository clienteRepository,
+                              AvaliacaoRepository avaliacaoRepository, TempoEstimadoCalculator tempoEstimadoCalculator) {
         this.restauranteRepository = restauranteRepository;
         this.modelMapper = modelMapper;
         this.geocodingService = geocodingService;
+        this.clienteRepository = clienteRepository;
+        this.avaliacaoRepository = avaliacaoRepository;
+        this.tempoEstimadoCalculator = tempoEstimadoCalculator;
     }
     
     public RestauranteResponseDTO criarRestaurante(RestauranteRequestDTO dto) {
@@ -97,5 +113,55 @@ public class RestauranteService {
     public Page<RestauranteResponseDTO> listarPorStatus(StatusRestaurante status, Pageable pageable) {
         Page<Restaurante> restaurantes = restauranteRepository.findByStatus(status, pageable);
         return restaurantes.map(r -> modelMapper.map(r, RestauranteResponseDTO.class));
+    }
+    
+    @Transactional(readOnly = true)
+    public Page<RestauranteBuscaDTO> buscarRestaurantes(String cozinha, Pageable pageable) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        Cliente cliente = clienteRepository.findByUserId(currentUser.getId())
+                .orElse(null);
+        
+        Page<Restaurante> restaurantes = restauranteRepository.buscarRestaurantesAprovados(cozinha, pageable);
+        
+        List<RestauranteBuscaDTO> dtos = restaurantes.getContent().stream()
+                .map(r -> mapearParaRestauranteBuscaDTO(r, cliente))
+                .toList();
+        
+        return new PageImpl<>(dtos, pageable, restaurantes.getTotalElements());
+    }
+    
+    private RestauranteBuscaDTO mapearParaRestauranteBuscaDTO(Restaurante restaurante, Cliente cliente) {
+        RestauranteBuscaDTO dto = new RestauranteBuscaDTO();
+        dto.setId(restaurante.getId());
+        dto.setNome(restaurante.getNome());
+        dto.setEndereco(restaurante.getEndereco());
+        dto.setTelefone(restaurante.getTelefone());
+        
+        if (cliente != null && cliente.getLatitude() != null && cliente.getLongitude() != null &&
+            restaurante.getLatitude() != null && restaurante.getLongitude() != null) {
+            var resultado = tempoEstimadoCalculator.calculateDistanceAndTime(
+                cliente.getLatitude(), cliente.getLongitude(),
+                restaurante.getLatitude(), restaurante.getLongitude(),
+                TipoVeiculo.MOTO
+            );
+            
+            if (resultado.getDistanciaKm() != null) {
+                dto.setDistanciaKm(resultado.getDistanciaKm());
+            }
+            
+            if (resultado.getTempoMinutos() > 0) {
+                dto.setTempoEstimadoMinutos(resultado.getTempoMinutos());
+            }
+        }
+        
+        BigDecimal mediaAvaliacao = avaliacaoRepository.calcularMediaNotaRestaurante(restaurante.getId());
+        long totalAvaliacoes = avaliacaoRepository.countByRestauranteId(restaurante.getId());
+        
+        if (mediaAvaliacao != null) {
+            dto.setMediaAvaliacao(mediaAvaliacao);
+            dto.setTotalAvaliacoes(totalAvaliacoes);
+        }
+        
+        return dto;
     }
 }
