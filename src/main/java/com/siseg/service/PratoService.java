@@ -21,12 +21,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-
 import java.util.UUID;
+import java.util.logging.Logger;
 
 @Service
 @Transactional
 public class PratoService {
+    
+    private static final Logger logger = Logger.getLogger(PratoService.class.getName());
     
     @Value("${app.storage.upload-dir:uploads}")
     private String uploadDir;
@@ -148,9 +150,8 @@ public class PratoService {
     
     private void registrarAlteracao(Prato prato, String campo, String valorAntigo, String valorNovo) {
         if (!valorAntigo.equals(valorNovo)) {
-            
-            System.out.println("Prato ID " + prato.getId() + " - Campo: " + campo + 
-                             " - Antigo: " + valorAntigo + " - Novo: " + valorNovo);
+            logger.info(String.format("Prato ID %d - Campo: %s - Antigo: %s - Novo: %s", 
+                prato.getId(), campo, valorAntigo, valorNovo));
         }
     }
 }

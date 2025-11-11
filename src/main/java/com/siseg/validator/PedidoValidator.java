@@ -8,6 +8,7 @@ import com.siseg.model.User;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.EntregadorRepository;
+import com.siseg.util.SecurityUtils;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -42,6 +43,18 @@ public class PedidoValidator {
         if (pedido.getStatus() != StatusPedido.CONFIRMED) {
             throw new PedidoAlreadyProcessedException("Pedido deve estar CONFIRMED para ser marcado como PREPARING");
         }
+    }
+    
+    public void validateEntregadorDoPedido(Pedido pedido, String mensagemErro) {
+        if (SecurityUtils.isAdmin()) {
+            return;
+        }
+        
+        if (pedido.getEntregador() == null) {
+            throw new AccessDeniedException(mensagemErro);
+        }
+        
+        SecurityUtils.validateEntregadorOwnership(pedido.getEntregador());
     }
 }
 

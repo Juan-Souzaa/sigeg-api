@@ -277,14 +277,7 @@ public class PedidoService {
         Pedido pedido = pedidoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
         
-        User currentUser = SecurityUtils.getCurrentUser();
-        
-        if (!SecurityUtils.isAdmin()) {
-            if (pedido.getEntregador() == null || pedido.getEntregador().getUser() == null ||
-                !pedido.getEntregador().getUser().getId().equals(currentUser.getId())) {
-                throw new AccessDeniedException("Apenas o entregador associado pode atualizar este status");
-            }
-        }
+        pedidoValidator.validateEntregadorDoPedido(pedido, "Apenas o entregador associado pode atualizar este status");
         
         if (pedido.getStatus() != StatusPedido.PREPARING) {
             throw new PedidoAlreadyProcessedException("Pedido deve estar PREPARING para ser marcado como OUT_FOR_DELIVERY");
@@ -324,14 +317,7 @@ public class PedidoService {
         Pedido pedido = pedidoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
         
-        User currentUser = SecurityUtils.getCurrentUser();
-        
-        if (!SecurityUtils.isAdmin()) {
-            if (pedido.getEntregador() == null || pedido.getEntregador().getUser() == null ||
-                !pedido.getEntregador().getUser().getId().equals(currentUser.getId())) {
-                throw new AccessDeniedException("Apenas o entregador associado pode marcar como entregue");
-            }
-        }
+        pedidoValidator.validateEntregadorDoPedido(pedido, "Apenas o entregador associado pode marcar como entregue");
         
         if (pedido.getStatus() != StatusPedido.OUT_FOR_DELIVERY) {
             throw new PedidoAlreadyProcessedException("Pedido deve estar OUT_FOR_DELIVERY para ser marcado como DELIVERED");
