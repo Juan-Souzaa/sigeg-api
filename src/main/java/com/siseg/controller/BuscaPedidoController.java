@@ -6,6 +6,7 @@ import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
 import com.siseg.dto.restaurante.RestauranteBuscaDTO;
 import com.siseg.dto.pagamento.PagamentoResponseDTO;
+import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.service.PedidoService;
 import com.siseg.service.PagamentoService;
 import com.siseg.service.RestauranteService;
@@ -15,10 +16,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.time.Instant;
 
 @RestController
 @RequestMapping("/api")
@@ -61,6 +63,20 @@ public class BuscaPedidoController {
        
         Long clienteId = null; 
         PedidoResponseDTO response = pedidoService.criarPedido(clienteId, dto);
+        return ResponseEntity.ok(response);
+    }
+    
+    @GetMapping("/pedidos/meus-pedidos")
+    @Operation(summary = "Listar meus pedidos com filtros")
+    public ResponseEntity<Page<PedidoResponseDTO>> listarMeusPedidos(
+            @RequestParam(required = false) StatusPedido status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant dataInicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant dataFim,
+            @RequestParam(required = false) Long restauranteId,
+            Pageable pageable) {
+        Page<PedidoResponseDTO> response = pedidoService.listarMeusPedidos(
+            status, dataInicio, dataFim, restauranteId, pageable
+        );
         return ResponseEntity.ok(response);
     }
     

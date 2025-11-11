@@ -515,6 +515,44 @@ public class PedidoService {
         logger.info(String.format("Entregador %s recusou o pedido %d", entregador.getNome(), pedidoId));
     }
     
+    @Transactional(readOnly = true)
+    public Page<PedidoResponseDTO> listarMeusPedidos(StatusPedido status, Instant dataInicio, Instant dataFim, Long restauranteId, Pageable pageable) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        Cliente cliente = buscarClientePorUsuario(currentUser);
+        
+        Page<Pedido> pedidos = buscarPedidosComFiltros(cliente.getId(), status, dataInicio, dataFim, restauranteId, pageable);
+        
+        return pedidos.map(pedidoMapper::toResponseDTO);
+    }
+    
+    private Page<Pedido> buscarPedidosComFiltros(Long clienteId, StatusPedido status, Instant dataInicio, Instant dataFim, Long restauranteId, Pageable pageable) {
+        boolean temStatus = status != null;
+        boolean temPeriodo = dataInicio != null && dataFim != null;
+        boolean temRestaurante = restauranteId != null;
+        
+        if (temStatus && temPeriodo) {
+            return pedidoRepository.findByClienteIdAndStatusAndCriadoEmBetween(
+                clienteId, status, dataInicio, dataFim, pageable
+            );
+        }
+        
+        if (temStatus) {
+            return pedidoRepository.findByClienteIdAndStatus(clienteId, status, pageable);
+        }
+        
+        if (temPeriodo) {
+            return pedidoRepository.findByClienteIdAndCriadoEmBetween(
+                clienteId, dataInicio, dataFim, pageable
+            );
+        }
+        
+        if (temRestaurante) {
+            return pedidoRepository.findByClienteIdAndRestauranteId(clienteId, restauranteId, pageable);
+        }
+        
+        return pedidoRepository.findByClienteId(clienteId, pageable);
+    }
+    
     private void validatePedidoOwnership(Pedido pedido) {
         SecurityUtils.validatePedidoOwnership(pedido);
     }
