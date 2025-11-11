@@ -18,6 +18,8 @@ import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.PagamentoRepository;
 import com.siseg.repository.PedidoRepository;
 import com.siseg.repository.RestauranteRepository;
+import com.siseg.service.AsaasService;
+import com.siseg.service.AsaasWebhookService;
 import com.siseg.service.PagamentoService;
 import com.siseg.util.SecurityUtils;
 import com.siseg.util.TestJwtUtil;
@@ -32,8 +34,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 
@@ -58,6 +58,12 @@ class PagamentoControllerFunctionalTest {
 
     @SpyBean
     private PagamentoService pagamentoService;
+    
+    @SpyBean
+    private AsaasWebhookService asaasWebhookService;
+    
+    @SpyBean
+    private AsaasService asaasService;
 
     @Autowired
     private ClienteRepository clienteRepository;
@@ -71,19 +77,6 @@ class PagamentoControllerFunctionalTest {
     @Autowired
     private PagamentoRepository pagamentoRepository;
 
-    private WebClient webClient;
-
-    private WebClient.RequestBodyUriSpec requestBodyUriSpec;
-
-    private WebClient.RequestBodySpec requestBodySpec;
-
-    @SuppressWarnings("rawtypes")
-    private WebClient.RequestHeadersSpec requestHeadersSpec;
-
-    @SuppressWarnings("rawtypes")
-    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
-
-    private WebClient.ResponseSpec responseSpec;
 
     private String clienteToken;
     private Cliente cliente;
@@ -145,30 +138,13 @@ class PagamentoControllerFunctionalTest {
         asaasQrCodeResponse.setEncodedImage("iVBORw0KGgoAAAANS");
         asaasQrCodeResponse.setPayload("00020126...");
 
-        mockWebClient();
-        ReflectionTestUtils.setField(pagamentoService, "webClient", webClient);
+        mockAsaasService();
     }
 
-    @SuppressWarnings("unchecked")
-    private void mockWebClient() {
-        webClient = mock(WebClient.class);
-        requestBodyUriSpec = mock(WebClient.RequestBodyUriSpec.class);
-        requestBodySpec = mock(WebClient.RequestBodySpec.class);
-        requestHeadersSpec = mock(WebClient.RequestHeadersSpec.class);
-        requestHeadersUriSpec = mock(WebClient.RequestHeadersUriSpec.class);
-        responseSpec = mock(WebClient.ResponseSpec.class);
-
-        when(webClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(AsaasCustomerResponseDTO.class)).thenReturn(Mono.just(asaasCustomerResponse));
-        when(responseSpec.bodyToMono(AsaasPaymentResponseDTO.class)).thenReturn(Mono.just(asaasPaymentResponse));
-        when(responseSpec.bodyToMono(AsaasQrCodeResponseDTO.class)).thenReturn(Mono.just(asaasQrCodeResponse));
-
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        lenient().when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestHeadersSpec);
-        lenient().when(requestHeadersUriSpec.uri(anyString(), anyString())).thenReturn(requestHeadersSpec);
+    private void mockAsaasService() {
+        lenient().doReturn("cus_123456").when(asaasService).buscarOuCriarCliente(any(Cliente.class));
+        lenient().doReturn(asaasPaymentResponse).when(asaasService).criarPagamentoPix(any(Pagamento.class), anyString());
+        lenient().doReturn(asaasQrCodeResponse).when(asaasService).buscarQrCodePix(anyString());
     }
 
     @Test
@@ -189,7 +165,7 @@ class PagamentoControllerFunctionalTest {
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(cliente.getUser());
 
-            pagamentoService.criarPagamento(pedido.getId(), null);
+            pagamentoService.criarPagamento(pedido.getId(), null, null);
 
             mockMvc.perform(get("/api/pagamentos/pedidos/" + pedido.getId())
                             .header("Authorization", "Bearer " + clienteToken)
@@ -216,8 +192,8 @@ class PagamentoControllerFunctionalTest {
         paymentData.setId("pay_123456");
         webhook.setPayment(paymentData);
 
-        ReflectionTestUtils.setField(pagamentoService, "webhookSecret", "test-secret");
-        doReturn(true).when(pagamentoService).validarWebhookSignature(anyString(), anyString());
+        ReflectionTestUtils.setField(asaasWebhookService, "webhookSecret", "test-secret");
+        doReturn(true).when(asaasWebhookService).validarAssinatura(anyString(), anyString());
 
         mockMvc.perform(post("/api/pagamentos/webhook")
                         .header("X-Signature", "valid-signature")
@@ -232,8 +208,8 @@ class PagamentoControllerFunctionalTest {
         AsaasWebhookDTO webhook = new AsaasWebhookDTO();
         webhook.setEvent("PAYMENT_RECEIVED");
 
-        ReflectionTestUtils.setField(pagamentoService, "webhookSecret", "test-secret");
-        doReturn(false).when(pagamentoService).validarWebhookSignature(anyString(), anyString());
+        ReflectionTestUtils.setField(asaasWebhookService, "webhookSecret", "test-secret");
+        doReturn(false).when(asaasWebhookService).validarAssinatura(anyString(), anyString());
 
         mockMvc.perform(post("/api/pagamentos/webhook")
                         .header("X-Signature", "invalid-signature")
