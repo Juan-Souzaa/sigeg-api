@@ -134,6 +134,7 @@ class PedidoServiceGeocodingTest {
             when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
             when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
             when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
+            when(pedidoValidator.validatePratoDisponivel(any(Prato.class))).thenReturn(prato);
             when(pedidoRepository.save(any(Pedido.class))).thenAnswer(invocation -> {
                 Pedido pedido = invocation.getArgument(0);
                 pedido.setId(1L);
@@ -193,6 +194,7 @@ class PedidoServiceGeocodingTest {
             when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
             when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
             when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
+            when(pedidoValidator.validatePratoDisponivel(any(Prato.class))).thenReturn(prato);
             when(pedidoRepository.save(any(Pedido.class))).thenAnswer(invocation -> {
                 Pedido pedido = invocation.getArgument(0);
                 pedido.setId(1L);
