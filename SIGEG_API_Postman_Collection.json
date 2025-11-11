@@ -2450,6 +2450,380 @@
 			]
 		},
 		{
+			"name": "Tickets",
+			"item": [
+				{
+					"name": "Criar Ticket",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"titulo\": \"Problema no pedido\",\n  \"descricao\": \"Meu pedido não chegou no prazo\",\n  \"tipo\": \"RECLAMACAO\",\n  \"prioridade\": \"ALTA\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets"
+							]
+						},
+						"description": "Cria um novo ticket. Qualquer usuário autenticado pode criar tickets."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('ticket_id', response.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Listar Meus Tickets",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista os tickets criados pelo usuário autenticado."
+					}
+				},
+				{
+					"name": "Buscar Ticket por ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets/{{ticket_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets",
+								"{{ticket_id}}"
+							]
+						},
+						"description": "Busca um ticket específico por ID. Apenas o criador ou admin pode visualizar."
+					}
+				},
+				{
+					"name": "Buscar Ticket Detalhado",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets/{{ticket_id}}/detalhes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets",
+								"{{ticket_id}}",
+								"detalhes"
+							]
+						},
+						"description": "Busca um ticket com todos os comentários. Comentários internos só são visíveis para admins."
+					}
+				},
+				{
+					"name": "Adicionar Comentário",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"comentario\": \"Vou verificar o problema\",\n  \"interno\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets/{{ticket_id}}/comentarios",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets",
+								"{{ticket_id}}",
+								"comentarios"
+							]
+						},
+						"description": "Adiciona um comentário ao ticket. O criador do ticket ou admin pode comentar. Apenas admin pode criar comentários internos."
+					}
+				},
+				{
+					"name": "Atribuir Ticket a Admin",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets/{{ticket_id}}/atribuir?adminId=1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets",
+								"{{ticket_id}}",
+								"atribuir"
+							],
+							"query": [
+								{
+									"key": "adminId",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Atribui um ticket a um administrador específico. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Atualizar Status do Ticket",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets/{{ticket_id}}/status?status=EM_ANDAMENTO",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets",
+								"{{ticket_id}}",
+								"status"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "EM_ANDAMENTO",
+									"description": "Valores: ABERTO, EM_ANDAMENTO, RESOLVIDO, FECHADO"
+								}
+							]
+						},
+						"description": "Atualiza o status de um ticket. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Resolver Ticket",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets/{{ticket_id}}/resolver?resolucao=Problema resolvido",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets",
+								"{{ticket_id}}",
+								"resolver"
+							],
+							"query": [
+								{
+									"key": "resolucao",
+									"value": "Problema resolvido"
+								}
+							]
+						},
+						"description": "Resolve um ticket e adiciona um comentário de resolução. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Listar Todos os Tickets (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets/admin/todos?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets",
+								"admin",
+								"todos"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista todos os tickets do sistema. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Listar Tickets por Status (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets/admin/status?status=ABERTO&page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets",
+								"admin",
+								"status"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "ABERTO",
+									"description": "Valores: ABERTO, EM_ANDAMENTO, RESOLVIDO, FECHADO"
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista tickets filtrados por status. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Listar Tickets por Tipo (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tickets/admin/tipo?tipo=RECLAMACAO&page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tickets",
+								"admin",
+								"tipo"
+							],
+							"query": [
+								{
+									"key": "tipo",
+									"value": "RECLAMACAO",
+									"description": "Valores: RECLAMACAO, SUPORTE_TECNICO, SUGESTAO"
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista tickets filtrados por tipo. Requer role ADMIN."
+					}
+				}
+			]
+		},
+		{
 			"name": "Documentação",
 			"item": [
 				{
