@@ -18,10 +18,11 @@ public interface CupomRepository extends JpaRepository<Cupom, Long> {
     Optional<Cupom> findByCodigoAndAtivoTrue(String codigo);
     
     @Query("SELECT c FROM Cupom c WHERE c.codigo = :codigo " +
-           "AND c.ativo = true " +
+           "AND c.ativo = :ativo " +
            "AND c.dataInicio <= :data " +
            "AND c.dataFim >= :data")
     Optional<Cupom> findByCodigoAndAtivoTrueAndDataValida(@Param("codigo") String codigo, 
+                                                           @Param("ativo") Boolean ativo,
                                                            @Param("data") LocalDate data);
     
     Page<Cupom> findByAtivoTrue(Pageable pageable);

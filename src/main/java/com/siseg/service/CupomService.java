@@ -40,7 +40,7 @@ public class CupomService {
     @Transactional(readOnly = true)
     public Cupom buscarPorCodigo(String codigo) {
         LocalDate hoje = LocalDate.now();
-        return cupomRepository.findByCodigoAndAtivoTrueAndDataValida(codigo, hoje)
+        return cupomRepository.findByCodigoAndAtivoTrueAndDataValida(codigo, true, hoje)
                 .orElseThrow(() -> new ResourceNotFoundException("Cupom não encontrado ou inválido"));
     }
 
