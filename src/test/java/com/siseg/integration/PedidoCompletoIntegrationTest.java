@@ -182,6 +182,8 @@ class PedidoCompletoIntegrationTest {
     }
 
     private Cliente criarCliente() {
+        String email = "cliente" + System.currentTimeMillis() + "@teste.com";
+        
         Role roleCliente = roleRepository.findByRoleName(ERole.ROLE_CLIENTE)
                 .orElseGet(() -> {
                     Role newRole = new Role();
@@ -190,7 +192,7 @@ class PedidoCompletoIntegrationTest {
                 });
         
         User user = new User();
-        user.setUsername("cliente@teste.com");
+        user.setUsername(email);
         user.setPassword("senha123");
         Set<Role> roles = new HashSet<>();
         roles.add(roleCliente);
@@ -199,7 +201,7 @@ class PedidoCompletoIntegrationTest {
         
         Cliente c = new Cliente();
         c.setNome("Cliente Teste");
-        c.setEmail("cliente@teste.com");
+        c.setEmail(email);
         c.setTelefone("(11) 99999-9999");
         c.setEndereco("Rua do Cliente, 123");
         c.setLatitude(new BigDecimal("-23.5505"));
@@ -210,6 +212,8 @@ class PedidoCompletoIntegrationTest {
     }
 
     private Restaurante criarRestaurante() {
+        String email = "restaurante" + System.currentTimeMillis() + "@teste.com";
+        
         Role roleRestaurante = roleRepository.findByRoleName(ERole.ROLE_RESTAURANTE)
                 .orElseGet(() -> {
                     Role newRole = new Role();
@@ -218,7 +222,7 @@ class PedidoCompletoIntegrationTest {
                 });
         
         User user = new User();
-        user.setUsername("restaurante@teste.com");
+        user.setUsername(email);
         user.setPassword("senha123");
         Set<Role> roles = new HashSet<>();
         roles.add(roleRestaurante);
@@ -227,7 +231,7 @@ class PedidoCompletoIntegrationTest {
         
         Restaurante r = new Restaurante();
         r.setNome("Restaurante Teste");
-        r.setEmail("restaurante@teste.com");
+        r.setEmail(email);
         r.setTelefone("(11) 88888-8888");
         r.setEndereco("Rua do Restaurante, 456");
         r.setStatus(StatusRestaurante.APPROVED);
