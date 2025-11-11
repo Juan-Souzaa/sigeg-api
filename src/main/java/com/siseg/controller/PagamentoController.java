@@ -3,7 +3,9 @@ package com.siseg.controller;
 import com.siseg.dto.pagamento.AsaasWebhookDTO;
 import com.siseg.dto.pagamento.CartaoCreditoRequestDTO;
 import com.siseg.dto.pagamento.PagamentoResponseDTO;
+import com.siseg.service.AsaasWebhookService;
 import com.siseg.service.PagamentoService;
+import com.siseg.util.HttpUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,17 +22,21 @@ import java.nio.charset.StandardCharsets;
 public class PagamentoController {
     
     private final PagamentoService pagamentoService;
+    private final AsaasWebhookService asaasWebhookService;
     
-    public PagamentoController(PagamentoService pagamentoService) {
+    public PagamentoController(PagamentoService pagamentoService, AsaasWebhookService asaasWebhookService) {
         this.pagamentoService = pagamentoService;
+        this.asaasWebhookService = asaasWebhookService;
     }
     
     @PostMapping("/pedidos/{pedidoId}")
     @Operation(summary = "Criar pagamento para pedido")
     public ResponseEntity<PagamentoResponseDTO> criarPagamento(
             @PathVariable Long pedidoId,
-            @RequestBody(required = false) @Valid CartaoCreditoRequestDTO cartaoDTO) {
-        PagamentoResponseDTO response = pagamentoService.criarPagamento(pedidoId, cartaoDTO);
+            @RequestBody(required = false) @Valid CartaoCreditoRequestDTO cartaoDTO,
+            HttpServletRequest request) {
+        String remoteIp = HttpUtils.getClientIpAddress(request);
+        PagamentoResponseDTO response = pagamentoService.criarPagamento(pedidoId, cartaoDTO, remoteIp);
         return ResponseEntity.ok(response);
     }
     
@@ -51,11 +57,11 @@ public class PagamentoController {
         try {
             String payload = new String(request.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             
-            if (!pagamentoService.validarWebhookSignature(signature, payload)) {
+            if (!asaasWebhookService.validarAssinatura(signature, payload)) {
                 return ResponseEntity.badRequest().body("Assinatura inválida");
             }
             
-            pagamentoService.processarWebhook(webhook);
+            asaasWebhookService.processarWebhook(webhook);
             return ResponseEntity.ok("Webhook processado com sucesso");
             
         } catch (IOException e) {
