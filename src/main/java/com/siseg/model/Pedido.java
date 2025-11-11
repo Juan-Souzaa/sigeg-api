@@ -73,4 +73,16 @@ public class Pedido {
 
     @Column(nullable = false, updatable = false)
     private Instant criadoEm = Instant.now();
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal taxaPlataformaRestaurante;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal taxaPlataformaEntregador;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal valorLiquidoRestaurante;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal valorLiquidoEntregador;
 }
