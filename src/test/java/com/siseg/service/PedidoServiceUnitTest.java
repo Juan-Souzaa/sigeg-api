@@ -33,6 +33,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -121,6 +122,8 @@ class PedidoServiceUnitTest {
         restaurante.setNome("Restaurante Teste");
         restaurante.setLatitude(new BigDecimal("-23.5505"));
         restaurante.setLongitude(new BigDecimal("-46.6333"));
+        restaurante.setStatus(com.siseg.model.enumerations.StatusRestaurante.APPROVED);
+        restaurante.setUser(user);
 
         prato = new Prato();
         prato.setId(1L);
@@ -739,6 +742,166 @@ class PedidoServiceUnitTest {
             assertEquals(1, result.getTotalElements());
             verify(pedidoRepository, times(1))
                     .findByClienteIdAndRestauranteId(cliente.getId(), 1L, pageable);
+        }
+    }
+
+    @Test
+    void deveListarPedidosRestauranteSemFiltros() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+
+            when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
+            when(pedidoRepository.findByRestauranteId(restaurante.getId(), pageable)).thenReturn(pedidosPage);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+
+            Page<PedidoResponseDTO> result = pedidoService.listarPedidosRestaurante(null, null, null, pageable);
+
+            assertNotNull(result);
+            assertEquals(1, result.getTotalElements());
+            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
+            verify(pedidoRepository, times(1)).findByRestauranteId(restaurante.getId(), pageable);
+        }
+    }
+
+    @Test
+    void deveListarPedidosRestauranteComFiltroStatus() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+
+            when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
+            when(pedidoRepository.findByRestauranteIdAndStatus(restaurante.getId(), StatusPedido.CREATED, pageable))
+                    .thenReturn(pedidosPage);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+
+            Page<PedidoResponseDTO> result = pedidoService.listarPedidosRestaurante(
+                    StatusPedido.CREATED, null, null, pageable);
+
+            assertNotNull(result);
+            assertEquals(1, result.getTotalElements());
+            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
+            verify(pedidoRepository, times(1))
+                    .findByRestauranteIdAndStatus(restaurante.getId(), StatusPedido.CREATED, pageable);
+        }
+    }
+
+    @Test
+    void deveListarPedidosRestauranteComFiltroPeriodo() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+            Instant dataInicio = Instant.now().minusSeconds(86400);
+            Instant dataFim = Instant.now();
+
+            when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
+            when(pedidoRepository.findByRestauranteIdAndCriadoEmBetween(
+                    restaurante.getId(), dataInicio, dataFim, pageable))
+                    .thenReturn(pedidosPage);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+
+            Page<PedidoResponseDTO> result = pedidoService.listarPedidosRestaurante(
+                    null, dataInicio, dataFim, pageable);
+
+            assertNotNull(result);
+            assertEquals(1, result.getTotalElements());
+            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
+            verify(pedidoRepository, times(1))
+                    .findByRestauranteIdAndCriadoEmBetween(restaurante.getId(), dataInicio, dataFim, pageable);
+        }
+    }
+
+    @Test
+    void deveListarPedidosRestauranteComFiltroStatusEPeriodo() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+            Instant dataInicio = Instant.now().minusSeconds(86400);
+            Instant dataFim = Instant.now();
+
+            when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
+            when(pedidoRepository.findByRestauranteIdAndStatusAndCriadoEmBetween(
+                    restaurante.getId(), StatusPedido.CREATED, dataInicio, dataFim, pageable))
+                    .thenReturn(pedidosPage);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+
+            Page<PedidoResponseDTO> result = pedidoService.listarPedidosRestaurante(
+                    StatusPedido.CREATED, dataInicio, dataFim, pageable);
+
+            assertNotNull(result);
+            assertEquals(1, result.getTotalElements());
+            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
+            verify(pedidoRepository, times(1))
+                    .findByRestauranteIdAndStatusAndCriadoEmBetween(
+                            restaurante.getId(), StatusPedido.CREATED, dataInicio, dataFim, pageable);
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoRestauranteNaoEncontrado() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Pageable pageable = PageRequest.of(0, 10);
+
+            when(pedidoValidator.validateRestauranteAprovado(user))
+                    .thenThrow(new ResourceNotFoundException("Restaurante não encontrado para o usuário autenticado"));
+
+            assertThrows(ResourceNotFoundException.class,
+                    () -> pedidoService.listarPedidosRestaurante(null, null, null, pageable));
+            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoRestauranteNaoAprovado() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Pageable pageable = PageRequest.of(0, 10);
+
+            when(pedidoValidator.validateRestauranteAprovado(user))
+                    .thenThrow(new AccessDeniedException("Restaurante não está aprovado"));
+
+            assertThrows(AccessDeniedException.class,
+                    () -> pedidoService.listarPedidosRestaurante(null, null, null, pageable));
+            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
+        }
+    }
+
+    @Test
+    void devePermitirListarPedidosQuandoAdminMesmoRestauranteNaoAprovado() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Restaurante restauranteNaoAprovado = new Restaurante();
+            restauranteNaoAprovado.setId(2L);
+            restauranteNaoAprovado.setStatus(com.siseg.model.enumerations.StatusRestaurante.PENDING_APPROVAL);
+            restauranteNaoAprovado.setUser(user);
+
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+
+            when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restauranteNaoAprovado);
+            when(pedidoRepository.findByRestauranteId(restauranteNaoAprovado.getId(), pageable))
+                    .thenReturn(pedidosPage);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+
+            Page<PedidoResponseDTO> result = pedidoService.listarPedidosRestaurante(null, null, null, pageable);
+
+            assertNotNull(result);
+            assertEquals(1, result.getTotalElements());
+            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
+            verify(pedidoRepository, times(1))
+                    .findByRestauranteId(restauranteNaoAprovado.getId(), pageable);
         }
     }
 }
