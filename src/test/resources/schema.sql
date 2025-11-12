@@ -276,3 +276,14 @@ CREATE TABLE IF NOT EXISTS ticket_comentarios (
     FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
     FOREIGN KEY (autor_id) REFERENCES users(id)
 );
+
+-- Tabela de rotas de entrega
+CREATE TABLE IF NOT EXISTS rota_entrega (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    pedido_id BIGINT NOT NULL UNIQUE,
+    waypoints TEXT,
+    indice_atual INT NOT NULL DEFAULT 0,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP,
+    FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE
+);
