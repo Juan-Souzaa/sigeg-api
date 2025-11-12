@@ -616,6 +616,66 @@
 							]
 						}
 					}
+				},
+				{
+					"name": "Listar Pedidos do Restaurante",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/pedidos/meus-pedidos?page=0&size=10&sort=criadoEm,desc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"pedidos",
+								"meus-pedidos"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0",
+									"description": "Número da página (0-indexed)"
+								},
+								{
+									"key": "size",
+									"value": "10",
+									"description": "Tamanho da página"
+								},
+								{
+									"key": "sort",
+									"value": "criadoEm,desc",
+									"description": "Ordenação (padrão: mais recente primeiro)"
+								},
+								{
+									"key": "status",
+									"value": "",
+									"description": "Filtro por status (CREATED, CONFIRMED, PREPARING, OUT_FOR_DELIVERY, DELIVERED, CANCELED)",
+									"disabled": true
+								},
+								{
+									"key": "dataInicio",
+									"value": "",
+									"description": "Data início (ISO 8601: 2024-01-01T00:00:00Z)",
+									"disabled": true
+								},
+								{
+									"key": "dataFim",
+									"value": "",
+									"description": "Data fim (ISO 8601: 2024-12-31T23:59:59Z)",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"description": "Lista os pedidos do restaurante autenticado com paginação e filtros opcionais.\n\nRequer role RESTAURANTE ou ADMIN.\nO restaurante deve estar aprovado (status APPROVED).\n\nFiltros disponíveis:\n- status: Filtrar por status do pedido\n- dataInicio/dataFim: Filtrar por período\n\nExemplos:\n- Todos os pedidos: /api/restaurantes/pedidos/meus-pedidos\n- Apenas em preparação: /api/restaurantes/pedidos/meus-pedidos?status=PREPARING\n- Último mês: /api/restaurantes/pedidos/meus-pedidos?dataInicio=2024-10-01T00:00:00Z&dataFim=2024-11-01T00:00:00Z"
 				}
 			]
 		},
