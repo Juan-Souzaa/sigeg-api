@@ -357,16 +357,22 @@ public class GeocodingService {
     private List<Coordinates> extrairWaypoints(OsrmRoute route) {
         List<Coordinates> waypoints = new ArrayList<>();
         
-        if (route.getCoordinates() != null && !route.getCoordinates().isEmpty()) {
-            for (List<Double> coord : route.getCoordinates()) {
+        // Primeiro tenta usar coordinates (GeoJSON ou direto)
+        List<List<Double>> coordinates = route.getCoordinates();
+        if (coordinates != null && !coordinates.isEmpty()) {
+            for (List<Double> coord : coordinates) {
                 if (coord != null && coord.size() >= 2) {
                     BigDecimal longitude = BigDecimal.valueOf(coord.get(0));
                     BigDecimal latitude = BigDecimal.valueOf(coord.get(1));
                     waypoints.add(new Coordinates(latitude, longitude));
                 }
             }
-        } else if (route.getGeometry() != null && !route.getGeometry().isEmpty()) {
-            waypoints = PolylineDecoder.decode(route.getGeometry());
+        } else {
+            // Fallback: tenta decodificar polyline se geometry for string
+            String geometryStr = route.getGeometryAsString();
+            if (geometryStr != null && !geometryStr.isEmpty()) {
+                waypoints = PolylineDecoder.decode(geometryStr);
+            }
         }
         
         return waypoints;
