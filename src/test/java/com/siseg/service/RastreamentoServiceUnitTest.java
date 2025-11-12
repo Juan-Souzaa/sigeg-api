@@ -101,66 +101,29 @@ class RastreamentoServiceUnitTest {
     }
     
     @Test
-    void deveSimularMovimentoQuandoEntregadorTemCoordenadas() {
-        when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-        when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
-        when(entregadorRepository.save(any(Entregador.class))).thenReturn(entregador);
-        
-        rastreamentoService.simularMovimento(1L);
-        
-        verify(entregadorRepository, atLeastOnce()).save(any(Entregador.class));
-        assertNotEquals(restaurante.getLatitude(), entregador.getLatitude());
-        assertNotEquals(restaurante.getLongitude(), entregador.getLongitude());
-    }
-    
-    @Test
-    void deveInicializarPosicaoQuandoEntregadorNaoTemCoordenadas() {
+    void deveRetornarRastreamentoComDistanciaZeroQuandoCoordenadasInvalidas() {
         entregador.setLatitude(null);
         entregador.setLongitude(null);
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
-        when(entregadorRepository.save(any(Entregador.class))).thenAnswer(invocation -> {
-            Entregador saved = invocation.getArgument(0);
-            entregador.setLatitude(saved.getLatitude());
-            entregador.setLongitude(saved.getLongitude());
-            return saved;
-        });
         
-        rastreamentoService.simularMovimento(1L);
+        RastreamentoDTO rastreamento = rastreamentoService.obterRastreamento(1L);
         
-        verify(entregadorRepository, atLeastOnce()).save(any(Entregador.class));
-        assertNotNull(entregador.getLatitude());
-        assertNotNull(entregador.getLongitude());
-        assertNotEquals(pedido.getLatitudeEntrega(), entregador.getLatitude());
+        assertNotNull(rastreamento);
+        assertEquals(BigDecimal.ZERO, rastreamento.getDistanciaRestanteKm());
+        assertEquals(0, rastreamento.getTempoEstimadoMinutos());
+        assertTrue(rastreamento.getProximoAoDestino());
     }
     
     @Test
-    void naoDeveMoverQuandoJaEstaProximoAoDestino() {
-        entregador.setLatitude(new BigDecimal("-23.5630"));
-        entregador.setLongitude(new BigDecimal("-46.6541"));
+    void deveLancarExcecaoQuandoPedidoNaoTemEntregador() {
+        pedido.setEntregador(null);
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-        when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
-        when(entregadorRepository.save(any(Entregador.class))).thenReturn(entregador);
         
-        rastreamentoService.simularMovimento(1L);
-        
-        // Quando próximo ao destino, o entregador é posicionado no destino e salvo
-        verify(entregadorRepository, times(1)).save(argThat(e -> 
-            e.getLatitude().equals(pedido.getLatitudeEntrega()) &&
-            e.getLongitude().equals(pedido.getLongitudeEntrega())
-        ));
+        assertThrows(com.siseg.exception.ResourceNotFoundException.class, () -> {
+            rastreamentoService.obterRastreamento(1L);
+        });
     }
     
-    @Test
-    void naoDeveSimularQuandoPedidoNaoEstaEmEntrega() {
-        pedido.setStatus(StatusPedido.PREPARING);
-        when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-        
-        assertThrows(IllegalStateException.class, () -> {
-            rastreamentoService.simularMovimento(1L);
-        });
-        
-        verify(entregadorRepository, never()).save(any(Entregador.class));
-    }
 }
 

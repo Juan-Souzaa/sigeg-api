@@ -1,19 +1,33 @@
 package com.siseg.service;
 
-import com.siseg.dto.geocoding.Coordinates;
+import java.util.Optional;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
-import java.util.Optional;
+
+import com.siseg.dto.geocoding.Coordinates;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(MockitoExtension.class)
 class GeocodingServiceUnitTest {
 
-    @InjectMocks
     private GeocodingService geocodingService;
+
+    @BeforeEach
+    void setUp() {
+        geocodingService = new GeocodingService(
+                "https://nominatim.openstreetmap.org",
+                "https://viacep.com.br",
+                "https://router.project-osrm.org",
+                "SIGEG-Test/1.0",
+                5000,
+                3,
+                1000L
+        );
+    }
 
     @Test
     void deveIdentificarCepValido() {

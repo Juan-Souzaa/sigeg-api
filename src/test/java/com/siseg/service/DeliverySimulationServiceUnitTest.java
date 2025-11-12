@@ -25,7 +25,7 @@ class DeliverySimulationServiceUnitTest {
     private PedidoRepository pedidoRepository;
     
     @Mock
-    private RastreamentoService rastreamentoService;
+    private DeliveryMovementService deliveryMovementService;
     
     @InjectMocks
     private DeliverySimulationService deliverySimulationService;
@@ -56,9 +56,9 @@ class DeliverySimulationServiceUnitTest {
         
         deliverySimulationService.simularEntregasAtivas();
         
-        verify(rastreamentoService, times(2)).simularMovimento(anyLong());
-        verify(rastreamentoService).simularMovimento(1L);
-        verify(rastreamentoService).simularMovimento(2L);
+        verify(deliveryMovementService, times(2)).simularMovimento(anyLong());
+        verify(deliveryMovementService).simularMovimento(1L);
+        verify(deliveryMovementService).simularMovimento(2L);
     }
     
     @Test
@@ -67,7 +67,7 @@ class DeliverySimulationServiceUnitTest {
         
         deliverySimulationService.simularEntregasAtivas();
         
-        verify(rastreamentoService, never()).simularMovimento(anyLong());
+        verify(deliveryMovementService, never()).simularMovimento(anyLong());
     }
     
     @Test
@@ -78,21 +78,21 @@ class DeliverySimulationServiceUnitTest {
         
         deliverySimulationService.simularEntregasAtivas();
         
-        verify(rastreamentoService, times(1)).simularMovimento(anyLong());
-        verify(rastreamentoService).simularMovimento(2L);
-        verify(rastreamentoService, never()).simularMovimento(1L);
+        verify(deliveryMovementService, times(1)).simularMovimento(anyLong());
+        verify(deliveryMovementService).simularMovimento(2L);
+        verify(deliveryMovementService, never()).simularMovimento(1L);
     }
     
     @Test
     void deveContinuarQuandoErroEmUmPedido() {
         List<Pedido> pedidos = Arrays.asList(pedido1, pedido2);
         when(pedidoRepository.findByStatus(StatusPedido.OUT_FOR_DELIVERY)).thenReturn(pedidos);
-        doThrow(new RuntimeException("Erro simulado")).when(rastreamentoService).simularMovimento(1L);
+        doThrow(new RuntimeException("Erro simulado")).when(deliveryMovementService).simularMovimento(1L);
         
         deliverySimulationService.simularEntregasAtivas();
         
-        verify(rastreamentoService).simularMovimento(1L);
-        verify(rastreamentoService).simularMovimento(2L);
+        verify(deliveryMovementService).simularMovimento(1L);
+        verify(deliveryMovementService).simularMovimento(2L);
     }
 }
 
