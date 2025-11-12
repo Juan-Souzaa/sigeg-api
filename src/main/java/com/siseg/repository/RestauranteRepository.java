@@ -8,13 +8,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.List;
+import java.util.Optional;
 
 public interface RestauranteRepository extends JpaRepository<Restaurante, Long> {
     
     Page<Restaurante> findByStatus(StatusRestaurante status, Pageable pageable);
     
-
+    Optional<Restaurante> findByUserId(Long userId);
     
     @Query("SELECT r FROM Restaurante r WHERE r.status = 'APPROVED' " +
            "AND (:cozinha IS NULL OR LOWER(r.nome) LIKE LOWER(CONCAT('%', :cozinha, '%')))")
