@@ -1,22 +1,28 @@
 package com.siseg.service;
 
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+
 import com.siseg.dto.geocoding.Coordinates;
 import com.siseg.dto.geocoding.NominatimResponse;
 import com.siseg.dto.geocoding.OsrmRoute;
 import com.siseg.dto.geocoding.OsrmRouteResponse;
 import com.siseg.dto.geocoding.RouteResult;
 import com.siseg.dto.geocoding.ViaCepResponse;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-
-import java.math.BigDecimal;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Logger;
+import com.siseg.util.PolylineDecoder;
 
 @Service
 public class GeocodingService {
@@ -30,10 +36,20 @@ public class GeocodingService {
     
     private volatile long lastRequestTime = 0;
     
+    private final int osrmTimeout;
+    private final int osrmMaxRetries;
+    private final long osrmRetryDelay;
+    
     public GeocodingService(@Value("${geocoding.nominatim.baseUrl}") String nominatimBaseUrl,
                            @Value("${geocoding.viacep.baseUrl}") String viacepBaseUrl,
                            @Value("${geocoding.osrm.baseUrl}") String osrmBaseUrl,
-                           @Value("${geocoding.nominatim.userAgent}") String nominatimUserAgent) {
+                           @Value("${geocoding.nominatim.userAgent}") String nominatimUserAgent,
+                           @Value("${geocoding.osrm.timeout:5000}") int osrmTimeout,
+                           @Value("${geocoding.osrm.retry.maxAttempts:3}") int osrmMaxRetries,
+                           @Value("${geocoding.osrm.retry.delay:1000}") long osrmRetryDelay) {
+        this.osrmTimeout = osrmTimeout;
+        this.osrmMaxRetries = osrmMaxRetries;
+        this.osrmRetryDelay = osrmRetryDelay;
         this.nominatimClient = WebClient.builder()
                 .baseUrl(nominatimBaseUrl)
                 .defaultHeader(HttpHeaders.USER_AGENT, nominatimUserAgent)
@@ -49,16 +65,10 @@ public class GeocodingService {
         this.osrmClient = WebClient.builder()
                 .baseUrl(osrmBaseUrl)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
                 .build();
     }
     
-    /**
-     * Geocodifica um endereço ou CEP, retornando coordenadas (latitude, longitude).
-     * Se for CEP, primeiro busca o endereço completo via ViaCEP.
-     * 
-     * @param enderecoOuCep Endereço completo ou CEP (formato: 12345678 ou 12345-678)
-     * @return Optional com coordenadas, ou empty se não conseguir geocodificar
-     */
     public Optional<Coordinates> geocodeAddress(String enderecoOuCep) {
         if (enderecoOuCep == null || enderecoOuCep.trim().isEmpty()) {
             return Optional.empty();
@@ -66,7 +76,6 @@ public class GeocodingService {
         
         String normalized = enderecoOuCep.trim();
         
-        // Verificar cache
         if (cache.containsKey(normalized)) {
             logger.fine("Coordenadas encontradas no cache para: " + normalized);
             return Optional.of(cache.get(normalized));
@@ -75,7 +84,6 @@ public class GeocodingService {
         try {
             String enderecoCompleto = normalized;
             
-            // Se for CEP, buscar endereço completo via ViaCEP
             if (isCep(normalized)) {
                 Optional<String> enderecoViaCep = buscarEnderecoPorCep(normalized);
                 if (enderecoViaCep.isPresent()) {
@@ -87,13 +95,10 @@ public class GeocodingService {
                 }
             }
             
-            // Geocodificar endereço completo com Nominatim
             Optional<Coordinates> coordenadas = geocodeWithNominatim(enderecoCompleto);
             
-            // Cachear resultado se bem-sucedido
             if (coordenadas.isPresent()) {
                 cache.put(normalized, coordenadas.get());
-                // Também cachear o endereço completo se diferente
                 if (!enderecoCompleto.equals(normalized)) {
                     cache.put(enderecoCompleto, coordenadas.get());
                 }
@@ -107,22 +112,14 @@ public class GeocodingService {
         }
     }
     
-    /**
-     * Verifica se o input é um CEP (formato: 12345678 ou 12345-678)
-     */
     private boolean isCep(String input) {
         if (input == null) return false;
-        // Remove espaços e verifica se é apenas números com ou sem hífen
         String cleaned = input.replaceAll("\\s+", "").replace("-", "");
         return cleaned.matches("^\\d{8}$");
     }
     
-    /**
-     * Busca endereço completo via ViaCEP API
-     */
     private Optional<String> buscarEnderecoPorCep(String cep) {
         try {
-            // Remove hífen e espaços do CEP
             String cepLimpo = cep.replaceAll("[^0-9]", "");
             
             if (cepLimpo.length() != 8) {
@@ -137,7 +134,6 @@ public class GeocodingService {
                     .block();
             
             if (response != null && response.getErro() == null && response.getLogradouro() != null) {
-                // Montar endereço completo: "logradouro, bairro, localidade, uf"
                 StringBuilder endereco = new StringBuilder();
                 endereco.append(response.getLogradouro());
                 
@@ -230,88 +226,156 @@ public class GeocodingService {
         lastRequestTime = System.currentTimeMillis();
     }
     
-    /**
-     * Calcula distância e tempo de viagem usando OSRM (Open Source Routing Machine)
-     * Retorna distância real de rota e tempo estimado
-     * 
-     * @param origemLat Latitude do ponto de origem
-     * @param origemLon Longitude do ponto de origem
-     * @param destinoLat Latitude do ponto de destino
-     * @param destinoLon Longitude do ponto de destino
-     * @param profile Perfil de roteamento: "driving", "walking", "cycling" (padrão: "driving")
-     * @return Optional com RouteResult contendo distância (km) e tempo (minutos), ou empty se falhar
-     */
     public Optional<RouteResult> calculateRoute(BigDecimal origemLat, BigDecimal origemLon,
                                                BigDecimal destinoLat, BigDecimal destinoLon,
                                                String profile) {
+        return calculateRoute(origemLat, origemLon, destinoLat, destinoLon, profile, false);
+    }
+    
+    public Optional<RouteResult> calculateRoute(BigDecimal origemLat, BigDecimal origemLon,
+                                               BigDecimal destinoLat, BigDecimal destinoLon,
+                                               String profile, boolean includeWaypoints) {
         if (origemLat == null || origemLon == null || destinoLat == null || destinoLon == null) {
+            logger.warning("Coordenadas inválidas para cálculo de rota");
             return Optional.empty();
         }
         
-        try {
-            // Formato OSRM: longitude,latitude;longitude,latitude
-            String coordinates = String.format("%s,%s;%s,%s",
-                origemLon, origemLat,
-                destinoLon, destinoLat);
-            
-            String routeProfile = (profile != null && !profile.isEmpty()) ? profile : "driving";
-            
-            OsrmRouteResponse response = osrmClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/route/v1/{profile}/{coordinates}")
-                            .queryParam("overview", "false")
-                            .queryParam("alternatives", "false")
-                            .queryParam("steps", "false")
-                            .build(routeProfile, coordinates))
-                    .retrieve()
-                    .bodyToMono(OsrmRouteResponse.class)
-                    .block();
-            
-            if (response != null && response.getCode() != null && 
-                "Ok".equals(response.getCode()) && 
-                response.getRoutes() != null && 
-                !response.getRoutes().isEmpty()) {
+        Exception lastException = null;
+        
+        for (int attempt = 1; attempt <= osrmMaxRetries; attempt++) {
+            try {
+                Optional<RouteResult> result = calcularRotaComOSRM(origemLat, origemLon, destinoLat, destinoLon, profile, includeWaypoints);
                 
-                OsrmRoute route = response.getRoutes().get(0);
+                if (result.isPresent()) {
+                    if (attempt > 1) {
+                        logger.info("Rota calculada com sucesso na tentativa " + attempt);
+                    }
+                    return result;
+                }
                 
-                // distance está em metros, converter para km
-                double distanciaMetros = route.getDistance();
-                BigDecimal distanciaKm = BigDecimal.valueOf(distanciaMetros / 1000.0)
-                        .setScale(2, java.math.RoundingMode.HALF_UP);
+            } catch (WebClientResponseException e) {
+                lastException = e;
+                int statusCode = e.getStatusCode().value();
+                String errorBody = e.getResponseBodyAsString();
                 
-                // duration está em segundos, converter para minutos
-                double tempoSegundos = route.getDuration();
-                int tempoMinutos = (int) Math.ceil(tempoSegundos / 60.0);
+                logger.warning(String.format(
+                    "Erro ao calcular rota OSRM (tentativa %d/%d): Status %d - %s",
+                    attempt, osrmMaxRetries, statusCode, errorBody != null ? errorBody : e.getMessage()
+                ));
                 
-                RouteResult result = new RouteResult(distanciaKm, tempoMinutos);
-                logger.fine("Rota calculada via OSRM: " + distanciaKm + " km, " + tempoMinutos + " min");
-                return Optional.of(result);
+                if (statusCode >= 400 && statusCode < 500) {
+                    logger.severe("Erro do cliente (4xx), não será feito retry: " + statusCode);
+                    break;
+                }
+                
+            } catch (org.springframework.web.reactive.function.client.WebClientException e) {
+                lastException = e;
+                logger.warning(String.format(
+                    "Erro de conexão com OSRM (tentativa %d/%d): %s",
+                    attempt, osrmMaxRetries, e.getMessage()
+                ));
+                
+            } catch (Exception e) {
+                lastException = e;
+                logger.warning(String.format(
+                    "Erro inesperado ao calcular rota OSRM (tentativa %d/%d): %s",
+                    attempt, osrmMaxRetries, e.getMessage()
+                ));
             }
             
-            logger.warning("OSRM não retornou rota válida");
-            return Optional.empty();
-            
-        } catch (org.springframework.web.reactive.function.client.WebClientException e) {
-            logger.warning("Erro de conexão com OSRM: " + e.getMessage());
-            return Optional.empty();
-        } catch (Exception e) {
-            logger.warning("Erro ao calcular rota com OSRM: " + e.getMessage());
-            return Optional.empty();
+            if (attempt < osrmMaxRetries) {
+                try {
+                    long delay = osrmRetryDelay * attempt;
+                    Thread.sleep(delay);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.warning("Thread interrompida durante retry");
+                    break;
+                }
+            }
         }
+        
+        logger.severe(String.format(
+            "Falha ao calcular rota OSRM após %d tentativas. Último erro: %s",
+            osrmMaxRetries, lastException != null ? lastException.getMessage() : "desconhecido"
+        ));
+        
+        return Optional.empty();
     }
     
-    /**
-     * Obtém o profile OSRM apropriado baseado no tipo de veículo
-     * @param tipoVeiculo Tipo de veículo do entregador
-     * @return Profile OSRM: "cycling" para bicicleta, "driving" para outros
-     */
+    private Optional<RouteResult> calcularRotaComOSRM(BigDecimal origemLat, BigDecimal origemLon,
+                                                     BigDecimal destinoLat, BigDecimal destinoLon,
+                                                     String profile, boolean includeWaypoints) {
+        String coordinates = String.format("%s,%s;%s,%s",
+            origemLon, origemLat,
+            destinoLon, destinoLat);
+        
+        String routeProfile = (profile != null && !profile.isEmpty()) ? profile : "driving";
+        
+        OsrmRouteResponse response = osrmClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/route/v1/{profile}/{coordinates}")
+                        .queryParam("overview", includeWaypoints ? "full" : "false")
+                        .queryParam("geometries", includeWaypoints ? "geojson" : "polyline")
+                        .queryParam("alternatives", "false")
+                        .queryParam("steps", "false")
+                        .build(routeProfile, coordinates))
+                .retrieve()
+                .bodyToMono(OsrmRouteResponse.class)
+                .block(Duration.ofMillis(osrmTimeout));
+        
+        if (response == null || response.getCode() == null || !"Ok".equals(response.getCode())) {
+            logger.warning("OSRM retornou código inválido: " + (response != null ? response.getCode() : "null"));
+            return Optional.empty();
+        }
+        
+        if (response.getRoutes() == null || response.getRoutes().isEmpty()) {
+            logger.warning("OSRM não retornou rotas");
+            return Optional.empty();
+        }
+        
+        OsrmRoute route = response.getRoutes().get(0);
+        
+        double distanciaMetros = route.getDistance();
+        BigDecimal distanciaKm = BigDecimal.valueOf(distanciaMetros / 1000.0)
+                .setScale(2, java.math.RoundingMode.HALF_UP);
+        
+        double tempoSegundos = route.getDuration();
+        int tempoMinutos = (int) Math.ceil(tempoSegundos / 60.0);
+        
+        List<Coordinates> waypoints = null;
+        if (includeWaypoints) {
+            waypoints = extrairWaypoints(route);
+        }
+        
+        RouteResult result = new RouteResult(distanciaKm, tempoMinutos, waypoints);
+        logger.fine("Rota calculada via OSRM: " + distanciaKm + " km, " + tempoMinutos + " min" + 
+                   (waypoints != null ? ", " + waypoints.size() + " waypoints" : ""));
+        return Optional.of(result);
+    }
+    
+    private List<Coordinates> extrairWaypoints(OsrmRoute route) {
+        List<Coordinates> waypoints = new ArrayList<>();
+        
+        if (route.getCoordinates() != null && !route.getCoordinates().isEmpty()) {
+            for (List<Double> coord : route.getCoordinates()) {
+                if (coord != null && coord.size() >= 2) {
+                    BigDecimal longitude = BigDecimal.valueOf(coord.get(0));
+                    BigDecimal latitude = BigDecimal.valueOf(coord.get(1));
+                    waypoints.add(new Coordinates(latitude, longitude));
+                }
+            }
+        } else if (route.getGeometry() != null && !route.getGeometry().isEmpty()) {
+            waypoints = PolylineDecoder.decode(route.getGeometry());
+        }
+        
+        return waypoints;
+    }
+    
     public String obterProfileOSRM(com.siseg.model.enumerations.TipoVeiculo tipoVeiculo) {
         return com.siseg.util.VehicleConstants.getOsrmProfile(tipoVeiculo);
     }
     
-    /**
-     * Limpa o cache (útil para testes ou quando necessário)
-     */
     public void clearCache() {
         cache.clear();
     }

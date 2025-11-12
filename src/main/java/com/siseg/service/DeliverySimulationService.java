@@ -15,11 +15,11 @@ public class DeliverySimulationService {
     private static final Logger logger = Logger.getLogger(DeliverySimulationService.class.getName());
     
     private final PedidoRepository pedidoRepository;
-    private final RastreamentoService rastreamentoService;
+    private final DeliveryMovementService deliveryMovementService;
     
-    public DeliverySimulationService(PedidoRepository pedidoRepository, RastreamentoService rastreamentoService) {
+    public DeliverySimulationService(PedidoRepository pedidoRepository, DeliveryMovementService deliveryMovementService) {
         this.pedidoRepository = pedidoRepository;
-        this.rastreamentoService = rastreamentoService;
+        this.deliveryMovementService = deliveryMovementService;
     }
     
     @Scheduled(fixedRate = 10000)
@@ -34,7 +34,7 @@ public class DeliverySimulationService {
         for (Pedido pedido : pedidosEmEntrega) {
             if (pedido.getEntregador() != null) {
                 try {
-                    rastreamentoService.simularMovimento(pedido.getId());
+                    deliveryMovementService.simularMovimento(pedido.getId());
                     pedidosProcessados++;
                 } catch (Exception e) {
                     logger.warning("Erro ao simular movimento para pedido " + pedido.getId() + ": " + e.getMessage());
