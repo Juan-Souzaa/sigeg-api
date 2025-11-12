@@ -57,9 +57,16 @@ public class TempoEstimadoCalculator {
                 logger.fine("Distância calculada via OSRM (profile=" + routeProfile + "): " 
                     + distanciaKm + " km, " + tempoMinutos + " min");
                 return new ResultadoCalculo(distanciaKm, tempoMinutos, true);
+            } else {
+                logger.warning("OSRM não retornou resultado válido para cálculo de distância/tempo. " +
+                             "Coordenadas: (" + origemLat + "," + origemLon + ") -> (" + destinoLat + "," + destinoLon + ")");
             }
         } catch (Exception e) {
-            logger.fine("Erro ao calcular rota via OSRM, usando fallback Haversine: " + e.getMessage());
+            logger.warning("Erro ao calcular rota via OSRM (após retries), usando fallback Haversine: " + e.getMessage());
+            // Log stack trace apenas em nível fine para não poluir logs
+            if (logger.isLoggable(java.util.logging.Level.FINE)) {
+                logger.fine("Stack trace do erro OSRM: " + java.util.Arrays.toString(e.getStackTrace()));
+            }
         }
         
         return null;
