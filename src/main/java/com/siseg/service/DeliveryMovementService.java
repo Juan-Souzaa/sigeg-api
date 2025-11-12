@@ -115,14 +115,17 @@ public class DeliveryMovementService {
             entregador.setLongitude(waypoint.getLongitude());
             entregadorRepository.save(entregador);
             routeService.avancarWaypoint(pedido.getId());
-            logger.fine("Entregador chegou ao waypoint " + routeService.obterRota(pedido.getId()).get().getIndiceAtual() + 
-                       " do pedido " + pedido.getId());
+            logger.info(String.format(
+                "Entregador chegou ao waypoint %d do pedido %d",
+                routeService.obterRota(pedido.getId()).get().getIndiceAtual(),
+                pedido.getId()
+            ));
         } else {
-            moverEmDirecaoAoWaypoint(entregador, waypoint, distanciaAteWaypoint, distanciaPorIteracaoKm, velocidadeKmh);
+            moverEmDirecaoAoWaypoint(entregador, pedido, waypoint, distanciaAteWaypoint, distanciaPorIteracaoKm, velocidadeKmh);
         }
     }
     
-    private void moverEmDirecaoAoWaypoint(Entregador entregador, Coordinates waypoint,
+    private void moverEmDirecaoAoWaypoint(Entregador entregador, Pedido pedido, Coordinates waypoint,
                                          BigDecimal distanciaTotal, double distanciaPorIteracaoKm, double velocidadeKmh) {
         if (distanciaTotal == null || distanciaTotal.compareTo(BigDecimal.ZERO) <= 0) {
             return;
@@ -143,9 +146,9 @@ public class DeliveryMovementService {
         entregador.setLongitude(novaLon);
         entregadorRepository.save(entregador);
         
-        logger.fine(String.format(
-            "Simulação de movimento: Pedido - Entregador movido em direção ao waypoint (Velocidade: %.1f km/h, Progresso: %.1f%%)",
-            velocidadeKmh, percentualProgresso * 100
+        logger.info(String.format(
+            "Simulação de movimento - Pedido %d: Entregador movido em direção ao waypoint (Velocidade: %.1f km/h, Distância até waypoint: %.4f km, Progresso nesta iteração: %.1f%%)",
+            pedido.getId(), velocidadeKmh, distanciaTotal.doubleValue(), percentualProgresso * 100
         ));
     }
     
@@ -183,8 +186,11 @@ public class DeliveryMovementService {
     }
     
     private double calcularDistanciaPorIteracao(double velocidadeKmh) {
-        return (velocidadeKmh / VehicleConstants.SEGUNDOS_POR_SEGUNDO) 
-               * VehicleConstants.INTERVALO_SIMULACAO_SEGUNDOS;
+        // Calcula distância baseada no intervalo real
+        double distanciaBase = (velocidadeKmh / VehicleConstants.SEGUNDOS_POR_SEGUNDO) 
+                               * VehicleConstants.INTERVALO_SIMULACAO_SEGUNDOS;
+        // Aplica fator de aceleração para tornar a simulação mais visível
+        return distanciaBase * VehicleConstants.FATOR_ACELERACAO_SIMULACAO;
     }
     
     private BigDecimal calcularDistancia(BigDecimal lat1, BigDecimal lon1, BigDecimal lat2, BigDecimal lon2) {

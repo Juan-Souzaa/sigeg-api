@@ -19,7 +19,8 @@ public class VehicleConstants {
     
     // Configurações de simulação
     public static final double SEGUNDOS_POR_SEGUNDO = 3600.0; // Conversão de horas para segundos
-    public static final double INTERVALO_SIMULACAO_SEGUNDOS = 10.0;
+    public static final double INTERVALO_SIMULACAO_SEGUNDOS = 10.0; // Intervalo real entre execuções (10 segundos)
+    public static final double FATOR_ACELERACAO_SIMULACAO = 5.0; // Acelera simulação: 1 segundo real = 5 segundos simulados
     
     // Tempos padrão de entrega
     public static final int TEMPO_PADRAO_ENTREGA_MINUTOS = 30;
