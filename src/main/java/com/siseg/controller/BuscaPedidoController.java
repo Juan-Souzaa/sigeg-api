@@ -16,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -94,6 +95,20 @@ public class BuscaPedidoController {
     @Operation(summary = "Marcar pedido como preparando (Restaurante)")
     public ResponseEntity<PedidoResponseDTO> marcarComoPreparando(@PathVariable Long id) {
         PedidoResponseDTO response = pedidoService.marcarComoPreparando(id);
+        return ResponseEntity.ok(response);
+    }
+    
+    @GetMapping("/restaurantes/pedidos/meus-pedidos")
+    @PreAuthorize("hasAnyRole('RESTAURANTE', 'ADMIN')")
+    @Operation(summary = "Listar pedidos do restaurante com filtros")
+    public ResponseEntity<Page<PedidoResponseDTO>> listarPedidosRestaurante(
+            @RequestParam(required = false) StatusPedido status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant dataInicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant dataFim,
+            Pageable pageable) {
+        Page<PedidoResponseDTO> response = pedidoService.listarPedidosRestaurante(
+            status, dataInicio, dataFim, pageable
+        );
         return ResponseEntity.ok(response);
     }
     
