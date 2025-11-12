@@ -8,6 +8,7 @@
 	"item": [
 		{
 			"name": "Autenticação",
+			"description": "Endpoints de autenticação e registro de usuários.\n\nDICA: Use os logins pré-configurados para facilitar os testes:\n- Login como Admin: username=admin, password=admin123\n- Login como Entregador: use as variáveis {{entregador_username}} e {{entregador_password}}\n- Login como Cliente: use as variáveis {{cliente_username}} e {{cliente_password}}\n\nOs tokens são salvos automaticamente nas variáveis de ambiente.",
 			"item": [
 				{
 					"name": "Login como Admin",
@@ -33,18 +34,27 @@
 								"auth",
 								"authenticate"
 							]
-						}
+						},
+						"description": "Login rápido como administrador.\n\nCredenciais padrão:\n- Username: admin\n- Password: admin123\n\nO token é salvo automaticamente em {{admin_token}} e {{jwt_token}}."
 					},
 					"event": [
 						{
 							"listen": "test",
 							"script": {
 								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
 									"if (pm.response.code === 200) {",
 									"    const token = pm.response.text();",
 									"    pm.environment.set('jwt_token', token);",
 									"    pm.environment.set('admin_token', token);",
-									"    console.log('Token admin salvo:', token);",
+									"    pm.environment.set('current_user_role', 'ADMIN');",
+									"    console.log('Login admin realizado com sucesso!');",
+									"    console.log('Token salvo em: admin_token e jwt_token');",
+									"} else {",
+									"    console.log('Erro no login:', pm.response.text());",
 									"}"
 								],
 								"type": "text/javascript"
@@ -53,7 +63,7 @@
 					]
 				},
 				{
-					"name": "Registrar Usuário",
+					"name": "Login como Entregador",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -64,20 +74,99 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+							"raw": "{\n  \"username\": \"{{entregador_username}}\",\n  \"password\": \"{{entregador_password}}\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/api/users/register",
+							"raw": "{{baseUrl}}/api/auth/authenticate",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
-								"users",
-								"register"
+								"auth",
+								"authenticate"
 							]
+						},
+						"description": "Login como entregador.\n\nConfigure no environment:\n- entregador_username: email do entregador\n- entregador_password: senha do entregador\n\nO token é salvo automaticamente em {{entregador_token}} e {{jwt_token}}.\n\nIMPORTANTE: O entregador precisa estar com status APPROVED para aceitar pedidos."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    const token = pm.response.text();",
+									"    pm.environment.set('jwt_token', token);",
+									"    pm.environment.set('entregador_token', token);",
+									"    pm.environment.set('current_user_role', 'ENTREGADOR');",
+									"    console.log('Login entregador realizado com sucesso!');",
+									"    console.log('Token salvo em: entregador_token e jwt_token');",
+									"} else {",
+									"    console.log('Erro no login:', pm.response.text());",
+									"    console.log('Verifique se o entregador existe e as credenciais estão corretas');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
 						}
-					}
+					]
+				},
+				{
+					"name": "Login como Cliente",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"{{cliente_username}}\",\n  \"password\": \"{{cliente_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/authenticate",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"authenticate"
+							]
+						},
+						"description": "Login como cliente.\n\nConfigure no environment:\n- cliente_username: email do cliente\n- cliente_password: senha do cliente\n\nO token é salvo automaticamente em {{cliente_token}} e {{jwt_token}}."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    const token = pm.response.text();",
+									"    pm.environment.set('jwt_token', token);",
+									"    pm.environment.set('cliente_token', token);",
+									"    pm.environment.set('current_user_role', 'CLIENTE');",
+									"    console.log('Login cliente realizado com sucesso!');",
+									"    console.log('Token salvo em: cliente_token e jwt_token');",
+									"} else {",
+									"    console.log('Erro no login:', pm.response.text());",
+									"    console.log('Verifique se o cliente existe e as credenciais estão corretas');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
 				},
 				{
 					"name": "Login (Genérico)",
@@ -104,17 +193,76 @@
 								"authenticate"
 							]
 						},
-						"description": "Login genérico - use variáveis {{username}} e {{password}} no environment"
+						"description": "Login genérico usando variáveis do environment.\n\nConfigure no environment:\n- username: email ou username do usuário\n- password: senha do usuário\n\nO token é salvo automaticamente em {{jwt_token}}.\n\nDICA: Use este endpoint para login com qualquer tipo de usuário (admin, cliente, entregador, restaurante)."
 					},
 					"event": [
 						{
 							"listen": "test",
 							"script": {
 								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
 									"if (pm.response.code === 200) {",
 									"    const token = pm.response.text();",
 									"    pm.environment.set('jwt_token', token);",
-									"    console.log('Token salvo:', token);",
+									"    console.log('Login realizado com sucesso!');",
+									"    console.log('Token salvo em: jwt_token');",
+									"} else {",
+									"    console.log('Erro no login:', pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Registrar Usuário",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"usuario@teste.com\",\n  \"password\": \"senha123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/users/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"register"
+							]
+						},
+						"description": "Registra um novo usuário no sistema.\n\nIMPORTANTE: Este endpoint cria apenas o usuário básico. Para criar Cliente, Restaurante ou Entregador, use os endpoints específicos:\n- POST /api/clientes (cria cliente)\n- POST /api/restaurantes (cria restaurante)\n- POST /api/entregadores (cria entregador)\n\nO registro de usuário aqui é apenas para casos especiais."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 or 201\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    console.log('Usuário registrado com sucesso!');",
+									"} else {",
+									"    console.log('Erro no registro:', pm.response.text());",
 									"}"
 								],
 								"type": "text/javascript"
@@ -150,7 +298,7 @@
 								}
 							}
 						},
-						"description": "Cria um novo cliente.\n\nGeocodificação Automática:\n- O endereço pode ser um CEP (12345678 ou 12345-678) ou endereço completo\n- As coordenadas (latitude/longitude) são calculadas automaticamente\n- Exemplo com CEP: \"01310-100\" ou \"01310100\"\n- Exemplo com endereço: \"Avenida Paulista, 1578, Bela Vista, São Paulo, SP\"",
+						"description": "Cria um novo cliente.\n\nGeocodificação Automática:\n- O endereço pode ser um CEP (12345678 ou 12345-678) ou endereço completo\n- As coordenadas (latitude/longitude) são calculadas automaticamente\n- Exemplo com CEP: \"01310-100\" ou \"01310100\"\n- Exemplo com endereço: \"Avenida Paulista, 1578, Bela Vista, São Paulo, SP\"\n\nDICA: Após cadastrar, as credenciais (email e senha) são salvas automaticamente no environment para facilitar o login posterior.",
 						"url": {
 							"raw": "{{baseUrl}}/api/clientes",
 							"host": [
@@ -161,7 +309,52 @@
 								"clientes"
 							]
 						}
-					}
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Extrai email e senha do body para salvar no environment",
+									"const body = pm.request.body.raw;",
+									"try {",
+									"    const bodyJson = JSON.parse(body);",
+									"    if (bodyJson.email) {",
+									"        pm.environment.set('cliente_username', bodyJson.email);",
+									"    }",
+									"    if (bodyJson.password) {",
+									"        pm.environment.set('cliente_password', bodyJson.password);",
+									"    }",
+									"} catch (e) {",
+									"    // Ignora erro de parsing",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('cliente_id', response.id);",
+									"    console.log('Cliente cadastrado com sucesso!');",
+									"    console.log('ID salvo:', response.id);",
+									"    console.log('Credenciais salvas no environment para login rápido');",
+									"    console.log('   Use: Login como Cliente');",
+									"} else {",
+									"    console.log('Erro ao cadastrar cliente:', pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
 				},
 				{
 					"name": "Listar Clientes",
@@ -1286,17 +1479,47 @@
 								"entregadores"
 							]
 						},
-						"description": "Cadastra um novo entregador com status PENDING_APPROVAL. Requer aprovação do admin."
+						"description": "Cadastra um novo entregador com status PENDING_APPROVAL. Requer aprovação do admin.\n\nDICA: Após cadastrar, as credenciais (email e senha) são salvas automaticamente no environment para facilitar o login posterior."
 					},
 					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Extrai email e senha do body para salvar no environment",
+									"const body = pm.request.body.raw;",
+									"try {",
+									"    const bodyJson = JSON.parse(body);",
+									"    if (bodyJson.email) {",
+									"        pm.environment.set('entregador_username', bodyJson.email);",
+									"    }",
+									"    if (bodyJson.password) {",
+									"        pm.environment.set('entregador_password', bodyJson.password);",
+									"    }",
+									"} catch (e) {",
+									"    // Ignora erro de parsing",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
 						{
 							"listen": "test",
 							"script": {
 								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
 									"if (pm.response.code === 200) {",
 									"    const response = pm.response.json();",
 									"    pm.environment.set('entregador_id', response.id);",
-									"    console.log('Entregador ID salvo:', response.id);",
+									"    console.log('Entregador cadastrado com sucesso!');",
+									"    console.log('ID salvo:', response.id);",
+									"    console.log('Credenciais salvas no environment para login rápido');",
+									"    console.log('   Use: Login como Entregador');",
+									"} else {",
+									"    console.log('Erro ao cadastrar entregador:', pm.response.text());",
 									"}"
 								],
 								"type": "text/javascript"
