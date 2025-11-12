@@ -1,5 +1,7 @@
 package com.siseg.validator;
 
+import org.springframework.stereotype.Component;
+
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.PedidoAlreadyProcessedException;
 import com.siseg.exception.PratoNotAvailableException;
@@ -12,7 +14,6 @@ import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.EntregadorRepository;
 import com.siseg.util.SecurityUtils;
-import org.springframework.stereotype.Component;
 
 @Component
 public class PedidoValidator {
@@ -89,6 +90,24 @@ public class PedidoValidator {
             throw new PratoNotAvailableException("Prato não disponível: " + prato.getNome());
         }
         return prato;
+    }
+    
+    public void validateStatusEntrega(Pedido pedido) {
+        if (pedido.getStatus() != StatusPedido.OUT_FOR_DELIVERY) {
+            throw new IllegalStateException("Pedido não está em entrega");
+        }
+    }
+    
+    public void validateEntregadorAssociado(Pedido pedido) {
+        if (pedido.getEntregador() == null) {
+            throw new IllegalStateException("Pedido sem entregador");
+        }
+    }
+    
+    public void validateCoordenadasDestino(Pedido pedido) {
+        if (pedido.getLatitudeEntrega() == null || pedido.getLongitudeEntrega() == null) {
+            throw new IllegalStateException("Pedido sem coordenadas de destino");
+        }
     }
 }
 
