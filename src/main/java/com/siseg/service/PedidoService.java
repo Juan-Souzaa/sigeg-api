@@ -525,6 +525,16 @@ public class PedidoService {
         return pedidos.map(pedidoMapper::toResponseDTO);
     }
     
+    @Transactional(readOnly = true)
+    public Page<PedidoResponseDTO> listarPedidosRestaurante(StatusPedido status, Instant dataInicio, Instant dataFim, Pageable pageable) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        Restaurante restaurante = pedidoValidator.validateRestauranteAprovado(currentUser);
+        
+        Page<Pedido> pedidos = buscarPedidosRestauranteComFiltros(restaurante.getId(), status, dataInicio, dataFim, pageable);
+        
+        return pedidos.map(pedidoMapper::toResponseDTO);
+    }
+    
     private Page<Pedido> buscarPedidosComFiltros(Long clienteId, StatusPedido status, Instant dataInicio, Instant dataFim, Long restauranteId, Pageable pageable) {
         boolean temStatus = status != null;
         boolean temPeriodo = dataInicio != null && dataFim != null;
@@ -551,6 +561,29 @@ public class PedidoService {
         }
         
         return pedidoRepository.findByClienteId(clienteId, pageable);
+    }
+    
+    private Page<Pedido> buscarPedidosRestauranteComFiltros(Long restauranteId, StatusPedido status, Instant dataInicio, Instant dataFim, Pageable pageable) {
+        boolean temStatus = status != null;
+        boolean temPeriodo = dataInicio != null && dataFim != null;
+        
+        if (temStatus && temPeriodo) {
+            return pedidoRepository.findByRestauranteIdAndStatusAndCriadoEmBetween(
+                restauranteId, status, dataInicio, dataFim, pageable
+            );
+        }
+        
+        if (temStatus) {
+            return pedidoRepository.findByRestauranteIdAndStatus(restauranteId, status, pageable);
+        }
+        
+        if (temPeriodo) {
+            return pedidoRepository.findByRestauranteIdAndCriadoEmBetween(
+                restauranteId, dataInicio, dataFim, pageable
+            );
+        }
+        
+        return pedidoRepository.findByRestauranteId(restauranteId, pageable);
     }
     
     private void validatePedidoOwnership(Pedido pedido) {
