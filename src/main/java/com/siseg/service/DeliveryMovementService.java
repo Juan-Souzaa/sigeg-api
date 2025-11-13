@@ -77,13 +77,18 @@ public class DeliveryMovementService {
             logger.info("Calculando rota para pedido " + pedido.getId());
             
             if (entregador.getLatitude() == null || entregador.getLongitude() == null) {
-                if (pedido.getRestaurante() != null && 
-                    pedido.getRestaurante().getLatitude() != null && 
-                    pedido.getRestaurante().getLongitude() != null) {
-                    entregador.setLatitude(pedido.getRestaurante().getLatitude());
-                    entregador.setLongitude(pedido.getRestaurante().getLongitude());
-                    entregadorRepository.save(entregador);
-                    logger.info("Inicializada posição do entregador com coordenadas do restaurante");
+                if (pedido.getRestaurante() != null) {
+                    var enderecoRestaurante = pedido.getRestaurante().getEnderecoPrincipal();
+                    if (enderecoRestaurante.isPresent() && 
+                        enderecoRestaurante.get().getLatitude() != null && 
+                        enderecoRestaurante.get().getLongitude() != null) {
+                        entregador.setLatitude(enderecoRestaurante.get().getLatitude());
+                        entregador.setLongitude(enderecoRestaurante.get().getLongitude());
+                        entregadorRepository.save(entregador);
+                        logger.info("Inicializada posição do entregador com coordenadas do restaurante");
+                    } else {
+                        throw new IllegalStateException("Não é possível calcular rota: restaurante sem coordenadas");
+                    }
                 } else {
                     throw new IllegalStateException("Não é possível calcular rota: restaurante sem coordenadas");
                 }
@@ -153,10 +158,10 @@ public class DeliveryMovementService {
     }
     
     private boolean verificarChegadaAoDestino(Pedido pedido, Entregador entregador) {
-        if (routeService.isRotaCompleta(pedido.getId())) {
+        if (routeService.isRotaCompleta(pedido.getId()) && pedido.getEnderecoEntrega() != null) {
             BigDecimal distancia = calcularDistancia(
                 entregador.getLatitude(), entregador.getLongitude(),
-                pedido.getLatitudeEntrega(), pedido.getLongitudeEntrega()
+                pedido.getEnderecoEntrega().getLatitude(), pedido.getEnderecoEntrega().getLongitude()
             );
             
             return distancia != null && distancia.compareTo(DISTANCIA_PROXIMO_DESTINO) <= 0;
@@ -166,10 +171,12 @@ public class DeliveryMovementService {
     }
     
     private void posicionarNoDestino(Entregador entregador, Pedido pedido) {
-        entregador.setLatitude(pedido.getLatitudeEntrega());
-        entregador.setLongitude(pedido.getLongitudeEntrega());
-        entregadorRepository.save(entregador);
-        logger.info("Entregador chegou ao destino do pedido " + pedido.getId());
+        if (pedido.getEnderecoEntrega() != null) {
+            entregador.setLatitude(pedido.getEnderecoEntrega().getLatitude());
+            entregador.setLongitude(pedido.getEnderecoEntrega().getLongitude());
+            entregadorRepository.save(entregador);
+            logger.info("Entregador chegou ao destino do pedido " + pedido.getId());
+        }
     }
     
     private double calcularVelocidade(Entregador entregador) {

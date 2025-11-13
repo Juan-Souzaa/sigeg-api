@@ -22,6 +22,7 @@ import com.siseg.dto.geocoding.OsrmRoute;
 import com.siseg.dto.geocoding.OsrmRouteResponse;
 import com.siseg.dto.geocoding.RouteResult;
 import com.siseg.dto.geocoding.ViaCepResponse;
+import com.siseg.model.Endereco;
 import com.siseg.util.PolylineDecoder;
 
 @Service
@@ -69,53 +70,73 @@ public class GeocodingService {
                 .build();
     }
     
-    public Optional<Coordinates> geocodeAddress(String enderecoOuCep) {
-        if (enderecoOuCep == null || enderecoOuCep.trim().isEmpty()) {
-            return Optional.empty();
+    public void geocodeAddress(Endereco endereco) {
+        if (endereco == null || !endereco.isCompleto()) {
+            logger.warning("Endereço nulo ou incompleto para geocodificação");
+            return;
         }
         
-        String normalized = enderecoOuCep.trim();
+        if (endereco.getLatitude() != null && endereco.getLongitude() != null) {
+            logger.fine("Endereço já possui coordenadas: " + endereco.toGeocodingString());
+            return;
+        }
         
-        if (cache.containsKey(normalized)) {
-            logger.fine("Coordenadas encontradas no cache para: " + normalized);
-            return Optional.of(cache.get(normalized));
+        String enderecoFormatado = endereco.toGeocodingString();
+        
+        if (cache.containsKey(enderecoFormatado)) {
+            Coordinates coords = cache.get(enderecoFormatado);
+            endereco.setLatitude(coords.getLatitude());
+            endereco.setLongitude(coords.getLongitude());
+            logger.fine("Coordenadas encontradas no cache para: " + enderecoFormatado);
+            return;
         }
         
         try {
-            String enderecoCompleto = normalized;
-            
-            if (isCep(normalized)) {
-                Optional<String> enderecoViaCep = buscarEnderecoPorCep(normalized);
+            String enderecoCompleto = enderecoFormatado;
+            if (endereco.getCep() != null && endereco.getCep().length() == 8) {
+                Optional<String> enderecoViaCep = buscarEnderecoPorCep(endereco.getCep());
                 if (enderecoViaCep.isPresent()) {
-                    enderecoCompleto = enderecoViaCep.get();
+                    enderecoCompleto = construirEnderecoCompleto(enderecoViaCep.get(), endereco);
                     logger.info("Endereço encontrado via CEP: " + enderecoCompleto);
-                } else {
-                    logger.warning("Não foi possível buscar endereço para CEP: " + normalized);
-                    return Optional.empty();
                 }
             }
             
             Optional<Coordinates> coordenadas = geocodeWithNominatim(enderecoCompleto);
             
             if (coordenadas.isPresent()) {
-                cache.put(normalized, coordenadas.get());
-                if (!enderecoCompleto.equals(normalized)) {
+                endereco.setLatitude(coordenadas.get().getLatitude());
+                endereco.setLongitude(coordenadas.get().getLongitude());
+                cache.put(enderecoFormatado, coordenadas.get());
+                if (!enderecoCompleto.equals(enderecoFormatado)) {
                     cache.put(enderecoCompleto, coordenadas.get());
                 }
+                logger.info("Coordenadas geocodificadas e salvas: " + enderecoFormatado);
+            } else {
+                logger.warning("Não foi possível geocodificar endereço: " + enderecoFormatado);
             }
             
-            return coordenadas;
-            
         } catch (Exception e) {
-            logger.warning("Erro ao geocodificar endereço '" + normalized + "': " + e.getMessage());
-            return Optional.empty();
+            logger.warning("Erro ao geocodificar endereço '" + enderecoFormatado + "': " + e.getMessage());
         }
     }
     
-    private boolean isCep(String input) {
-        if (input == null) return false;
-        String cleaned = input.replaceAll("\\s+", "").replace("-", "");
-        return cleaned.matches("^\\d{8}$");
+    private String construirEnderecoCompleto(String enderecoViaCep, Endereco endereco) {
+        StringBuilder sb = new StringBuilder();
+        
+        String logradouroViaCep = enderecoViaCep.split(",")[0].trim();
+        sb.append(logradouroViaCep).append(", ");
+        sb.append(endereco.getNumero());
+        
+        if (endereco.getComplemento() != null && !endereco.getComplemento().trim().isEmpty()) {
+            sb.append(", ").append(endereco.getComplemento());
+        }
+        
+        String[] partes = enderecoViaCep.split(",", 2);
+        if (partes.length > 1) {
+            sb.append(", ").append(partes[1].trim());
+        }
+        
+        return sb.toString();
     }
     
     private Optional<String> buscarEnderecoPorCep(String cep) {
@@ -149,7 +170,6 @@ public class GeocodingService {
                     endereco.append(", ").append(response.getUf());
                 }
                 
-                // Adicionar Brasil para melhorar precisão da geocodificação
                 endereco.append(", Brasil");
                 
                 return Optional.of(endereco.toString());
@@ -164,12 +184,8 @@ public class GeocodingService {
         }
     }
     
-    /**
-     * Geocodifica endereço usando Nominatim API
-     */
     private Optional<Coordinates> geocodeWithNominatim(String endereco) {
         try {
-            // Respeitar rate limit: 1 requisição por segundo
             respeitarRateLimit();
             
             NominatimResponse[] responses = nominatimClient.get()
@@ -208,9 +224,6 @@ public class GeocodingService {
         }
     }
     
-    /**
-     * Respeita rate limit do Nominatim (1 requisição por segundo)
-     */
     private void respeitarRateLimit() {
         long currentTime = System.currentTimeMillis();
         long timeSinceLastRequest = currentTime - lastRequestTime;
@@ -357,7 +370,6 @@ public class GeocodingService {
     private List<Coordinates> extrairWaypoints(OsrmRoute route) {
         List<Coordinates> waypoints = new ArrayList<>();
         
-        // Primeiro tenta usar coordinates (GeoJSON ou direto)
         List<List<Double>> coordinates = route.getCoordinates();
         if (coordinates != null && !coordinates.isEmpty()) {
             for (List<Double> coord : coordinates) {
@@ -368,7 +380,6 @@ public class GeocodingService {
                 }
             }
         } else {
-            // Fallback: tenta decodificar polyline se geometry for string
             String geometryStr = route.getGeometryAsString();
             if (geometryStr != null && !geometryStr.isEmpty()) {
                 waypoints = PolylineDecoder.decode(geometryStr);

@@ -65,8 +65,12 @@ public class RastreamentoService {
     private RastreamentoDTO criarRastreamentoDTO(Pedido pedido, Entregador entregador) {
         RastreamentoDTO rastreamento = new RastreamentoDTO();
         rastreamento.setStatusEntrega(pedido.getStatus());
-        rastreamento.setPosicaoDestinoLat(pedido.getLatitudeEntrega());
-        rastreamento.setPosicaoDestinoLon(pedido.getLongitudeEntrega());
+        
+        if (pedido.getEnderecoEntrega() != null) {
+            rastreamento.setPosicaoDestinoLat(pedido.getEnderecoEntrega().getLatitude());
+            rastreamento.setPosicaoDestinoLon(pedido.getEnderecoEntrega().getLongitude());
+        }
+        
         rastreamento.setPosicaoAtualLat(entregador.getLatitude());
         rastreamento.setPosicaoAtualLon(entregador.getLongitude());
         rastreamento.setDistanciaRestanteKm(BigDecimal.ZERO);
@@ -76,7 +80,9 @@ public class RastreamentoService {
     }
     
     private boolean temCoordenadasValidas(Pedido pedido, Entregador entregador) {
-        if (pedido.getLatitudeEntrega() == null || pedido.getLongitudeEntrega() == null) {
+        if (pedido.getEnderecoEntrega() == null || 
+            pedido.getEnderecoEntrega().getLatitude() == null || 
+            pedido.getEnderecoEntrega().getLongitude() == null) {
             logger.warning("Pedido sem coordenadas de destino para rastreamento");
             return false;
         }
@@ -93,8 +99,8 @@ public class RastreamentoService {
         var resultado = tempoEstimadoCalculator.calculateDistanceAndTime(
             entregador.getLatitude(),
             entregador.getLongitude(),
-            pedido.getLatitudeEntrega(),
-            pedido.getLongitudeEntrega(),
+            pedido.getEnderecoEntrega().getLatitude(),
+            pedido.getEnderecoEntrega().getLongitude(),
             entregador.getTipoVeiculo()
         );
         

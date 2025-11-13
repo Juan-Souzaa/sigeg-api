@@ -53,9 +53,15 @@ public class RouteService {
         
         String profile = geocodingService.obterProfileOSRM(entregador.getTipoVeiculo());
         
+        if (pedido.getEnderecoEntrega() == null || 
+            pedido.getEnderecoEntrega().getLatitude() == null || 
+            pedido.getEnderecoEntrega().getLongitude() == null) {
+            throw new IllegalStateException("Pedido sem coordenadas de destino para calcular rota");
+        }
+        
         Optional<RouteResult> routeResult = geocodingService.calculateRoute(
             origemLat, origemLon,
-            pedido.getLatitudeEntrega(), pedido.getLongitudeEntrega(),
+            pedido.getEnderecoEntrega().getLatitude(), pedido.getEnderecoEntrega().getLongitude(),
             profile, true
         );
         
@@ -138,8 +144,11 @@ public class RouteService {
         if (entregador.getLatitude() != null) {
             return entregador.getLatitude();
         }
-        if (pedido.getRestaurante() != null && pedido.getRestaurante().getLatitude() != null) {
-            return pedido.getRestaurante().getLatitude();
+        if (pedido.getRestaurante() != null) {
+            var enderecoRestaurante = pedido.getRestaurante().getEnderecoPrincipal();
+            if (enderecoRestaurante.isPresent() && enderecoRestaurante.get().getLatitude() != null) {
+                return enderecoRestaurante.get().getLatitude();
+            }
         }
         return null;
     }
@@ -148,8 +157,11 @@ public class RouteService {
         if (entregador.getLongitude() != null) {
             return entregador.getLongitude();
         }
-        if (pedido.getRestaurante() != null && pedido.getRestaurante().getLongitude() != null) {
-            return pedido.getRestaurante().getLongitude();
+        if (pedido.getRestaurante() != null) {
+            var enderecoRestaurante = pedido.getRestaurante().getEnderecoPrincipal();
+            if (enderecoRestaurante.isPresent() && enderecoRestaurante.get().getLongitude() != null) {
+                return enderecoRestaurante.get().getLongitude();
+            }
         }
         return null;
     }
