@@ -44,14 +44,9 @@ public class Pedido {
     @Column(columnDefinition = "TEXT")
     private String observacoes;
 
-    @Column(nullable = false)
-    private String enderecoEntrega;
-
-    @Column(precision = 10, scale = 8)
-    private BigDecimal latitudeEntrega;
-
-    @Column(precision = 11, scale = 8)
-    private BigDecimal longitudeEntrega;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "endereco_entrega_id")
+    private Endereco enderecoEntrega;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal subtotal;

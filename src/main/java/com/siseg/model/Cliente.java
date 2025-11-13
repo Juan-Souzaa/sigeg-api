@@ -5,8 +5,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 
 @Entity
 @Table(name = "clientes")
@@ -31,15 +32,21 @@ public class Cliente {
     @Column(nullable = false)
     private String telefone;
 
-    @Column(nullable = false)
-    private String endereco;
-
-    @Column(precision = 10, scale = 8)
-    private BigDecimal latitude;
-
-    @Column(precision = 11, scale = 8)
-    private BigDecimal longitude;
+    @OneToMany(mappedBy = "cliente", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Endereco> enderecos;
 
     @Column(nullable = false, updatable = false)
     private Instant criadoEm = Instant.now();
+    
+    /**
+     * Retorna o endereço principal do cliente
+     */
+    public Optional<Endereco> getEnderecoPrincipal() {
+        if (enderecos == null) {
+            return Optional.empty();
+        }
+        return enderecos.stream()
+                .filter(e -> Boolean.TRUE.equals(e.getPrincipal()))
+                .findFirst();
+    }
 }
