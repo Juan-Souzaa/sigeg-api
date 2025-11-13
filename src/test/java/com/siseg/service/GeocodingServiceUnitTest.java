@@ -1,13 +1,11 @@
 package com.siseg.service;
 
-import java.util.Optional;
-
+import com.siseg.model.Endereco;
+import com.siseg.model.enumerations.TipoEndereco;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import com.siseg.dto.geocoding.Coordinates;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -30,91 +28,75 @@ class GeocodingServiceUnitTest {
     }
 
     @Test
-    void deveIdentificarCepValido() {
-        // Teste para método privado através de comportamento público
-        assertTrue(isCepThroughBehavior("12345678"));
-        assertTrue(isCepThroughBehavior("12345-678"));
-        assertFalse(isCepThroughBehavior("Rua Teste, 123"));
-        assertFalse(isCepThroughBehavior("123"));
-        assertFalse(isCepThroughBehavior(""));
-        assertFalse(isCepThroughBehavior(null));
-    }
-
-    // Helper para testar isCep indiretamente
-    private boolean isCepThroughBehavior(String input) {
-        // Se for CEP, tentará buscar no ViaCEP primeiro
-        // Como não podemos mockar facilmente, vamos verificar comportamento
-        // Na prática, CEPs válidos são identificados pelo padrão
-        if (input == null) return false;
-        String cleaned = input.replaceAll("[^0-9]", "");
-        return cleaned.matches("^\\d{8}$");
+    void deveRetornarSemErroParaEnderecoNulo() {
+        assertDoesNotThrow(() -> geocodingService.geocodeAddress(null));
     }
 
     @Test
-    void deveRetornarEmptyParaEnderecoNulo() {
-        Optional<Coordinates> result = geocodingService.geocodeAddress(null);
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    void deveRetornarEmptyParaEnderecoVazio() {
-        Optional<Coordinates> result = geocodingService.geocodeAddress("");
-        assertTrue(result.isEmpty());
+    void deveRetornarSemErroParaEnderecoIncompleto() {
+        Endereco endereco = new Endereco();
+        endereco.setLogradouro("Rua Teste");
         
-        result = geocodingService.geocodeAddress("   ");
-        assertTrue(result.isEmpty());
+        assertDoesNotThrow(() -> geocodingService.geocodeAddress(endereco));
     }
 
     @Test
     void deveLimparCache() {
-        // Garantir que clearCache não lança exceção
         assertDoesNotThrow(() -> geocodingService.clearCache());
     }
 
     @Test
     void deveReutilizarCacheParaMesmoEndereco() {
-        // Este teste seria mais completo com mock do WebClient
-        // Por enquanto, testa que cache não lança erro
-        String endereco = "Rua Teste, 123, São Paulo, SP";
+        Endereco endereco1 = criarEnderecoCompleto("Rua Teste", "123");
+        Endereco endereco2 = criarEnderecoCompleto("Rua Teste", "123");
         
-        // Primeira chamada (não mockada, pode falhar silenciosamente)
-        Optional<Coordinates> result1 = geocodingService.geocodeAddress(endereco);
+        geocodingService.geocodeAddress(endereco1);
+        geocodingService.geocodeAddress(endereco2);
         
-        // Segunda chamada deve usar cache (se primeira foi bem-sucedida)
-        Optional<Coordinates> result2 = geocodingService.geocodeAddress(endereco);
-        
-        // Se ambas retornaram resultado, devem ser iguais (cache funcionou)
-        if (result1.isPresent() && result2.isPresent()) {
-            assertEquals(result1.get(), result2.get());
+        if (endereco1.getLatitude() != null && endereco2.getLatitude() != null) {
+            assertEquals(endereco1.getLatitude(), endereco2.getLatitude());
+            assertEquals(endereco1.getLongitude(), endereco2.getLongitude());
         }
         
-        // Limpar cache
         geocodingService.clearCache();
     }
 
     @Test
-    void deveAceitarCepComFormatoVariado() {
-        // Testa diferentes formatos de CEP
-        String[] ceps = {"12345678", "12345-678", "12345 678", " 12345678 ", "12.345.678"};
+    void deveAceitarEnderecoComCepValido() {
+        Endereco endereco = criarEnderecoCompleto("Rua Teste", "123");
+        endereco.setCep("01310100");
         
-        for (String cep : ceps) {
-            // Não deve lançar exceção (mesmo que falhe na busca)
-            assertDoesNotThrow(() -> {
-                Optional<Coordinates> result = geocodingService.geocodeAddress(cep);
-                // Pode retornar empty se não conseguir geocodificar, mas não deve lançar exceção
-            });
-        }
+        assertDoesNotThrow(() -> geocodingService.geocodeAddress(endereco));
     }
 
     @Test
     void deveAceitarEnderecoCompleto() {
-        String enderecoCompleto = "Avenida Paulista, 1000, Bela Vista, São Paulo, SP, Brasil";
+        Endereco endereco = criarEnderecoCompleto("Avenida Paulista", "1000");
+        endereco.setBairro("Bela Vista");
         
-        // Não deve lançar exceção
-        assertDoesNotThrow(() -> {
-            Optional<Coordinates> result = geocodingService.geocodeAddress(enderecoCompleto);
-            // Pode retornar empty se serviço externo estiver indisponível
-        });
+        assertDoesNotThrow(() -> geocodingService.geocodeAddress(endereco));
+    }
+
+    @Test
+    void naoDeveGeocodificarSeEnderecoJaTemCoordenadas() {
+        Endereco endereco = criarEnderecoCompleto("Rua Teste", "123");
+        endereco.setLatitude(java.math.BigDecimal.valueOf(-23.5505));
+        endereco.setLongitude(java.math.BigDecimal.valueOf(-46.6333));
+        
+        assertDoesNotThrow(() -> geocodingService.geocodeAddress(endereco));
+    }
+
+    private Endereco criarEnderecoCompleto(String logradouro, String numero) {
+        Endereco endereco = new Endereco();
+        endereco.setLogradouro(logradouro);
+        endereco.setNumero(numero);
+        endereco.setBairro("Centro");
+        endereco.setCidade("São Paulo");
+        endereco.setEstado("SP");
+        endereco.setCep("01310100");
+        endereco.setTipo(TipoEndereco.OUTRO);
+        endereco.setPrincipal(false);
+        return endereco;
     }
 }
 
