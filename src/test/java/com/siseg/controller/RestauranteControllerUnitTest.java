@@ -1,5 +1,6 @@
 package com.siseg.controller;
 
+import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
 import com.siseg.exception.ResourceNotFoundException;
@@ -39,18 +40,27 @@ class RestauranteControllerUnitTest {
 
     @BeforeEach
     void setUp() {
+        EnderecoRequestDTO enderecoDTO = new EnderecoRequestDTO();
+        enderecoDTO.setLogradouro("Rua Teste");
+        enderecoDTO.setNumero("123");
+        enderecoDTO.setBairro("Centro");
+        enderecoDTO.setCidade("São Paulo");
+        enderecoDTO.setEstado("SP");
+        enderecoDTO.setCep("01310100");
+        enderecoDTO.setPrincipal(true);
+
         restauranteRequestDTO = new RestauranteRequestDTO();
         restauranteRequestDTO.setNome("Restaurante de Teste");
         restauranteRequestDTO.setEmail("teste@restaurante.com");
         restauranteRequestDTO.setTelefone("(11) 99999-9999");
-        restauranteRequestDTO.setEndereco("Rua Teste, 123");
+        restauranteRequestDTO.setEndereco(enderecoDTO);
 
         restauranteResponseDTO = new RestauranteResponseDTO();
         restauranteResponseDTO.setId(1L);
         restauranteResponseDTO.setNome("Restaurante de Teste");
         restauranteResponseDTO.setEmail("teste@restaurante.com");
         restauranteResponseDTO.setTelefone("(11) 99999-9999");
-        restauranteResponseDTO.setEndereco("Rua Teste, 123");
+        restauranteResponseDTO.setEndereco("Rua Teste, 123"); // String formatada
         restauranteResponseDTO.setStatus(StatusRestaurante.PENDING_APPROVAL);
     }
 

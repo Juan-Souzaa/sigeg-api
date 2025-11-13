@@ -2,12 +2,14 @@ package com.siseg.controller;
 
 import com.siseg.dto.rastreamento.RastreamentoDTO;
 import com.siseg.model.Cliente;
+import com.siseg.model.Endereco;
 import com.siseg.model.Entregador;
 import com.siseg.model.Pedido;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.ERole;
 import com.siseg.model.enumerations.StatusPedido;
+import com.siseg.model.enumerations.TipoEndereco;
 import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.PedidoRepository;
@@ -76,14 +78,27 @@ class RastreamentoControllerFunctionalTest {
         Restaurante restaurante = new Restaurante();
         restaurante.setId(1L);
         
+        // Criar endereço de entrega
+        Endereco enderecoEntrega = new Endereco();
+        enderecoEntrega.setId(1L);
+        enderecoEntrega.setLogradouro("Rua de Entrega");
+        enderecoEntrega.setNumero("456");
+        enderecoEntrega.setBairro("Centro");
+        enderecoEntrega.setCidade("São Paulo");
+        enderecoEntrega.setEstado("SP");
+        enderecoEntrega.setCep("01310100");
+        enderecoEntrega.setLatitude(new BigDecimal("-23.5631"));
+        enderecoEntrega.setLongitude(new BigDecimal("-46.6542"));
+        enderecoEntrega.setPrincipal(false);
+        enderecoEntrega.setTipo(TipoEndereco.OUTRO);
+        
         pedido = new Pedido();
         pedido.setId(1L);
         pedido.setCliente(cliente);
         pedido.setRestaurante(restaurante);
         pedido.setEntregador(entregador);
         pedido.setStatus(StatusPedido.OUT_FOR_DELIVERY);
-        pedido.setLatitudeEntrega(new BigDecimal("-23.5631"));
-        pedido.setLongitudeEntrega(new BigDecimal("-46.6542"));
+        pedido.setEnderecoEntrega(enderecoEntrega);
     }
     
     @Test

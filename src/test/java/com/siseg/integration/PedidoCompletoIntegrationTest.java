@@ -5,6 +5,7 @@ import com.siseg.dto.carrinho.CarrinhoItemRequestDTO;
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.model.*;
 import com.siseg.model.enumerations.*;
+import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.repository.*;
 import com.siseg.service.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +48,9 @@ class PedidoCompletoIntegrationTest {
 
     @Autowired
     private EntregadorRepository entregadorRepository;
+
+    @Autowired
+    private EnderecoService enderecoService;
 
     @Autowired
     private PedidoRepository pedidoRepository;
@@ -106,7 +110,7 @@ class PedidoCompletoIntegrationTest {
         pedidoDTO.setRestauranteId(restaurante.getId());
         pedidoDTO.setCarrinhoId(carrinho.getId());
         pedidoDTO.setMetodoPagamento(MetodoPagamento.PIX);
-        pedidoDTO.setEnderecoEntrega("Rua de Entrega, 456");
+        // Não definir enderecoId - deve usar endereço principal do cliente
 
         var pedidoResponse = pedidoService.criarPedido(cliente.getId(), pedidoDTO);
         assertNotNull(pedidoResponse);
@@ -173,7 +177,7 @@ class PedidoCompletoIntegrationTest {
         pedidoDTO.setRestauranteId(restaurante.getId());
         pedidoDTO.setCarrinhoId(carrinho.getId());
         pedidoDTO.setMetodoPagamento(MetodoPagamento.PIX);
-        pedidoDTO.setEnderecoEntrega("Rua de Entrega, 456");
+        // Não definir enderecoId - deve usar endereço principal do cliente
 
         var pedidoResponse = pedidoService.criarPedido(cliente.getId(), pedidoDTO);
         var pedido = pedidoRepository.findById(pedidoResponse.getId()).orElseThrow();
@@ -203,12 +207,22 @@ class PedidoCompletoIntegrationTest {
         c.setNome("Cliente Teste");
         c.setEmail(email);
         c.setTelefone("(11) 99999-9999");
-        c.setEndereco("Rua do Cliente, 123");
-        c.setLatitude(new BigDecimal("-23.5505"));
-        c.setLongitude(new BigDecimal("-46.6333"));
         c.setUser(savedUser);
         
-        return clienteRepository.save(c);
+        Cliente saved = clienteRepository.save(c);
+        
+        // Criar endereço
+        EnderecoRequestDTO enderecoDTO = new EnderecoRequestDTO();
+        enderecoDTO.setLogradouro("Rua do Cliente");
+        enderecoDTO.setNumero("123");
+        enderecoDTO.setBairro("Centro");
+        enderecoDTO.setCidade("São Paulo");
+        enderecoDTO.setEstado("SP");
+        enderecoDTO.setCep("01310100");
+        enderecoDTO.setPrincipal(true);
+        enderecoService.criarEndereco(enderecoDTO, saved);
+        
+        return saved;
     }
 
     private Restaurante criarRestaurante() {
@@ -233,13 +247,23 @@ class PedidoCompletoIntegrationTest {
         r.setNome("Restaurante Teste");
         r.setEmail(email);
         r.setTelefone("(11) 88888-8888");
-        r.setEndereco("Rua do Restaurante, 456");
         r.setStatus(StatusRestaurante.APPROVED);
-        r.setLatitude(new BigDecimal("-23.5505"));
-        r.setLongitude(new BigDecimal("-46.6333"));
         r.setUser(savedUser);
         
-        return restauranteRepository.save(r);
+        Restaurante saved = restauranteRepository.save(r);
+        
+        // Criar endereço
+        EnderecoRequestDTO enderecoDTO = new EnderecoRequestDTO();
+        enderecoDTO.setLogradouro("Rua do Restaurante");
+        enderecoDTO.setNumero("456");
+        enderecoDTO.setBairro("Centro");
+        enderecoDTO.setCidade("São Paulo");
+        enderecoDTO.setEstado("SP");
+        enderecoDTO.setCep("01310100");
+        enderecoDTO.setPrincipal(true);
+        enderecoService.criarEndereco(enderecoDTO, saved);
+        
+        return saved;
     }
 
     private Prato criarPrato() {

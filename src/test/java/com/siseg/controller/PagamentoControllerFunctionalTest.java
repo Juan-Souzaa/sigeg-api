@@ -14,12 +14,14 @@ import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.Restaurante;
 import com.siseg.model.Pagamento;
 import com.siseg.model.enumerations.StatusPagamento;
+import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.PagamentoRepository;
 import com.siseg.repository.PedidoRepository;
 import com.siseg.repository.RestauranteRepository;
 import com.siseg.service.AsaasService;
 import com.siseg.service.AsaasWebhookService;
+import com.siseg.service.EnderecoService;
 import com.siseg.service.PagamentoService;
 import com.siseg.util.SecurityUtils;
 import com.siseg.util.TestJwtUtil;
@@ -52,6 +54,9 @@ class PagamentoControllerFunctionalTest {
 
     @Autowired
     private TestJwtUtil testJwtUtil;
+
+    @Autowired
+    private EnderecoService enderecoService;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -98,8 +103,20 @@ class PagamentoControllerFunctionalTest {
                     c.setNome("Cliente Teste");
                     c.setEmail("cliente@teste.com");
                     c.setTelefone("(11) 99999-9999");
-                    c.setEndereco("Rua Teste, 123");
-                    return clienteRepository.save(c);
+                    Cliente saved = clienteRepository.save(c);
+                    
+                    // Criar endereço
+                    EnderecoRequestDTO enderecoDTO = new EnderecoRequestDTO();
+                    enderecoDTO.setLogradouro("Rua Teste");
+                    enderecoDTO.setNumero("123");
+                    enderecoDTO.setBairro("Centro");
+                    enderecoDTO.setCidade("São Paulo");
+                    enderecoDTO.setEstado("SP");
+                    enderecoDTO.setCep("01310100");
+                    enderecoDTO.setPrincipal(true);
+                    enderecoService.criarEndereco(enderecoDTO, saved);
+                    
+                    return saved;
                 });
 
         Restaurante restaurante = restauranteRepository.findAll().stream().findFirst()
@@ -108,11 +125,26 @@ class PagamentoControllerFunctionalTest {
                     r.setNome("Restaurante Teste");
                     r.setEmail("restaurante@teste.com");
                     r.setTelefone("(11) 88888-8888");
-                    r.setEndereco("Rua Restaurante, 456");
                     User restauranteUser = testJwtUtil.getOrCreateUser("restaurante", ERole.ROLE_RESTAURANTE);
                     r.setUser(restauranteUser);
-                    return restauranteRepository.save(r);
+                    Restaurante saved = restauranteRepository.save(r);
+                    
+                    // Criar endereço
+                    EnderecoRequestDTO enderecoDTO = new EnderecoRequestDTO();
+                    enderecoDTO.setLogradouro("Rua Restaurante");
+                    enderecoDTO.setNumero("456");
+                    enderecoDTO.setBairro("Centro");
+                    enderecoDTO.setCidade("São Paulo");
+                    enderecoDTO.setEstado("SP");
+                    enderecoDTO.setCep("01310100");
+                    enderecoDTO.setPrincipal(true);
+                    enderecoService.criarEndereco(enderecoDTO, saved);
+                    
+                    return saved;
                 });
+
+        com.siseg.model.Endereco enderecoEntrega = enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())
+                .orElseThrow(() -> new RuntimeException("Cliente não possui endereço"));
 
         pedido = new Pedido();
         pedido.setCliente(cliente);
@@ -122,7 +154,7 @@ class PagamentoControllerFunctionalTest {
         pedido.setSubtotal(new BigDecimal("90.00"));
         pedido.setTaxaEntrega(new BigDecimal("10.00"));
         pedido.setTotal(new BigDecimal("100.00"));
-        pedido.setEnderecoEntrega("Rua Teste, 123");
+        pedido.setEnderecoEntrega(enderecoEntrega);
         pedido = pedidoRepository.save(pedido);
 
         asaasCustomerResponse = new AsaasCustomerResponseDTO();

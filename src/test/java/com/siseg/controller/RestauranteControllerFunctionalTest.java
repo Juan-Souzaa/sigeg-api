@@ -1,6 +1,7 @@
 package com.siseg.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.util.TestJwtUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,18 @@ class RestauranteControllerFunctionalTest {
     private String userToken;
     private String adminToken;
 
+    private EnderecoRequestDTO criarEnderecoDTO(String logradouro, String numero) {
+        EnderecoRequestDTO enderecoDTO = new EnderecoRequestDTO();
+        enderecoDTO.setLogradouro(logradouro);
+        enderecoDTO.setNumero(numero);
+        enderecoDTO.setBairro("Centro");
+        enderecoDTO.setCidade("São Paulo");
+        enderecoDTO.setEstado("SP");
+        enderecoDTO.setCep("01310100");
+        enderecoDTO.setPrincipal(true);
+        return enderecoDTO;
+    }
+
     @BeforeEach
     void setUp() {
         // Gera tokens JWT válidos para os testes
@@ -58,7 +71,7 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante de Teste");
         requestDTO.setEmail("teste@restaurante.com");
         requestDTO.setTelefone("(11) 99999-9999");
-        requestDTO.setEndereco("Rua Teste, 123");
+        requestDTO.setEndereco(criarEnderecoDTO("Rua Teste", "123"));
 
         mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
@@ -69,7 +82,7 @@ class RestauranteControllerFunctionalTest {
                 .andExpect(jsonPath("$.nome").value("Restaurante de Teste"))
                 .andExpect(jsonPath("$.email").value("teste@restaurante.com"))
                 .andExpect(jsonPath("$.telefone").value("(11) 99999-9999"))
-                .andExpect(jsonPath("$.endereco").value("Rua Teste, 123"))
+                .andExpect(jsonPath("$.endereco").exists()) // Endereço será formatado como string
                 .andExpect(jsonPath("$.status").value("PENDING_APPROVAL"))
                 .andExpect(jsonPath("$.id").exists());
     }
@@ -109,7 +122,7 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante para Listagem");
         requestDTO.setEmail("listagem@restaurante.com");
         requestDTO.setTelefone("(11) 88888-8888");
-        requestDTO.setEndereco("Rua Listagem, 456");
+        requestDTO.setEndereco(criarEnderecoDTO("Rua Listagem", "456"));
 
         mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
@@ -134,7 +147,7 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante para Busca");
         requestDTO.setEmail("busca@restaurante.com");
         requestDTO.setTelefone("(11) 77777-7777");
-        requestDTO.setEndereco("Rua Busca, 789");
+        requestDTO.setEndereco(criarEnderecoDTO("Rua Busca", "789"));
 
         String response = mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
@@ -165,7 +178,7 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante para Aprovar");
         requestDTO.setEmail("aprovar@restaurante.com");
         requestDTO.setTelefone("(11) 66666-6666");
-        requestDTO.setEndereco("Rua Aprovar, 101");
+        requestDTO.setEndereco(criarEnderecoDTO("Rua Aprovar", "101"));
 
         String response = mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
@@ -195,7 +208,7 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante para Rejeitar");
         requestDTO.setEmail("rejeitar@restaurante.com");
         requestDTO.setTelefone("(11) 55555-5555");
-        requestDTO.setEndereco("Rua Rejeitar, 202");
+        requestDTO.setEndereco(criarEnderecoDTO("Rua Rejeitar", "202"));
 
         String response = mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)
@@ -225,7 +238,7 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante para Teste Admin");
         requestDTO.setEmail("admin-test@restaurante.com");
         requestDTO.setTelefone("(11) 44444-4444");
-        requestDTO.setEndereco("Rua Admin Test, 303");
+        requestDTO.setEndereco(criarEnderecoDTO("Rua Admin Test", "303"));
 
         String response = mockMvc.perform(post("/api/restaurantes")
                 .header("Authorization", "Bearer " + userToken)

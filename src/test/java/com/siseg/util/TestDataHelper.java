@@ -1,5 +1,6 @@
 package com.siseg.util;
 
+import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.model.Cliente;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
@@ -7,6 +8,7 @@ import com.siseg.model.enumerations.ERole;
 import com.siseg.model.enumerations.StatusRestaurante;
 import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.RestauranteRepository;
+import com.siseg.service.EnderecoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +24,9 @@ public class TestDataHelper {
     @Autowired
     private TestJwtUtil testJwtUtil;
 
+    @Autowired
+    private EnderecoService enderecoService;
+
     /**
      * Cria um restaurante para um usuário específico
      */
@@ -32,11 +37,24 @@ public class TestDataHelper {
         restaurante.setNome("Restaurante de " + username);
         restaurante.setEmail(username + "@restaurante.com");
         restaurante.setTelefone("(11) 99999-9999");
-        restaurante.setEndereco("Rua Teste, 123");
         restaurante.setStatus(StatusRestaurante.APPROVED);
         restaurante.setUser(user);
         
-        return restauranteRepository.save(restaurante);
+        Restaurante saved = restauranteRepository.save(restaurante);
+        
+        // Criar endereço para o restaurante
+        EnderecoRequestDTO enderecoDTO = new EnderecoRequestDTO();
+        enderecoDTO.setLogradouro("Rua Teste");
+        enderecoDTO.setNumero("123");
+        enderecoDTO.setBairro("Centro");
+        enderecoDTO.setCidade("São Paulo");
+        enderecoDTO.setEstado("SP");
+        enderecoDTO.setCep("01310100");
+        enderecoDTO.setPrincipal(true);
+        
+        enderecoService.criarEndereco(enderecoDTO, saved);
+        
+        return saved;
     }
 
     /**
@@ -49,10 +67,23 @@ public class TestDataHelper {
         cliente.setNome("Cliente " + username);
         cliente.setEmail(username + "@email.com");
         cliente.setTelefone("(11) 88888-8888");
-        cliente.setEndereco("Rua Cliente, 456");
         cliente.setUser(user);
         
-        return clienteRepository.save(cliente);
+        Cliente saved = clienteRepository.save(cliente);
+        
+        // Criar endereço para o cliente
+        EnderecoRequestDTO enderecoDTO = new EnderecoRequestDTO();
+        enderecoDTO.setLogradouro("Rua Cliente");
+        enderecoDTO.setNumero("456");
+        enderecoDTO.setBairro("Centro");
+        enderecoDTO.setCidade("São Paulo");
+        enderecoDTO.setEstado("SP");
+        enderecoDTO.setCep("01310100");
+        enderecoDTO.setPrincipal(true);
+        
+        enderecoService.criarEndereco(enderecoDTO, saved);
+        
+        return saved;
     }
 
     /**
