@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "sigeg-api-collection",
 		"name": "SIGEG API - Sistema Integrado de Gestão de Entregas Gastronômicas",
-		"description": "Coleção completa para testar todos os endpoints da API SIGEG.\n\nIMPORTANTE - Segurança e Ownership:\n- Todos os recursos (Restaurantes, Clientes, Pratos, Pedidos, Pagamentos, Entregadores) estão associados ao usuário autenticado\n- Usuários só podem acessar/editar seus próprios recursos\n- Administradores podem acessar todos os recursos\n- O clienteId não é mais necessário ao criar pedidos (obtido automaticamente do usuário autenticado)\n- Endpoints de aprovação/rejeição de restaurantes e entregadores requerem role ADMIN\n- Endpoints de entrega requerem role ENTREGADOR e status APPROVED\n- Restaurantes só podem marcar seus próprios pedidos como preparando\n- Entregadores só podem aceitar/marcar pedidos que estão disponíveis ou que foram atribuídos a eles\n\nGEOCODIFICAÇÃO AUTOMÁTICA:\n- Ao criar Restaurante, Cliente ou Pedido, o endereço é geocodificado automaticamente\n- Aceita CEP (formato: 12345678 ou 12345-678) ou endereço completo\n- Coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap Nominatim\n- Se a geocodificação falhar, o recurso ainda é criado (sem coordenadas)\n- Para pedidos: se o endereço de entrega for igual ao do cliente, as coordenadas são reutilizadas\n- Distância e tempo estimado de entrega são calculados usando coordenadas reais",
+		"description": "Coleção completa para testar todos os endpoints da API SIGEG.\n\nIMPORTANTE - Segurança e Ownership:\n- Todos os recursos (Restaurantes, Clientes, Pratos, Pedidos, Pagamentos, Entregadores) estão associados ao usuário autenticado\n- Usuários só podem acessar/editar seus próprios recursos\n- Administradores podem acessar todos os recursos\n- O clienteId não é mais necessário ao criar pedidos (obtido automaticamente do usuário autenticado)\n- Endpoints de aprovação/rejeição de restaurantes e entregadores requerem role ADMIN\n- Endpoints de entrega requerem role ENTREGADOR e status APPROVED\n- Restaurantes só podem marcar seus próprios pedidos como preparando\n- Entregadores só podem aceitar/marcar pedidos que estão disponíveis ou que foram atribuídos a eles\n\nESTRUTURA DE ENDEREÇOS:\n- Clientes e Restaurantes agora têm endereços como entidade separada (múltiplos endereços permitidos)\n- Ao criar Cliente ou Restaurante, o endereço é OBRIGATÓRIO e deve ser enviado como objeto:\n  - logradouro, numero, bairro, cidade, estado, cep (obrigatórios)\n  - complemento (opcional)\n  - principal (opcional - primeiro endereço vira principal automaticamente)\n- O endereço é retornado como string formatada no campo 'endereco' dos DTOs de resposta\n\nGEOCODIFICAÇÃO AUTOMÁTICA:\n- Ao criar Restaurante, Cliente ou Pedido, o endereço é geocodificado automaticamente\n- Coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap Nominatim\n- Se a geocodificação falhar, o recurso ainda é criado (sem coordenadas)\n- Para pedidos: se o endereço de entrega for igual ao do cliente, as coordenadas são reutilizadas\n- Distância e tempo estimado de entrega são calculados usando coordenadas reais",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -291,14 +291,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"nome\": \"Cliente Teste\",\n  \"email\": \"cliente@teste.com\",\n  \"telefone\": \"11912345678\",\n  \"endereco\": \"01310-100\",\n  \"password\": \"123456\"\n}",
+							"raw": "{\n  \"nome\": \"Cliente Teste\",\n  \"email\": \"cliente@teste.com\",\n  \"telefone\": \"11912345678\",\n  \"password\": \"123456\",\n  \"endereco\": {\n    \"logradouro\": \"Rua das Flores\",\n    \"numero\": \"123\",\n    \"complemento\": \"Apto 45\",\n    \"bairro\": \"Centro\",\n    \"cidade\": \"São Paulo\",\n    \"estado\": \"SP\",\n    \"cep\": \"01310100\",\n    \"principal\": true\n  }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
 								}
 							}
 						},
-						"description": "Cria um novo cliente.\n\nGeocodificação Automática:\n- O endereço pode ser um CEP (12345678 ou 12345-678) ou endereço completo\n- As coordenadas (latitude/longitude) são calculadas automaticamente\n- Exemplo com CEP: \"01310-100\" ou \"01310100\"\n- Exemplo com endereço: \"Avenida Paulista, 1578, Bela Vista, São Paulo, SP\"\n\nDICA: Após cadastrar, as credenciais (email e senha) são salvas automaticamente no environment para facilitar o login posterior.",
+						"description": "Cria um novo cliente.\n\nEndereço Obrigatório:\n- O endereço é obrigatório e deve ser enviado como objeto com os seguintes campos:\n  - logradouro (obrigatório): Ex: \"Rua das Flores\"\n  - numero (obrigatório): Ex: \"123\"\n  - complemento (opcional): Ex: \"Apto 45\"\n  - bairro (obrigatório): Ex: \"Centro\"\n  - cidade (obrigatório): Ex: \"São Paulo\"\n  - estado (obrigatório): Ex: \"SP\" (2 letras maiúsculas)\n  - cep (obrigatório): Ex: \"01310100\" ou \"01310-100\" (8 dígitos)\n  - principal (opcional): true/false (primeiro endereço vira principal automaticamente)\n\nGeocodificação Automática:\n- As coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap\n- O endereço é formatado e geocodificado após a criação\n\nDICA: Após cadastrar, as credenciais (email e senha) são salvas automaticamente no environment para facilitar o login posterior.",
 						"url": {
 							"raw": "{{baseUrl}}/api/clientes",
 							"host": [
@@ -437,14 +437,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"nome\": \"Restaurante Teste\",\n  \"email\": \"teste@restaurante.com\",\n  \"telefone\": \"11999999999\",\n  \"endereco\": \"01310-100\"\n}",
+							"raw": "{\n  \"nome\": \"Restaurante Teste\",\n  \"email\": \"teste@restaurante.com\",\n  \"telefone\": \"11999999999\",\n  \"endereco\": {\n    \"logradouro\": \"Avenida Paulista\",\n    \"numero\": \"1578\",\n    \"complemento\": \"\",\n    \"bairro\": \"Bela Vista\",\n    \"cidade\": \"São Paulo\",\n    \"estado\": \"SP\",\n    \"cep\": \"01310100\",\n    \"principal\": true\n  }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
 								}
 							}
 						},
-						"description": "Cria um novo restaurante.\n\nGeocodificação Automática:\n- O endereço pode ser um CEP (12345678 ou 12345-678) ou endereço completo\n- As coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap\n- O restaurante é associado automaticamente ao usuário autenticado\n- Exemplo com CEP: \"01310-100\"\n- Exemplo com endereço: \"Avenida Paulista, 1578, Bela Vista, São Paulo, SP\"",
+						"description": "Cria um novo restaurante.\n\nEndereço Obrigatório:\n- O endereço é obrigatório e deve ser enviado como objeto com os seguintes campos:\n  - logradouro (obrigatório): Ex: \"Avenida Paulista\"\n  - numero (obrigatório): Ex: \"1578\"\n  - complemento (opcional): Ex: \"\" ou \"Sala 10\"\n  - bairro (obrigatório): Ex: \"Bela Vista\"\n  - cidade (obrigatório): Ex: \"São Paulo\"\n  - estado (obrigatório): Ex: \"SP\" (2 letras maiúsculas)\n  - cep (obrigatório): Ex: \"01310100\" ou \"01310-100\" (8 dígitos)\n  - principal (opcional): true/false (primeiro endereço vira principal automaticamente)\n\nGeocodificação Automática:\n- As coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap\n- O endereço é formatado e geocodificado após a criação\n- O restaurante é associado automaticamente ao usuário autenticado",
 						"url": {
 							"raw": "{{baseUrl}}/api/restaurantes",
 							"host": [
