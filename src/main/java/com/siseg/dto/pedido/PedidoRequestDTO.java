@@ -1,7 +1,6 @@
 package com.siseg.dto.pedido;
 
 import com.siseg.model.enumerations.MetodoPagamento;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
@@ -13,7 +12,6 @@ public class PedidoRequestDTO {
     @NotNull(message = "ID do restaurante é obrigatório")
     private Long restauranteId;
     
-    @Valid
     @NotEmpty(message = "Itens do pedido são obrigatórios")
     private List<PedidoItemRequestDTO> itens;
     
@@ -25,8 +23,7 @@ public class PedidoRequestDTO {
     
     private String observacoes;
     
-    @NotBlank(message = "Endereço de entrega é obrigatório")
-    private String enderecoEntrega;
+    private Long enderecoId; // Opcional: se não fornecido, usa endereço principal do cliente
     
     private Long carrinhoId;
 }

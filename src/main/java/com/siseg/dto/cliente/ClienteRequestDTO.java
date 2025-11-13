@@ -1,7 +1,10 @@
 package com.siseg.dto.cliente;
 
+import com.siseg.dto.EnderecoRequestDTO;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -21,9 +24,9 @@ public class ClienteRequestDTO {
     @Size(min = 10, max = 15, message = "Telefone deve ter entre 10 e 15 caracteres")
     private String telefone;
 
-    @NotBlank(message = "Endereço é obrigatório")
-    @Size(min = 8, max = 200, message = "Endereço deve ter entre 8 e 200 caracteres")
-    private String endereco;
+    @Valid
+    @NotNull(message = "Endereço é obrigatório")
+    private EnderecoRequestDTO endereco;
 
     @NotBlank(message = "Senha é obrigatória")
     @Size(min = 6, max = 20, message = "Senha deve ter entre 6 e 20 caracteres")
