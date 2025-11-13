@@ -1,8 +1,8 @@
 package com.siseg.service;
 
+import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.dto.cliente.ClienteRequestDTO;
 import com.siseg.dto.cliente.ClienteResponseDTO;
-import com.siseg.dto.geocoding.Coordinates;
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Cliente;
@@ -27,7 +27,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -54,7 +53,7 @@ class ClienteServiceUnitTest {
     private ModelMapper modelMapper;
 
     @Mock
-    private GeocodingService geocodingService;
+    private EnderecoService enderecoService;
 
     @InjectMocks
     private ClienteService clienteService;
@@ -79,14 +78,22 @@ class ClienteServiceUnitTest {
         cliente.setId(1L);
         cliente.setNome("Cliente Teste");
         cliente.setEmail("cliente@teste.com");
-        cliente.setEndereco("Rua do Cliente, 123");
         cliente.setUser(user);
+
+        EnderecoRequestDTO enderecoDTO = new EnderecoRequestDTO();
+        enderecoDTO.setLogradouro("Rua do Cliente");
+        enderecoDTO.setNumero("123");
+        enderecoDTO.setBairro("Centro");
+        enderecoDTO.setCidade("São Paulo");
+        enderecoDTO.setEstado("SP");
+        enderecoDTO.setCep("01310100");
+        enderecoDTO.setPrincipal(true);
 
         clienteRequestDTO = new ClienteRequestDTO();
         clienteRequestDTO.setNome("Cliente Teste");
         clienteRequestDTO.setEmail("cliente@teste.com");
         clienteRequestDTO.setPassword("senha123");
-        clienteRequestDTO.setEndereco("Rua do Cliente, 123");
+        clienteRequestDTO.setEndereco(enderecoDTO);
 
         clienteResponseDTO = new ClienteResponseDTO();
         clienteResponseDTO.setId(1L);
@@ -96,7 +103,14 @@ class ClienteServiceUnitTest {
 
     @Test
     void deveCriarClienteComSucesso() {
-        Coordinates coords = new Coordinates(new BigDecimal("-23.5505"), new BigDecimal("-46.6333"));
+        com.siseg.model.Endereco endereco = new com.siseg.model.Endereco();
+        endereco.setId(1L);
+        endereco.setLogradouro("Rua do Cliente");
+        endereco.setNumero("123");
+        endereco.setBairro("Centro");
+        endereco.setCidade("São Paulo");
+        endereco.setEstado("SP");
+        endereco.setCep("01310100");
 
         when(roleRepository.findByRoleName(ERole.ROLE_CLIENTE)).thenReturn(Optional.of(clienteRole));
         when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
@@ -106,12 +120,14 @@ class ClienteServiceUnitTest {
             return u;
         });
         when(modelMapper.map(clienteRequestDTO, Cliente.class)).thenReturn(cliente);
-        when(geocodingService.geocodeAddress(anyString())).thenReturn(Optional.of(coords));
+        when(enderecoService.criarEndereco(any(EnderecoRequestDTO.class), any(Cliente.class))).thenReturn(endereco);
         when(clienteRepository.save(any(Cliente.class))).thenAnswer(invocation -> {
             Cliente c = invocation.getArgument(0);
             c.setId(1L);
             return c;
         });
+        when(clienteRepository.findById(1L)).thenReturn(Optional.of(cliente));
+        when(enderecoService.buscarEnderecoPrincipalCliente(1L)).thenReturn(Optional.of(endereco));
         when(modelMapper.map(any(Cliente.class), eq(ClienteResponseDTO.class))).thenReturn(clienteResponseDTO);
 
         ClienteResponseDTO result = clienteService.criarCliente(clienteRequestDTO);
@@ -119,11 +135,14 @@ class ClienteServiceUnitTest {
         assertNotNull(result);
         verify(userRepository, times(1)).save(any(User.class));
         verify(clienteRepository, times(1)).save(any(Cliente.class));
-        verify(geocodingService, times(1)).geocodeAddress(anyString());
+        verify(enderecoService, times(1)).criarEndereco(any(EnderecoRequestDTO.class), any(Cliente.class));
     }
 
     @Test
     void deveCriarClienteSemGeocodificacaoQuandoFalha() {
+        com.siseg.model.Endereco endereco = new com.siseg.model.Endereco();
+        endereco.setId(1L);
+
         when(roleRepository.findByRoleName(ERole.ROLE_CLIENTE)).thenReturn(Optional.of(clienteRole));
         when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
@@ -132,18 +151,20 @@ class ClienteServiceUnitTest {
             return u;
         });
         when(modelMapper.map(clienteRequestDTO, Cliente.class)).thenReturn(cliente);
-        when(geocodingService.geocodeAddress(anyString())).thenReturn(Optional.empty());
+        when(enderecoService.criarEndereco(any(EnderecoRequestDTO.class), any(Cliente.class))).thenReturn(endereco);
         when(clienteRepository.save(any(Cliente.class))).thenAnswer(invocation -> {
             Cliente c = invocation.getArgument(0);
             c.setId(1L);
             return c;
         });
+        when(clienteRepository.findById(1L)).thenReturn(Optional.of(cliente));
+        when(enderecoService.buscarEnderecoPrincipalCliente(1L)).thenReturn(Optional.of(endereco));
         when(modelMapper.map(any(Cliente.class), eq(ClienteResponseDTO.class))).thenReturn(clienteResponseDTO);
 
         ClienteResponseDTO result = clienteService.criarCliente(clienteRequestDTO);
 
         assertNotNull(result);
-        verify(geocodingService, times(1)).geocodeAddress(anyString());
+        verify(enderecoService, times(1)).criarEndereco(any(EnderecoRequestDTO.class), any(Cliente.class));
     }
 
     @Test

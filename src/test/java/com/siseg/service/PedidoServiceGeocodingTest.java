@@ -1,8 +1,6 @@
 package com.siseg.service;
 
-import com.siseg.dto.geocoding.Coordinates;
 import com.siseg.dto.geocoding.ResultadoCalculo;
-import com.siseg.dto.pedido.PedidoItemResponseDTO;
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
 import com.siseg.model.*;
@@ -10,6 +8,7 @@ import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.model.enumerations.MetodoPagamento;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
+import com.siseg.model.enumerations.TipoEndereco;
 import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.mapper.PedidoMapper;
 import com.siseg.repository.*;
@@ -32,7 +31,6 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,9 +55,6 @@ class PedidoServiceGeocodingTest {
     private NotificationService notificationService;
 
     @Mock
-    private GeocodingService geocodingService;
-
-    @Mock
     private ModelMapper modelMapper;
 
     @Mock
@@ -71,6 +66,18 @@ class PedidoServiceGeocodingTest {
     @Mock
     private TempoEstimadoCalculator tempoEstimadoCalculator;
 
+    @Mock
+    private EnderecoService enderecoService;
+
+    @Mock
+    private CarrinhoService carrinhoService;
+
+    @Mock
+    private CupomService cupomService;
+
+    @Mock
+    private TaxaCalculoService taxaCalculoService;
+
     @InjectMocks
     private PedidoService pedidoService;
 
@@ -79,6 +86,9 @@ class PedidoServiceGeocodingTest {
     private Prato prato;
     private PedidoRequestDTO pedidoRequestDTO;
     private User user;
+    private Endereco enderecoCliente;
+    private Endereco enderecoRestaurante;
+    private Endereco enderecoEntrega;
 
     @BeforeEach
     void setUp() {
@@ -86,17 +96,46 @@ class PedidoServiceGeocodingTest {
         user.setId(1L);
         user.setUsername("cliente@teste.com");
 
+        // Criar endereço do cliente
+        enderecoCliente = new Endereco();
+        enderecoCliente.setId(1L);
+        enderecoCliente.setLogradouro("Rua do Cliente");
+        enderecoCliente.setNumero("123");
+        enderecoCliente.setBairro("Centro");
+        enderecoCliente.setCidade("São Paulo");
+        enderecoCliente.setEstado("SP");
+        enderecoCliente.setCep("01310100");
+        enderecoCliente.setLatitude(new BigDecimal("-23.5506"));
+        enderecoCliente.setLongitude(new BigDecimal("-46.6334"));
+        enderecoCliente.setPrincipal(true);
+        enderecoCliente.setTipo(TipoEndereco.CASA);
+
         cliente = new Cliente();
         cliente.setId(1L);
         cliente.setNome("Cliente Teste");
-        cliente.setEndereco("Rua do Cliente, 123");
+        cliente.setEnderecos(List.of(enderecoCliente));
+        enderecoCliente.setCliente(cliente);
         cliente.setUser(user);
+
+        // Criar endereço do restaurante
+        enderecoRestaurante = new Endereco();
+        enderecoRestaurante.setId(2L);
+        enderecoRestaurante.setLogradouro("Rua do Restaurante");
+        enderecoRestaurante.setNumero("456");
+        enderecoRestaurante.setBairro("Centro");
+        enderecoRestaurante.setCidade("São Paulo");
+        enderecoRestaurante.setEstado("SP");
+        enderecoRestaurante.setCep("01310100");
+        enderecoRestaurante.setLatitude(new BigDecimal("-23.5505"));
+        enderecoRestaurante.setLongitude(new BigDecimal("-46.6333"));
+        enderecoRestaurante.setPrincipal(true);
+        enderecoRestaurante.setTipo(TipoEndereco.OUTRO);
 
         restaurante = new Restaurante();
         restaurante.setId(1L);
         restaurante.setNome("Restaurante Teste");
-        restaurante.setLatitude(new BigDecimal("-23.5505"));
-        restaurante.setLongitude(new BigDecimal("-46.6333"));
+        restaurante.setEnderecos(List.of(enderecoRestaurante));
+        enderecoRestaurante.setRestaurante(restaurante);
 
         prato = new Prato();
         prato.setId(1L);
@@ -106,10 +145,23 @@ class PedidoServiceGeocodingTest {
         prato.setCategoria(CategoriaMenu.MAIN);
         prato.setRestaurante(restaurante);
 
+        // Criar endereço de entrega
+        enderecoEntrega = new Endereco();
+        enderecoEntrega.setId(3L);
+        enderecoEntrega.setLogradouro("Rua de Entrega");
+        enderecoEntrega.setNumero("456");
+        enderecoEntrega.setBairro("Centro");
+        enderecoEntrega.setCidade("São Paulo");
+        enderecoEntrega.setEstado("SP");
+        enderecoEntrega.setCep("01310100");
+        enderecoEntrega.setPrincipal(false);
+        enderecoEntrega.setTipo(TipoEndereco.OUTRO);
+        enderecoEntrega.setCliente(cliente);
+
         pedidoRequestDTO = new PedidoRequestDTO();
         pedidoRequestDTO.setRestauranteId(1L);
         pedidoRequestDTO.setMetodoPagamento(MetodoPagamento.PIX);
-        pedidoRequestDTO.setEnderecoEntrega("Rua de Entrega, 456");
+        // Não definir enderecoId - deve usar endereço principal do cliente
         
         var itemDTO = new com.siseg.dto.pedido.PedidoItemRequestDTO();
         itemDTO.setPratoId(1L);
@@ -119,14 +171,9 @@ class PedidoServiceGeocodingTest {
 
     @Test
     void deveGeocodificarEnderecoEntregaAoCriarPedido() {
-        // Given
-        Pedido pedidoSalvo = new Pedido();
-        pedidoSalvo.setId(1L);
-        pedidoSalvo.setCliente(cliente);
-        pedidoSalvo.setRestaurante(restaurante);
-        pedidoSalvo.setEnderecoEntrega(pedidoRequestDTO.getEnderecoEntrega());
-        pedidoSalvo.setStatus(StatusPedido.CREATED);
-        pedidoSalvo.setItens(new ArrayList<>());
+        // Given - endereço sem coordenadas
+        enderecoCliente.setLatitude(null);
+        enderecoCliente.setLongitude(null);
 
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
@@ -135,19 +182,20 @@ class PedidoServiceGeocodingTest {
             when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
             when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
             when(pedidoValidator.validatePratoDisponivel(any(Prato.class))).thenReturn(prato);
+            when(enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())).thenReturn(Optional.of(enderecoCliente));
             when(pedidoRepository.save(any(Pedido.class))).thenAnswer(invocation -> {
                 Pedido pedido = invocation.getArgument(0);
                 pedido.setId(1L);
                 return pedido;
             });
 
-            // Mock geocodificação do endereço de entrega
-            Coordinates coordsEntrega = new Coordinates(
-                new BigDecimal("-23.5506"), 
-                new BigDecimal("-46.6334")
-            );
-            when(geocodingService.geocodeAddress(pedidoRequestDTO.getEnderecoEntrega()))
-                    .thenReturn(Optional.of(coordsEntrega));
+            // Mock geocodificação do endereço
+            when(enderecoService.geocodificarESalvar(any(Endereco.class))).thenAnswer(invocation -> {
+                Endereco endereco = invocation.getArgument(0);
+                endereco.setLatitude(new BigDecimal("-23.5506"));
+                endereco.setLongitude(new BigDecimal("-46.6334"));
+                return endereco;
+            });
 
             // Mock PedidoMapper para retornar DTO
             PedidoResponseDTO responseDTO = new PedidoResponseDTO();
@@ -161,32 +209,15 @@ class PedidoServiceGeocodingTest {
 
             // Then
             assertNotNull(result);
-            verify(geocodingService, times(1)).geocodeAddress(pedidoRequestDTO.getEnderecoEntrega());
-            verify(pedidoRepository, times(1)).save(argThat(p ->
-                p.getLatitudeEntrega() != null &&
-                p.getLongitudeEntrega() != null &&
-                p.getLatitudeEntrega().equals(coordsEntrega.getLatitude()) &&
-                p.getLongitudeEntrega().equals(coordsEntrega.getLongitude())
-            ));
+            verify(enderecoService, times(1)).geocodificarESalvar(any(Endereco.class));
         }
     }
 
     @Test
-    void deveReutilizarCoordenadasDoClienteSeEnderecoForIgual() {
-        // Given
-        cliente.setLatitude(new BigDecimal("-23.5506"));
-        cliente.setLongitude(new BigDecimal("-46.6334"));
-        
-        // Mesmo endereço do cliente
-        pedidoRequestDTO.setEnderecoEntrega(cliente.getEndereco());
-
-        Pedido pedidoSalvo = new Pedido();
-        pedidoSalvo.setId(1L);
-        pedidoSalvo.setCliente(cliente);
-        pedidoSalvo.setRestaurante(restaurante);
-        pedidoSalvo.setEnderecoEntrega(pedidoRequestDTO.getEnderecoEntrega());
-        pedidoSalvo.setStatus(StatusPedido.CREATED);
-        pedidoSalvo.setItens(new ArrayList<>());
+    void deveReutilizarCoordenadasDoClienteSeEnderecoJaTemCoordenadas() {
+        // Given - endereço já tem coordenadas
+        enderecoCliente.setLatitude(new BigDecimal("-23.5506"));
+        enderecoCliente.setLongitude(new BigDecimal("-46.6334"));
 
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
@@ -195,6 +226,7 @@ class PedidoServiceGeocodingTest {
             when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
             when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
             when(pedidoValidator.validatePratoDisponivel(any(Prato.class))).thenReturn(prato);
+            when(enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())).thenReturn(Optional.of(enderecoCliente));
             when(pedidoRepository.save(any(Pedido.class))).thenAnswer(invocation -> {
                 Pedido pedido = invocation.getArgument(0);
                 pedido.setId(1L);
@@ -213,14 +245,8 @@ class PedidoServiceGeocodingTest {
 
             // Then
             assertNotNull(result);
-            // Não deve chamar geocodificação se reutilizar coordenadas
-            verify(geocodingService, never()).geocodeAddress(anyString());
-            verify(pedidoRepository, times(1)).save(argThat(p ->
-                p.getLatitudeEntrega() != null &&
-                p.getLongitudeEntrega() != null &&
-                p.getLatitudeEntrega().equals(cliente.getLatitude()) &&
-                p.getLongitudeEntrega().equals(cliente.getLongitude())
-            ));
+            // Não deve chamar geocodificação se endereço já tem coordenadas
+            verify(enderecoService, never()).geocodificarESalvar(any(Endereco.class));
         }
     }
 
@@ -239,8 +265,9 @@ class PedidoServiceGeocodingTest {
         pedido.setCliente(cliente);
         pedido.setRestaurante(restaurante);
         pedido.setStatus(StatusPedido.PREPARING);
-        pedido.setLatitudeEntrega(new BigDecimal("-23.5506"));
-        pedido.setLongitudeEntrega(new BigDecimal("-46.6334"));
+        pedido.setEnderecoEntrega(enderecoEntrega);
+        enderecoEntrega.setLatitude(new BigDecimal("-23.5506"));
+        enderecoEntrega.setLongitude(new BigDecimal("-46.6334"));
         pedido.setSubtotal(new BigDecimal("51.00"));
         pedido.setTaxaEntrega(new BigDecimal("5.00"));
         pedido.setTotal(new BigDecimal("56.00"));

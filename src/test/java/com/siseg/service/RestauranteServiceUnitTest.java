@@ -1,9 +1,10 @@
 package com.siseg.service;
 
-import com.siseg.dto.geocoding.Coordinates;
+import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
 import com.siseg.exception.ResourceNotFoundException;
+import com.siseg.mapper.RestauranteMapper;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.StatusRestaurante;
@@ -22,7 +23,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,7 +40,10 @@ class RestauranteServiceUnitTest {
     private ModelMapper modelMapper;
 
     @Mock
-    private GeocodingService geocodingService;
+    private EnderecoService enderecoService;
+
+    @Mock
+    private RestauranteMapper restauranteMapper;
 
     @InjectMocks
     private RestauranteService restauranteService;
@@ -51,26 +54,34 @@ class RestauranteServiceUnitTest {
 
     @BeforeEach
     void setUp() {
+        EnderecoRequestDTO enderecoDTO = new EnderecoRequestDTO();
+        enderecoDTO.setLogradouro("Rua Teste");
+        enderecoDTO.setNumero("123");
+        enderecoDTO.setBairro("Centro");
+        enderecoDTO.setCidade("São Paulo");
+        enderecoDTO.setEstado("SP");
+        enderecoDTO.setCep("01310100");
+        enderecoDTO.setPrincipal(true);
+
         restauranteRequestDTO = new RestauranteRequestDTO();
         restauranteRequestDTO.setNome("Restaurante de Teste");
         restauranteRequestDTO.setEmail("teste@restaurante.com");
         restauranteRequestDTO.setTelefone("(11) 99999-9999");
-        restauranteRequestDTO.setEndereco("Rua Teste, 123");
+        restauranteRequestDTO.setEndereco(enderecoDTO);
 
         restauranteResponseDTO = new RestauranteResponseDTO();
         restauranteResponseDTO.setId(1L);
         restauranteResponseDTO.setNome("Restaurante de Teste");
         restauranteResponseDTO.setEmail("teste@restaurante.com");
         restauranteResponseDTO.setTelefone("(11) 99999-9999");
-        restauranteResponseDTO.setEndereco("Rua Teste, 123");
         restauranteResponseDTO.setStatus(StatusRestaurante.PENDING_APPROVAL);
+        restauranteResponseDTO.setEndereco("Rua Teste, 123, Centro, São Paulo, SP, 01310-100, Brasil");
 
         restaurante = new Restaurante();
         restaurante.setId(1L);
         restaurante.setNome("Restaurante de Teste");
         restaurante.setEmail("teste@restaurante.com");
         restaurante.setTelefone("(11) 99999-9999");
-        restaurante.setEndereco("Rua Teste, 123");
         restaurante.setStatus(StatusRestaurante.PENDING_APPROVAL);
     }
 
@@ -81,19 +92,24 @@ class RestauranteServiceUnitTest {
         mockUser.setId(1L);
         mockUser.setUsername("testuser");
         
+        com.siseg.model.Endereco endereco = new com.siseg.model.Endereco();
+        endereco.setId(1L);
+        endereco.setLogradouro("Rua Teste");
+        endereco.setNumero("123");
+        endereco.setBairro("Centro");
+        endereco.setCidade("São Paulo");
+        endereco.setEstado("SP");
+        endereco.setCep("01310100");
+        
         when(modelMapper.map(restauranteRequestDTO, Restaurante.class)).thenReturn(restaurante);
         when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
-        when(modelMapper.map(restaurante, RestauranteResponseDTO.class)).thenReturn(restauranteResponseDTO);
+        when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+        when(enderecoService.criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class))).thenReturn(endereco);
+        when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
-            
-            // Mock geocodificação bem-sucedida
-            Coordinates coords = new Coordinates(new BigDecimal("-23.5505"), new BigDecimal("-46.6333"));
-            when(geocodingService.geocodeAddress(restauranteRequestDTO.getEndereco()))
-                    .thenReturn(Optional.of(coords));
 
-            // When
             RestauranteResponseDTO result = restauranteService.criarRestaurante(restauranteRequestDTO);
 
             // Then
@@ -102,10 +118,9 @@ class RestauranteServiceUnitTest {
             assertEquals(restauranteResponseDTO.getNome(), result.getNome());
             assertEquals(StatusRestaurante.PENDING_APPROVAL, result.getStatus());
             verify(restauranteRepository, times(1)).save(argThat(r -> 
-                r.getUser() != null && r.getUser().getId().equals(mockUser.getId()) &&
-                r.getLatitude() != null && r.getLongitude() != null
+                r.getUser() != null && r.getUser().getId().equals(mockUser.getId())
             ));
-            verify(geocodingService, times(1)).geocodeAddress(restauranteRequestDTO.getEndereco());
+            verify(enderecoService, times(1)).criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class));
         }
     }
 
@@ -114,7 +129,7 @@ class RestauranteServiceUnitTest {
         // Given
         Long id = 1L;
         when(restauranteRepository.findById(id)).thenReturn(Optional.of(restaurante));
-        when(modelMapper.map(restaurante, RestauranteResponseDTO.class)).thenReturn(restauranteResponseDTO);
+        when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
         // When
         RestauranteResponseDTO result = restauranteService.buscarPorId(id);
@@ -143,7 +158,7 @@ class RestauranteServiceUnitTest {
         Pageable pageable = PageRequest.of(0, 10);
         Page<Restaurante> page = new PageImpl<>(List.of(restaurante), pageable, 1);
         when(restauranteRepository.findAll(pageable)).thenReturn(page);
-        when(modelMapper.map(restaurante, RestauranteResponseDTO.class)).thenReturn(restauranteResponseDTO);
+        when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
         // When
         Page<RestauranteResponseDTO> result = restauranteService.listarTodos(pageable);
@@ -161,7 +176,7 @@ class RestauranteServiceUnitTest {
         Pageable pageable = PageRequest.of(0, 10);
         Page<Restaurante> page = new PageImpl<>(List.of(restaurante), pageable, 1);
         when(restauranteRepository.findByStatus(status, pageable)).thenReturn(page);
-        when(modelMapper.map(restaurante, RestauranteResponseDTO.class)).thenReturn(restauranteResponseDTO);
+        when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
         // When
         Page<RestauranteResponseDTO> result = restauranteService.listarPorStatus(status, pageable);
@@ -179,7 +194,7 @@ class RestauranteServiceUnitTest {
         restaurante.setStatus(StatusRestaurante.APPROVED);
         when(restauranteRepository.findById(id)).thenReturn(Optional.of(restaurante));
         when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
-        when(modelMapper.map(restaurante, RestauranteResponseDTO.class)).thenReturn(restauranteResponseDTO);
+        when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
         // When
         RestauranteResponseDTO result = restauranteService.aprovarRestaurante(id);
@@ -198,7 +213,7 @@ class RestauranteServiceUnitTest {
         restaurante.setStatus(StatusRestaurante.REJECTED);
         when(restauranteRepository.findById(id)).thenReturn(Optional.of(restaurante));
         when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
-        when(modelMapper.map(restaurante, RestauranteResponseDTO.class)).thenReturn(restauranteResponseDTO);
+        when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
         // When
         RestauranteResponseDTO result = restauranteService.rejeitarRestaurante(id);
@@ -217,18 +232,18 @@ class RestauranteServiceUnitTest {
         mockUser.setId(1L);
         mockUser.setUsername("testuser");
         
+        com.siseg.model.Endereco endereco = new com.siseg.model.Endereco();
+        endereco.setId(1L);
+        
         when(modelMapper.map(restauranteRequestDTO, Restaurante.class)).thenReturn(restaurante);
         when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
-        when(modelMapper.map(restaurante, RestauranteResponseDTO.class)).thenReturn(restauranteResponseDTO);
-        
-        // Mock geocodificação falhando
-        when(geocodingService.geocodeAddress(restauranteRequestDTO.getEndereco()))
-                .thenReturn(Optional.empty());
+        when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+        when(enderecoService.criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class))).thenReturn(endereco);
+        when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
 
-            // When
             RestauranteResponseDTO result = restauranteService.criarRestaurante(restauranteRequestDTO);
 
             // Then
@@ -237,7 +252,7 @@ class RestauranteServiceUnitTest {
             verify(restauranteRepository, times(1)).save(argThat(r -> 
                 r.getUser() != null && r.getUser().getId().equals(mockUser.getId())
             ));
-            verify(geocodingService, times(1)).geocodeAddress(restauranteRequestDTO.getEndereco());
+            verify(enderecoService, times(1)).criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class));
         }
     }
 }
