@@ -40,11 +40,8 @@ CREATE TABLE IF NOT EXISTS restaurantes (
     nome VARCHAR(100) NOT NULL,
     email VARCHAR(100) NOT NULL UNIQUE,
     telefone VARCHAR(20) NOT NULL,
-    endereco VARCHAR(200) NOT NULL,
     status VARCHAR(20) NOT NULL CHECK (status IN ('PENDING_APPROVAL','APPROVED','REJECTED')),
     user_id BIGINT,
-    latitude DECIMAL(10, 8),
-    longitude DECIMAL(11, 8),
     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
@@ -70,9 +67,6 @@ CREATE TABLE IF NOT EXISTS clientes (
     nome VARCHAR(100) NOT NULL,
     email VARCHAR(100) NOT NULL UNIQUE,
     telefone VARCHAR(20) NOT NULL,
-    endereco VARCHAR(200) NOT NULL,
-    latitude DECIMAL(10, 8),
-    longitude DECIMAL(11, 8),
     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
@@ -96,6 +90,27 @@ CREATE TABLE IF NOT EXISTS entregadores (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- Tabela de enderecos
+CREATE TABLE IF NOT EXISTS enderecos (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    cliente_id BIGINT,
+    restaurante_id BIGINT,
+    logradouro VARCHAR(200) NOT NULL,
+    numero VARCHAR(10) NOT NULL,
+    complemento VARCHAR(50),
+    bairro VARCHAR(100) NOT NULL,
+    cidade VARCHAR(100) NOT NULL,
+    estado VARCHAR(2) NOT NULL,
+    cep VARCHAR(8) NOT NULL,
+    latitude DECIMAL(10,8),
+    longitude DECIMAL(11,8),
+    tipo VARCHAR(20) NOT NULL DEFAULT 'OUTRO',
+    principal BOOLEAN NOT NULL DEFAULT FALSE,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+    FOREIGN KEY (restaurante_id) REFERENCES restaurantes(id) ON DELETE CASCADE
+);
+
 -- Tabela de pedidos
 CREATE TABLE IF NOT EXISTS pedidos (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -105,9 +120,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
     metodo_pagamento VARCHAR(20) NOT NULL CHECK (metodo_pagamento IN ('PIX','CASH','CREDIT_CARD')),
     troco DECIMAL(10,2),
     observacoes TEXT,
-    endereco_entrega VARCHAR(200) NOT NULL,
-    latitude_entrega DECIMAL(10, 8),
-    longitude_entrega DECIMAL(11, 8),
+    endereco_entrega_id BIGINT,
     subtotal DECIMAL(10,2) NOT NULL,
     taxa_entrega DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     total DECIMAL(10,2) NOT NULL,
@@ -120,7 +133,8 @@ CREATE TABLE IF NOT EXISTS pedidos (
     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (cliente_id) REFERENCES clientes(id),
     FOREIGN KEY (restaurante_id) REFERENCES restaurantes(id),
-    FOREIGN KEY (entregador_id) REFERENCES entregadores(id)
+    FOREIGN KEY (entregador_id) REFERENCES entregadores(id),
+    FOREIGN KEY (endereco_entrega_id) REFERENCES enderecos(id)
 );
 
 -- Tabela de itens do pedido
