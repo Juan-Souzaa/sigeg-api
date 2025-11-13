@@ -31,26 +31,24 @@ public class ClienteService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final ModelMapper modelMapper;
-    private final GeocodingService geocodingService;
+    private final EnderecoService enderecoService;
 
     public ClienteService(ClienteRepository clienteRepository, UserRepository userRepository, 
                          RoleRepository roleRepository, PasswordEncoder passwordEncoder, ModelMapper modelMapper,
-                         GeocodingService geocodingService) {
+                         EnderecoService enderecoService) {
         this.clienteRepository = clienteRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.modelMapper = modelMapper;
-        this.geocodingService = geocodingService;
+        this.enderecoService = enderecoService;
     }
 
     public ClienteResponseDTO criarCliente(ClienteRequestDTO dto) {
-        // Criar User primeiro
         User user = new User();
-        user.setUsername(dto.getEmail()); // Usar email como username
+        user.setUsername(dto.getEmail());
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
         
-        // Adicionar role de cliente
         Set<Role> roles = new HashSet<>();
         Role clienteRole = roleRepository.findByRoleName(ERole.ROLE_CLIENTE)
                 .orElseThrow(() -> new ResourceNotFoundException("Role CLIENTE não encontrado"));
@@ -59,26 +57,17 @@ public class ClienteService {
         
         User savedUser = userRepository.save(user);
         
-        // Criar Cliente
         Cliente cliente = modelMapper.map(dto, Cliente.class);
         cliente.setUser(savedUser);
         
-        // Geocodificar endereço automaticamente
-        geocodingService.geocodeAddress(cliente.getEndereco())
-                .ifPresentOrElse(
-                    coords -> {
-                        cliente.setLatitude(coords.getLatitude());
-                        cliente.setLongitude(coords.getLongitude());
-                        java.util.logging.Logger.getLogger(ClienteService.class.getName())
-                                .info("Coordenadas geocodificadas para cliente: " + cliente.getEndereco());
-                    },
-                    () -> java.util.logging.Logger.getLogger(ClienteService.class.getName())
-                            .warning("Não foi possível geocodificar endereço do cliente: " + cliente.getEndereco())
-                );
-        
         Cliente saved = clienteRepository.save(cliente);
         
-        return modelMapper.map(saved, ClienteResponseDTO.class);
+        enderecoService.criarEndereco(dto.getEndereco(), saved);
+        
+        Cliente clienteComEnderecos = clienteRepository.findById(saved.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + saved.getId()));
+        
+        return toResponseDTO(clienteComEnderecos);
     }
 
     public ClienteResponseDTO buscarPorId(Long id) {
@@ -87,32 +76,38 @@ public class ClienteService {
         
         validateClienteOwnership(cliente);
         
-        return modelMapper.map(cliente, ClienteResponseDTO.class);
+        return toResponseDTO(cliente);
     }
 
     public Page<ClienteResponseDTO> listarTodos(Pageable pageable) {
         User currentUser = SecurityUtils.getCurrentUser();
         
-        // Admin pode ver todos os clientes
         if (SecurityUtils.isAdmin()) {
             Page<Cliente> clientes = clienteRepository.findAll(pageable);
-            return clientes.map(cliente -> modelMapper.map(cliente, ClienteResponseDTO.class));
+            return clientes.map(this::toResponseDTO);
         }
         
-        // Cliente só vê seus próprios dados
         Page<Cliente> clientes = clienteRepository.findByUserId(currentUser.getId(), pageable);
-        return clientes.map(cliente -> modelMapper.map(cliente, ClienteResponseDTO.class));
+        return clientes.map(this::toResponseDTO);
+    }
+    
+    private ClienteResponseDTO toResponseDTO(Cliente cliente) {
+        ClienteResponseDTO dto = modelMapper.map(cliente, ClienteResponseDTO.class);
+        enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())
+            .ifPresentOrElse(
+                endereco -> dto.setEndereco(endereco.toGeocodingString()),
+                () -> dto.setEndereco(null)
+            );
+        return dto;
     }
     
     private void validateClienteOwnership(Cliente cliente) {
         User currentUser = SecurityUtils.getCurrentUser();
         
-        // Admin pode acessar qualquer cliente
         if (SecurityUtils.isAdmin()) {
             return;
         }
         
-        // Verifica se o cliente pertence ao usuário autenticado
         if (cliente.getUser() == null || !cliente.getUser().getId().equals(currentUser.getId())) {
             throw new AccessDeniedException("Você não tem permissão para acessar este cliente");
         }

@@ -25,6 +25,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.logging.Logger;
 
 @Service
@@ -40,7 +41,7 @@ public class PedidoService {
     private final PratoRepository pratoRepository;
     private final EntregadorRepository entregadorRepository;
     private final NotificationService notificationService;
-    private final GeocodingService geocodingService;
+    private final EnderecoService enderecoService;
     private final RastreamentoService rastreamentoService;
     private final TempoEstimadoCalculator tempoEstimadoCalculator;
     private final PedidoMapper pedidoMapper;
@@ -52,17 +53,17 @@ public class PedidoService {
     public PedidoService(PedidoRepository pedidoRepository, ClienteRepository clienteRepository,
                          RestauranteRepository restauranteRepository, PratoRepository pratoRepository,
                          EntregadorRepository entregadorRepository, NotificationService notificationService,
-                         GeocodingService geocodingService, RastreamentoService rastreamentoService,
-                         TempoEstimadoCalculator tempoEstimadoCalculator, PedidoMapper pedidoMapper,
-                         PedidoValidator pedidoValidator, CarrinhoService carrinhoService, CupomService cupomService,
-                         TaxaCalculoService taxaCalculoService) {
+                         EnderecoService enderecoService, 
+                         RastreamentoService rastreamentoService, TempoEstimadoCalculator tempoEstimadoCalculator, 
+                         PedidoMapper pedidoMapper, PedidoValidator pedidoValidator, CarrinhoService carrinhoService, 
+                         CupomService cupomService, TaxaCalculoService taxaCalculoService) {
         this.pedidoRepository = pedidoRepository;
         this.clienteRepository = clienteRepository;
         this.restauranteRepository = restauranteRepository;
         this.pratoRepository = pratoRepository;
         this.entregadorRepository = entregadorRepository;
         this.notificationService = notificationService;
-        this.geocodingService = geocodingService;
+        this.enderecoService = enderecoService;
         this.rastreamentoService = rastreamentoService;
         this.tempoEstimadoCalculator = tempoEstimadoCalculator;
         this.pedidoMapper = pedidoMapper;
@@ -79,7 +80,7 @@ public class PedidoService {
         Restaurante restaurante = buscarRestaurante(dto.getRestauranteId());
         
         Pedido pedido = criarPedidoBasico(cliente, restaurante, dto);
-        processarGeocodificacaoEndereco(pedido, cliente, dto.getEnderecoEntrega());
+        processarEnderecoEntrega(pedido, cliente, dto);
         
         if (dto.getCarrinhoId() != null) {
             processarCarrinhoParaPedido(pedido, dto.getCarrinhoId(), cliente.getId());
@@ -131,35 +132,26 @@ public class PedidoService {
         pedido.setMetodoPagamento(dto.getMetodoPagamento());
         pedido.setTroco(dto.getTroco());
         pedido.setObservacoes(dto.getObservacoes());
-        pedido.setEnderecoEntrega(dto.getEnderecoEntrega());
         pedido.setStatus(StatusPedido.CREATED);
         return pedido;
     }
     
-    private void processarGeocodificacaoEndereco(Pedido pedido, Cliente cliente, String enderecoEntrega) {
-        if (podeReutilizarCoordenadasCliente(cliente, enderecoEntrega)) {
-            pedido.setLatitudeEntrega(cliente.getLatitude());
-            pedido.setLongitudeEntrega(cliente.getLongitude());
-            logger.info("Coordenadas reutilizadas do cliente para endereço de entrega");
-            return;
+    private void processarEnderecoEntrega(Pedido pedido, Cliente cliente, PedidoRequestDTO dto) {
+        Endereco enderecoEntrega;
+        
+        if (dto.getEnderecoId() != null) {
+            enderecoEntrega = enderecoService.buscarEnderecoPorIdECliente(dto.getEnderecoId(), cliente.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Endereço não encontrado ou não pertence ao cliente"));
+        } else {
+            enderecoEntrega = enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Cliente não possui endereço cadastrado"));
         }
         
-        geocodingService.geocodeAddress(enderecoEntrega)
-                .ifPresentOrElse(
-                    coords -> {
-                        pedido.setLatitudeEntrega(coords.getLatitude());
-                        pedido.setLongitudeEntrega(coords.getLongitude());
-                        logger.info("Coordenadas geocodificadas para endereço de entrega: " + enderecoEntrega);
-                    },
-                    () -> logger.warning("Não foi possível geocodificar endereço de entrega: " + enderecoEntrega)
-                );
-    }
-    
-    private boolean podeReutilizarCoordenadasCliente(Cliente cliente, String enderecoEntrega) {
-        return cliente.getEndereco() != null && 
-               cliente.getEndereco().equals(enderecoEntrega) &&
-               cliente.getLatitude() != null && 
-               cliente.getLongitude() != null;
+        pedido.setEnderecoEntrega(enderecoEntrega);
+        
+        if (enderecoEntrega.getLatitude() == null || enderecoEntrega.getLongitude() == null) {
+            enderecoService.geocodificarESalvar(enderecoEntrega);
+        }
     }
     
     private void processarItensPedido(Pedido pedido, List<PedidoItemRequestDTO> itensDto) {
@@ -362,17 +354,32 @@ public class PedidoService {
     }
     
     private boolean precisaInicializarPosicao(Entregador entregador, Restaurante restaurante) {
-        return (entregador.getLatitude() == null || entregador.getLongitude() == null) &&
-               restaurante != null &&
-               restaurante.getLatitude() != null &&
-               restaurante.getLongitude() != null;
+        if (entregador.getLatitude() != null && entregador.getLongitude() != null) {
+            return false;
+        }
+        
+        if (restaurante == null) {
+            return false;
+        }
+        
+        return restaurante.getEnderecoPrincipal()
+                .map(endereco -> endereco.getLatitude() != null && endereco.getLongitude() != null)
+                .orElse(false);
     }
     
     private void definirPosicaoInicialEntregador(Entregador entregador, Restaurante restaurante) {
-        entregador.setLatitude(restaurante.getLatitude());
-        entregador.setLongitude(restaurante.getLongitude());
-        entregadorRepository.save(entregador);
-        logger.info("Posição inicial do entregador definida com coordenadas do restaurante");
+        restaurante.getEnderecoPrincipal()
+                .ifPresentOrElse(
+                    endereco -> {
+                        if (endereco.getLatitude() != null && endereco.getLongitude() != null) {
+                            entregador.setLatitude(endereco.getLatitude());
+                            entregador.setLongitude(endereco.getLongitude());
+                            entregadorRepository.save(entregador);
+                            logger.info("Posição inicial do entregador definida com coordenadas do restaurante");
+                        }
+                    },
+                    () -> logger.warning("Restaurante não possui endereço principal com coordenadas")
+                );
     }
 
     @Transactional
@@ -411,11 +418,14 @@ public class PedidoService {
         Page<Pedido> pedidos = pedidoRepository.findByStatusAndEntregadorIsNull(StatusPedido.PREPARING, pageable);
         
         pedidos.getContent().forEach(pedido -> {
+            String enderecoStr = pedido.getEnderecoEntrega() != null 
+                    ? pedido.getEnderecoEntrega().toGeocodingString() 
+                    : "Endereço não disponível";
             notificationService.notifyNewOrderAvailable(
                 pedido.getId(),
                 entregador.getEmail(),
                 entregador.getTelefone(),
-                pedido.getEnderecoEntrega(),
+                enderecoStr,
                 pedido.getTotal()
             );
         });
@@ -451,11 +461,19 @@ public class PedidoService {
             return;
         }
         
+        Optional<Endereco> enderecoRestaurante = pedido.getRestaurante().getEnderecoPrincipal();
+        Endereco enderecoEntrega = pedido.getEnderecoEntrega();
+        
+        if (enderecoRestaurante.isEmpty() || enderecoEntrega == null) {
+            aplicarTempoPadraoEntrega(pedido);
+            return;
+        }
+        
         var resultado = tempoEstimadoCalculator.calculateDistanceAndTime(
-            pedido.getRestaurante().getLatitude(),
-            pedido.getRestaurante().getLongitude(),
-            pedido.getLatitudeEntrega(),
-            pedido.getLongitudeEntrega(),
+            enderecoRestaurante.get().getLatitude(),
+            enderecoRestaurante.get().getLongitude(),
+            enderecoEntrega.getLatitude(),
+            enderecoEntrega.getLongitude(),
             entregador.getTipoVeiculo()
         );
         
@@ -470,11 +488,18 @@ public class PedidoService {
     }
     
     private boolean temCoordenadasCompletas(Pedido pedido) {
-        return pedido.getRestaurante() != null && 
-               pedido.getRestaurante().getLatitude() != null && 
-               pedido.getRestaurante().getLongitude() != null &&
-               pedido.getLatitudeEntrega() != null && 
-               pedido.getLongitudeEntrega() != null;
+        if (pedido.getRestaurante() == null || pedido.getEnderecoEntrega() == null) {
+            return false;
+        }
+        
+        Optional<Endereco> enderecoRestaurante = pedido.getRestaurante().getEnderecoPrincipal();
+        Endereco enderecoEntrega = pedido.getEnderecoEntrega();
+        
+        return enderecoRestaurante.isPresent() &&
+               enderecoRestaurante.get().getLatitude() != null && 
+               enderecoRestaurante.get().getLongitude() != null &&
+               enderecoEntrega.getLatitude() != null && 
+               enderecoEntrega.getLongitude() != null;
     }
     
     private void aplicarTempoPadraoEntrega(Pedido pedido) {
