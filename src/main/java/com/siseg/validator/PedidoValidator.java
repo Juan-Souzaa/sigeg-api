@@ -121,7 +121,10 @@ public class PedidoValidator {
     }
     
     public void validateCoordenadasDestino(Pedido pedido) {
-        if (pedido.getLatitudeEntrega() == null || pedido.getLongitudeEntrega() == null) {
+        if (pedido.getEnderecoEntrega() == null) {
+            throw new IllegalStateException("Pedido sem endereço de entrega");
+        }
+        if (pedido.getEnderecoEntrega().getLatitude() == null || pedido.getEnderecoEntrega().getLongitude() == null) {
             throw new IllegalStateException("Pedido sem coordenadas de destino");
         }
     }

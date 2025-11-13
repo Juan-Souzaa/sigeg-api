@@ -76,29 +76,15 @@ public class PagamentoMapper {
         holderInfo.setPhone(extrairTelefoneNumerico(cliente.getTelefone()));
         holderInfo.setMobilePhone(extrairTelefoneNumerico(cliente.getTelefone()));
         
-        EnderecoParseado endereco = parsearEndereco(cliente.getEndereco());
-        holderInfo.setPostalCode(obterCepValido(endereco.cep));
-        holderInfo.setAddressNumber(obterNumeroValido(endereco.numero));
-        holderInfo.setAddressComplement(endereco.complemento);
+        // Usar endereço principal do cliente diretamente
+        cliente.getEnderecoPrincipal()
+                .ifPresent(endereco -> {
+                    holderInfo.setPostalCode(endereco.getCep());
+                    holderInfo.setAddressNumber(endereco.getNumero());
+                    holderInfo.setAddressComplement(endereco.getComplemento());
+                });
         
         return holderInfo;
-    }
-    
-    private String obterCepValido(String cep) {
-        if (cep != null && !cep.isEmpty()) {
-            String cepLimpo = cep.replaceAll("[^0-9]", "");
-            if (cepLimpo.length() == 8) {
-                return cepLimpo;
-            }
-        }
-        return "01310100";
-    }
-    
-    private String obterNumeroValido(String numero) {
-        if (numero != null && !numero.isEmpty()) {
-            return numero;
-        }
-        return "0";
     }
     
     private String extrairTelefoneNumerico(String telefone) {
@@ -106,48 +92,6 @@ public class PagamentoMapper {
             return null;
         }
         return telefone.replaceAll("[^0-9]", "");
-    }
-    
-    private EnderecoParseado parsearEndereco(String endereco) {
-        EnderecoParseado resultado = new EnderecoParseado();
-        
-        if (endereco == null || endereco.trim().isEmpty()) {
-            return resultado;
-        }
-        
-        String enderecoLimpo = endereco.trim();
-        
-        java.util.regex.Pattern cepPattern = java.util.regex.Pattern.compile("(\\d{5}-?\\d{3})");
-        java.util.regex.Matcher cepMatcher = cepPattern.matcher(enderecoLimpo);
-        if (cepMatcher.find()) {
-            String cep = cepMatcher.group(1).replaceAll("[^0-9]", "");
-            if (cep.length() == 8) {
-                resultado.cep = cep;
-            }
-        } else {
-            java.util.regex.Pattern cepPatternSimples = java.util.regex.Pattern.compile("(\\d{8})");
-            java.util.regex.Matcher cepMatcherSimples = cepPatternSimples.matcher(enderecoLimpo);
-            if (cepMatcherSimples.find()) {
-                resultado.cep = cepMatcherSimples.group(1);
-            }
-        }
-        
-        java.util.regex.Pattern numeroPattern = java.util.regex.Pattern.compile("(?:,|\\s|n[oº°]?\\s*)(\\d+)(?:\\s*-\\s*(\\d+))?");
-        java.util.regex.Matcher numeroMatcher = numeroPattern.matcher(enderecoLimpo);
-        if (numeroMatcher.find()) {
-            resultado.numero = numeroMatcher.group(1);
-            if (numeroMatcher.group(2) != null) {
-                resultado.complemento = numeroMatcher.group(2);
-            }
-        }
-        
-        return resultado;
-    }
-    
-    private static class EnderecoParseado {
-        String cep;
-        String numero;
-        String complemento;
     }
     
     public AsaasCustomerRequestDTO toAsaasCustomerRequest(Cliente cliente, String cpfCnpj) {

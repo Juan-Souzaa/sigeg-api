@@ -1,5 +1,6 @@
 package com.siseg.config;
 
+import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.model.*;
 import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.model.enumerations.ERole;
@@ -7,6 +8,7 @@ import com.siseg.model.enumerations.MetodoPagamento;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.StatusRestaurante;
 import com.siseg.repository.*;
+import com.siseg.service.EnderecoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
@@ -44,6 +46,9 @@ public class DataInitializer implements CommandLineRunner {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private EnderecoService enderecoService;
 
     @Override
     public void run(String... args) throws Exception {
@@ -129,8 +134,18 @@ public class DataInitializer implements CommandLineRunner {
         cliente1.setNome("João Silva");
         cliente1.setEmail("joao.silva@email.com");
         cliente1.setTelefone("11987654321");
-        cliente1.setEndereco("Rua das Flores, 123 - São Paulo/SP - CEP: 01310-100");
-        clienteRepository.save(cliente1);
+        Cliente savedCliente1 = clienteRepository.save(cliente1);
+        
+        // Criar endereço para cliente1
+        EnderecoRequestDTO enderecoDTO1 = new EnderecoRequestDTO();
+        enderecoDTO1.setLogradouro("Rua das Flores");
+        enderecoDTO1.setNumero("123");
+        enderecoDTO1.setBairro("Centro");
+        enderecoDTO1.setCidade("São Paulo");
+        enderecoDTO1.setEstado("SP");
+        enderecoDTO1.setCep("01310100");
+        enderecoDTO1.setPrincipal(true);
+        enderecoService.criarEndereco(enderecoDTO1, savedCliente1);
 
         // Cliente 2
         User user2 = new User();
@@ -148,8 +163,18 @@ public class DataInitializer implements CommandLineRunner {
         cliente2.setNome("Maria Santos");
         cliente2.setEmail("maria.santos@email.com");
         cliente2.setTelefone("11912345678");
-        cliente2.setEndereco("Av. Paulista, 456 - São Paulo/SP - CEP: 01310-200");
-        clienteRepository.save(cliente2);
+        Cliente savedCliente2 = clienteRepository.save(cliente2);
+        
+        // Criar endereço para cliente2
+        EnderecoRequestDTO enderecoDTO2 = new EnderecoRequestDTO();
+        enderecoDTO2.setLogradouro("Av. Paulista");
+        enderecoDTO2.setNumero("456");
+        enderecoDTO2.setBairro("Bela Vista");
+        enderecoDTO2.setCidade("São Paulo");
+        enderecoDTO2.setEstado("SP");
+        enderecoDTO2.setCep("01310200");
+        enderecoDTO2.setPrincipal(true);
+        enderecoService.criarEndereco(enderecoDTO2, savedCliente2);
 
         // Cliente 3
         User user3 = new User();
@@ -167,8 +192,18 @@ public class DataInitializer implements CommandLineRunner {
         cliente3.setNome("Pedro Oliveira");
         cliente3.setEmail("pedro.oliveira@email.com");
         cliente3.setTelefone("11955554444");
-        cliente3.setEndereco("Rua Augusta, 789 - São Paulo/SP - CEP: 01305-100");
-        clienteRepository.save(cliente3);
+        Cliente savedCliente3 = clienteRepository.save(cliente3);
+        
+        // Criar endereço para cliente3
+        EnderecoRequestDTO enderecoDTO3 = new EnderecoRequestDTO();
+        enderecoDTO3.setLogradouro("Rua Augusta");
+        enderecoDTO3.setNumero("789");
+        enderecoDTO3.setBairro("Consolação");
+        enderecoDTO3.setCidade("São Paulo");
+        enderecoDTO3.setEstado("SP");
+        enderecoDTO3.setCep("01305100");
+        enderecoDTO3.setPrincipal(true);
+        enderecoService.criarEndereco(enderecoDTO3, savedCliente3);
 
         System.out.println("✅ Clientes de exemplo criados com sucesso!");
         System.out.println("   Cliente 1: João Silva (ID: 1) - Email: joao.silva@email.com - Senha: 123456");
@@ -195,12 +230,22 @@ public class DataInitializer implements CommandLineRunner {
         restaurante.setNome("Restaurante Teste");
         restaurante.setEmail("restaurante@teste.com");
         restaurante.setTelefone("(11) 99999-9999");
-        restaurante.setEndereco("Rua Teste, 123, São Paulo, SP");
         restaurante.setStatus(StatusRestaurante.APPROVED);
         restaurante.setUser(savedRestauranteUser);
-        restaurante.setLatitude(new BigDecimal("-23.5505"));
-        restaurante.setLongitude(new BigDecimal("-46.6333"));
-        restaurante = restauranteRepository.save(restaurante);
+        Restaurante savedRestaurante = restauranteRepository.save(restaurante);
+        
+        // Criar endereço para restaurante
+        EnderecoRequestDTO enderecoRestauranteDTO = new EnderecoRequestDTO();
+        enderecoRestauranteDTO.setLogradouro("Rua Teste");
+        enderecoRestauranteDTO.setNumero("123");
+        enderecoRestauranteDTO.setBairro("Centro");
+        enderecoRestauranteDTO.setCidade("São Paulo");
+        enderecoRestauranteDTO.setEstado("SP");
+        enderecoRestauranteDTO.setCep("01310100");
+        enderecoRestauranteDTO.setPrincipal(true);
+        enderecoService.criarEndereco(enderecoRestauranteDTO, savedRestaurante);
+        
+        restaurante = savedRestaurante;
 
         // Criar prato
         Prato prato = new Prato();
@@ -238,7 +283,10 @@ public class DataInitializer implements CommandLineRunner {
         pedido.setRestaurante(restaurante);
         pedido.setStatus(StatusPedido.CREATED);
         pedido.setMetodoPagamento(MetodoPagamento.CREDIT_CARD);
-        pedido.setEnderecoEntrega(cliente.getEndereco());
+        // Usar endereço principal do cliente
+        Endereco enderecoEntrega = cliente.getEnderecoPrincipal()
+                .orElseThrow(() -> new RuntimeException("Cliente não possui endereço cadastrado"));
+        pedido.setEnderecoEntrega(enderecoEntrega);
         pedido.setSubtotal(new BigDecimal("25.90"));
         pedido.setTaxaEntrega(new BigDecimal("5.00"));
         pedido.setTotal(new BigDecimal("30.90"));
