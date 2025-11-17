@@ -206,7 +206,7 @@ class PedidoCompletoIntegrationTest {
         Cliente c = new Cliente();
         c.setNome("Cliente Teste");
         c.setEmail(email);
-        c.setTelefone("(11) 99999-9999");
+        c.setTelefone("(11) 99415-2001");
         c.setUser(savedUser);
         
         Cliente saved = clienteRepository.save(c);
@@ -246,7 +246,7 @@ class PedidoCompletoIntegrationTest {
         Restaurante r = new Restaurante();
         r.setNome("Restaurante Teste");
         r.setEmail(email);
-        r.setTelefone("(11) 88888-8888");
+        r.setTelefone("(11) 99415-2001");
         r.setStatus(StatusRestaurante.APPROVED);
         r.setUser(savedUser);
         
@@ -295,7 +295,7 @@ class PedidoCompletoIntegrationTest {
         Entregador e = new Entregador();
         e.setNome("Entregador Teste");
         e.setEmail("entregador@teste.com");
-        e.setTelefone("(11) 77777-7777");
+        e.setTelefone("(11) 99415-2001");
         e.setCpf("12345678900");
         e.setPlacaVeiculo("ABC1234");
         e.setTipoVeiculo(TipoVeiculo.MOTO);

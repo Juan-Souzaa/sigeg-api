@@ -1,6 +1,11 @@
 package com.siseg.service;
 
-import com.siseg.dto.pagamento.*;
+import com.siseg.dto.pagamento.AsaasCustomerResponseDTO;
+import com.siseg.dto.pagamento.AsaasPaymentResponseDTO;
+import com.siseg.dto.pagamento.AsaasQrCodeResponseDTO;
+import com.siseg.dto.pagamento.AsaasRefundResponseDTO;
+import com.siseg.dto.pagamento.CartaoCreditoRequestDTO;
+import com.siseg.dto.pagamento.PagamentoResponseDTO;
 import com.siseg.exception.PaymentGatewayException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Cliente;
@@ -312,7 +317,110 @@ class PagamentoServiceUnitTest {
         }
     }
 
+    @Test
+    void deveProcessarReembolsoDinheiroComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
 
+            pagamento.setMetodo(MetodoPagamento.CASH);
+            pagamento.setStatus(StatusPagamento.PAID);
+            pagamento.setValor(new BigDecimal("100.00"));
+
+            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+            when(pagamentoRepository.findByPedidoId(1L)).thenReturn(Optional.of(pagamento));
+            doNothing().when(pagamentoValidator).validateReembolsoPossivel(any(Pagamento.class));
+            when(pagamentoRepository.save(any(Pagamento.class))).thenAnswer(invocation -> {
+                Pagamento p = invocation.getArgument(0);
+                return p;
+            });
+            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
+            when(modelMapper.map(any(Pagamento.class), eq(PagamentoResponseDTO.class))).thenReturn(pagamentoResponseDTO);
+
+            PagamentoResponseDTO result = pagamentoService.processarReembolso(1L, "Teste de reembolso");
+
+            assertNotNull(result);
+            verify(pagamentoRepository, times(1)).save(argThat(p -> 
+                p.getStatus() == StatusPagamento.REFUNDED &&
+                p.getValorReembolsado().compareTo(new BigDecimal("100.00")) == 0 &&
+                p.getDataReembolso() != null));
+            verify(pedidoRepository, times(1)).save(argThat(p -> 
+                p.getStatus() == StatusPedido.CANCELED));
+        }
+    }
+
+    @Test
+    void deveProcessarReembolsoEletronicoComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            pagamento.setMetodo(MetodoPagamento.PIX);
+            pagamento.setStatus(StatusPagamento.PAID);
+            pagamento.setValor(new BigDecimal("100.00"));
+            pagamento.setAsaasPaymentId("pay_123456");
+
+            AsaasRefundResponseDTO refundResponse = new AsaasRefundResponseDTO();
+            refundResponse.setId("refund_123456");
+            refundResponse.setValue("100.00");
+            refundResponse.setStatus("REFUNDED");
+
+            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+            when(pagamentoRepository.findByPedidoId(1L)).thenReturn(Optional.of(pagamento));
+            doNothing().when(pagamentoValidator).validateReembolsoPossivel(any(Pagamento.class));
+            when(asaasService.estornarPagamento(anyString(), anyString())).thenReturn(refundResponse);
+            when(pagamentoRepository.save(any(Pagamento.class))).thenAnswer(invocation -> {
+                Pagamento p = invocation.getArgument(0);
+                return p;
+            });
+            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
+            when(modelMapper.map(any(Pagamento.class), eq(PagamentoResponseDTO.class))).thenReturn(pagamentoResponseDTO);
+
+            PagamentoResponseDTO result = pagamentoService.processarReembolso(1L, "Teste de reembolso");
+
+            assertNotNull(result);
+            verify(asaasService, times(1)).estornarPagamento("pay_123456", "Teste de reembolso");
+            verify(pagamentoRepository, times(1)).save(argThat(p -> 
+                p.getStatus() == StatusPagamento.REFUNDED &&
+                p.getAsaasRefundId().equals("refund_123456") &&
+                p.getDataReembolso() != null));
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoPagamentoNaoEncontradoParaReembolso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+            when(pagamentoRepository.findByPedidoId(1L)).thenReturn(Optional.empty());
+
+            assertThrows(ResourceNotFoundException.class, 
+                    () -> pagamentoService.processarReembolso(1L, "Teste"));
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoErroAoEstornarNoAsaas() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            pagamento.setMetodo(MetodoPagamento.PIX);
+            pagamento.setStatus(StatusPagamento.PAID);
+            pagamento.setAsaasPaymentId("pay_123456");
+
+            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+            when(pagamentoRepository.findByPedidoId(1L)).thenReturn(Optional.of(pagamento));
+            doNothing().when(pagamentoValidator).validateReembolsoPossivel(any(Pagamento.class));
+            when(asaasService.estornarPagamento(anyString(), anyString()))
+                    .thenThrow(new PaymentGatewayException("Erro ao estornar pagamento"));
+
+            assertThrows(PaymentGatewayException.class, 
+                    () -> pagamentoService.processarReembolso(1L, "Teste"));
+        }
+    }
 }
 
 

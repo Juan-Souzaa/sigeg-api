@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.siseg.dto.pagamento.AsaasCustomerResponseDTO;
 import com.siseg.dto.pagamento.AsaasPaymentResponseDTO;
 import com.siseg.dto.pagamento.AsaasQrCodeResponseDTO;
+import com.siseg.dto.pagamento.AsaasRefundResponseDTO;
 import com.siseg.dto.pagamento.AsaasWebhookDTO;
 import com.siseg.model.Cliente;
 import com.siseg.model.Pedido;
@@ -84,7 +85,9 @@ class PagamentoControllerFunctionalTest {
 
 
     private String clienteToken;
+    private String restauranteToken;
     private Cliente cliente;
+    private Restaurante restaurante;
     private Pedido pedido;
     private AsaasCustomerResponseDTO asaasCustomerResponse;
     private AsaasPaymentResponseDTO asaasPaymentResponse;
@@ -123,7 +126,7 @@ class PagamentoControllerFunctionalTest {
                     return saved;
                 });
 
-        Restaurante restaurante = restauranteRepository.findAll().stream().findFirst()
+        restaurante = restauranteRepository.findAll().stream().findFirst()
                 .orElseGet(() -> {
                     Restaurante r = new Restaurante();
                     r.setNome("Restaurante Teste");
@@ -146,6 +149,8 @@ class PagamentoControllerFunctionalTest {
                     
                     return saved;
                 });
+        
+        restauranteToken = testJwtUtil.generateTokenForUser("restaurante", ERole.ROLE_RESTAURANTE);
 
         com.siseg.model.Endereco enderecoEntrega = enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())
                 .orElseThrow(() -> new RuntimeException("Cliente não possui endereço"));
@@ -253,6 +258,60 @@ class PagamentoControllerFunctionalTest {
                         .content(objectMapper.writeValueAsString(webhook)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string("Assinatura inválida"));
+    }
+
+    @Test
+    void deveEstornarPagamentoComSucesso() throws Exception {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(cliente.getUser());
+
+            Pagamento pagamento = new Pagamento();
+            pagamento.setPedido(pedido);
+            pagamento.setMetodo(MetodoPagamento.PIX);
+            pagamento.setStatus(StatusPagamento.PAID);
+            pagamento.setValor(new BigDecimal("100.00"));
+            pagamento.setAsaasPaymentId("pay_123456");
+            pagamento = pagamentoRepository.save(pagamento);
+
+            AsaasRefundResponseDTO refundResponse = new AsaasRefundResponseDTO();
+            refundResponse.setId("refund_123456");
+            refundResponse.setValue("100.00");
+            refundResponse.setStatus("REFUNDED");
+
+            doReturn(refundResponse).when(asaasService).estornarPagamento(anyString(), anyString());
+
+            String requestBody = "{\"motivo\":\"Teste de reembolso\"}";
+
+            mockMvc.perform(post("/api/pagamentos/pedidos/" + pedido.getId() + "/reembolso")
+                            .header("Authorization", "Bearer " + restauranteToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(requestBody))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("REFUNDED"));
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoPagamentoJaReembolsado() throws Exception {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(cliente.getUser());
+
+            Pagamento pagamento = new Pagamento();
+            pagamento.setPedido(pedido);
+            pagamento.setMetodo(MetodoPagamento.PIX);
+            pagamento.setStatus(StatusPagamento.REFUNDED);
+            pagamento.setValor(new BigDecimal("100.00"));
+            pagamento.setAsaasPaymentId("pay_123456");
+            pagamento = pagamentoRepository.save(pagamento);
+
+            String requestBody = "{\"motivo\":\"Teste de reembolso\"}";
+
+            mockMvc.perform(post("/api/pagamentos/pedidos/" + pedido.getId() + "/reembolso")
+                            .header("Authorization", "Bearer " + restauranteToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(requestBody))
+                    .andExpect(status().isBadRequest());
+        }
     }
 }
 
