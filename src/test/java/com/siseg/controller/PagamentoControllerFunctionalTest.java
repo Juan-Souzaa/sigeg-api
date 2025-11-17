@@ -98,6 +98,10 @@ class PagamentoControllerFunctionalTest {
         User user = testJwtUtil.getOrCreateUser("cliente", ERole.ROLE_CLIENTE);
         cliente = clienteRepository.findByUserId(user.getId())
                 .orElseGet(() -> {
+                    Cliente existente = clienteRepository.findByEmail("cliente@teste.com").orElse(null);
+                    if (existente != null) {
+                        return existente;
+                    }
                     Cliente c = new Cliente();
                     c.setUser(user);
                     c.setNome("Cliente Teste");
