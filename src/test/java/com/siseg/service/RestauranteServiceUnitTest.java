@@ -122,9 +122,13 @@ class RestauranteServiceUnitTest {
     @Test
     void deveCriarRestauranteComSucesso() {
         // Given
-        User mockUser = new User();
-        mockUser.setId(1L);
-        mockUser.setUsername("testuser");
+        User savedUser = new User();
+        savedUser.setId(1L);
+        savedUser.setUsername("teste@restaurante.com");
+        
+        Role restauranteRole = new Role();
+        restauranteRole.setId(1L);
+        restauranteRole.setRoleName(ERole.ROLE_RESTAURANTE);
         
         com.siseg.model.Endereco endereco = new com.siseg.model.Endereco();
         endereco.setId(1L);
@@ -135,27 +139,27 @@ class RestauranteServiceUnitTest {
         endereco.setEstado("SP");
         endereco.setCep("01310100");
         
+        when(userRepository.findByUsername(restauranteRequestDTO.getEmail())).thenReturn(Optional.empty());
+        when(restauranteRepository.findByEmail(restauranteRequestDTO.getEmail())).thenReturn(Optional.empty());
+        when(roleRepository.findByRoleName(ERole.ROLE_RESTAURANTE)).thenReturn(Optional.of(restauranteRole));
+        when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
+        when(userRepository.save(any(User.class))).thenReturn(savedUser);
         when(modelMapper.map(restauranteRequestDTO, Restaurante.class)).thenReturn(restaurante);
         when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
         when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
         when(enderecoService.criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class))).thenReturn(endereco);
         when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
+        RestauranteResponseDTO result = restauranteService.criarRestaurante(restauranteRequestDTO);
 
-            RestauranteResponseDTO result = restauranteService.criarRestaurante(restauranteRequestDTO);
-
-            // Then
-            assertNotNull(result);
-            assertEquals(restauranteResponseDTO.getId(), result.getId());
-            assertEquals(restauranteResponseDTO.getNome(), result.getNome());
-            assertEquals(StatusRestaurante.PENDING_APPROVAL, result.getStatus());
-            verify(restauranteRepository, times(1)).save(argThat(r -> 
-                r.getUser() != null && r.getUser().getId().equals(mockUser.getId())
-            ));
-            verify(enderecoService, times(1)).criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class));
-        }
+        // Then
+        assertNotNull(result);
+        assertEquals(restauranteResponseDTO.getId(), result.getId());
+        assertEquals(restauranteResponseDTO.getNome(), result.getNome());
+        assertEquals(StatusRestaurante.PENDING_APPROVAL, result.getStatus());
+        verify(userRepository, times(1)).save(any(User.class));
+        verify(restauranteRepository, times(1)).save(any(Restaurante.class));
+        verify(enderecoService, times(1)).criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class));
     }
 
     @Test
