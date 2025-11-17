@@ -1,17 +1,23 @@
 package com.siseg.service;
 
 import com.siseg.dto.EnderecoRequestDTO;
+import com.siseg.dto.EnderecoResponseDTO;
+import com.siseg.exception.ResourceNotFoundException;
+import com.siseg.mapper.EnderecoMapper;
 import com.siseg.model.Cliente;
 import com.siseg.model.Endereco;
 import com.siseg.model.Restaurante;
 import com.siseg.model.enumerations.TipoEndereco;
+import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.EnderecoRepository;
+import com.siseg.repository.RestauranteRepository;
 import com.siseg.validator.EnderecoValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class EnderecoService {
@@ -19,11 +25,19 @@ public class EnderecoService {
     private final EnderecoRepository enderecoRepository;
     private final EnderecoValidator enderecoValidator;
     private final GeocodingService geocodingService;
+    private final EnderecoMapper enderecoMapper;
+    private final ClienteRepository clienteRepository;
+    private final RestauranteRepository restauranteRepository;
     
-    public EnderecoService(EnderecoRepository enderecoRepository, EnderecoValidator enderecoValidator, GeocodingService geocodingService) {
+    public EnderecoService(EnderecoRepository enderecoRepository, EnderecoValidator enderecoValidator, 
+                          GeocodingService geocodingService, EnderecoMapper enderecoMapper,
+                          ClienteRepository clienteRepository, RestauranteRepository restauranteRepository) {
         this.enderecoRepository = enderecoRepository;
         this.enderecoValidator = enderecoValidator;
         this.geocodingService = geocodingService;
+        this.enderecoMapper = enderecoMapper;
+        this.clienteRepository = clienteRepository;
+        this.restauranteRepository = restauranteRepository;
     }
     
     @Transactional
@@ -154,6 +168,214 @@ public class EnderecoService {
                 enderecoRepository.save(e);
             }
         });
+    }
+    
+    public Cliente buscarClienteParaEndereco(Long clienteId) {
+        Cliente cliente = clienteRepository.findById(clienteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + clienteId));
+        enderecoValidator.validateClienteOwnership(cliente);
+        return cliente;
+    }
+    
+    public Restaurante buscarRestauranteParaEndereco(Long restauranteId) {
+        Restaurante restaurante = restauranteRepository.findById(restauranteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
+        enderecoValidator.validateRestauranteOwnership(restaurante);
+        return restaurante;
+    }
+    
+    public List<EnderecoResponseDTO> listarEnderecosCliente(Long clienteId) {
+        Cliente cliente = clienteRepository.findById(clienteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + clienteId));
+        enderecoValidator.validateClienteOwnership(cliente);
+        
+        List<Endereco> enderecos = enderecoRepository.findByClienteId(clienteId);
+        return enderecos.stream()
+                .map(enderecoMapper::toResponseDTO)
+                .collect(Collectors.toList());
+    }
+    
+    public List<EnderecoResponseDTO> listarEnderecosRestaurante(Long restauranteId) {
+        Restaurante restaurante = restauranteRepository.findById(restauranteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
+        enderecoValidator.validateRestauranteOwnership(restaurante);
+        
+        List<Endereco> enderecos = enderecoRepository.findByRestauranteId(restauranteId);
+        return enderecos.stream()
+                .map(enderecoMapper::toResponseDTO)
+                .collect(Collectors.toList());
+    }
+    
+    public EnderecoResponseDTO buscarEnderecoPorIdCliente(Long enderecoId, Long clienteId) {
+        Endereco endereco = enderecoRepository.findById(enderecoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Endereço não encontrado com ID: " + enderecoId));
+        
+        Cliente cliente = clienteRepository.findById(clienteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + clienteId));
+        
+        enderecoValidator.validateEnderecoPertenceAoCliente(endereco, clienteId, cliente);
+        return enderecoMapper.toResponseDTO(endereco);
+    }
+    
+    public EnderecoResponseDTO buscarEnderecoPorIdRestaurante(Long enderecoId, Long restauranteId) {
+        Endereco endereco = enderecoRepository.findById(enderecoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Endereço não encontrado com ID: " + enderecoId));
+        
+        Restaurante restaurante = restauranteRepository.findById(restauranteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
+        
+        enderecoValidator.validateEnderecoPertenceAoRestaurante(endereco, restauranteId, restaurante);
+        return enderecoMapper.toResponseDTO(endereco);
+    }
+    
+    @Transactional
+    public EnderecoResponseDTO atualizarEnderecoCliente(Long enderecoId, EnderecoRequestDTO dto, Long clienteId) {
+        Endereco endereco = enderecoRepository.findById(enderecoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Endereço não encontrado com ID: " + enderecoId));
+        
+        Cliente cliente = clienteRepository.findById(clienteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + clienteId));
+        
+        enderecoValidator.validateEnderecoPertenceAoCliente(endereco, clienteId, cliente);
+        
+        boolean enderecoAlterado = atualizarCamposEndereco(endereco, dto);
+        
+        if (Boolean.TRUE.equals(dto.getPrincipal())) {
+            desmarcarEnderecosPrincipaisCliente(clienteId);
+            endereco.setPrincipal(true);
+        }
+        
+        Endereco saved = enderecoRepository.save(endereco);
+        
+        if (enderecoAlterado && (saved.getLatitude() == null || saved.getLongitude() == null)) {
+            geocodingService.geocodeAddress(saved);
+            saved = enderecoRepository.save(saved);
+        }
+        
+        return enderecoMapper.toResponseDTO(saved);
+    }
+    
+    @Transactional
+    public EnderecoResponseDTO atualizarEnderecoRestaurante(Long enderecoId, EnderecoRequestDTO dto, Long restauranteId) {
+        Endereco endereco = enderecoRepository.findById(enderecoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Endereço não encontrado com ID: " + enderecoId));
+        
+        Restaurante restaurante = restauranteRepository.findById(restauranteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
+        
+        enderecoValidator.validateEnderecoPertenceAoRestaurante(endereco, restauranteId, restaurante);
+        
+        boolean enderecoAlterado = atualizarCamposEndereco(endereco, dto);
+        
+        if (Boolean.TRUE.equals(dto.getPrincipal())) {
+            desmarcarEnderecosPrincipaisRestaurante(restauranteId);
+            endereco.setPrincipal(true);
+        }
+        
+        Endereco saved = enderecoRepository.save(endereco);
+        
+        if (enderecoAlterado && (saved.getLatitude() == null || saved.getLongitude() == null)) {
+            geocodingService.geocodeAddress(saved);
+            saved = enderecoRepository.save(saved);
+        }
+        
+        return enderecoMapper.toResponseDTO(saved);
+    }
+    
+    @Transactional
+    public void excluirEnderecoCliente(Long enderecoId, Long clienteId) {
+        Endereco endereco = enderecoRepository.findById(enderecoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Endereço não encontrado com ID: " + enderecoId));
+        
+        Cliente cliente = clienteRepository.findById(clienteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + clienteId));
+        
+        enderecoValidator.validateEnderecoPertenceAoCliente(endereco, clienteId, cliente);
+        
+        long totalEnderecos = enderecoRepository.countByClienteId(clienteId);
+        enderecoValidator.validatePodeExcluirEndereco(totalEnderecos, "cliente");
+        
+        boolean eraPrincipal = Boolean.TRUE.equals(endereco.getPrincipal());
+        
+        enderecoRepository.delete(endereco);
+        
+        if (eraPrincipal) {
+            List<Endereco> enderecosRestantes = enderecoRepository.findByClienteId(clienteId);
+            if (!enderecosRestantes.isEmpty()) {
+                Endereco novoPrincipal = enderecosRestantes.get(0);
+                novoPrincipal.setPrincipal(true);
+                enderecoRepository.save(novoPrincipal);
+            }
+        }
+    }
+    
+    @Transactional
+    public void excluirEnderecoRestaurante(Long enderecoId, Long restauranteId) {
+        Endereco endereco = enderecoRepository.findById(enderecoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Endereço não encontrado com ID: " + enderecoId));
+        
+        Restaurante restaurante = restauranteRepository.findById(restauranteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + restauranteId));
+        
+        enderecoValidator.validateEnderecoPertenceAoRestaurante(endereco, restauranteId, restaurante);
+        
+        long totalEnderecos = enderecoRepository.countByRestauranteId(restauranteId);
+        enderecoValidator.validatePodeExcluirEndereco(totalEnderecos, "restaurante");
+        
+        boolean eraPrincipal = Boolean.TRUE.equals(endereco.getPrincipal());
+        
+        enderecoRepository.delete(endereco);
+        
+        if (eraPrincipal) {
+            List<Endereco> enderecosRestantes = enderecoRepository.findByRestauranteId(restauranteId);
+            if (!enderecosRestantes.isEmpty()) {
+                Endereco novoPrincipal = enderecosRestantes.get(0);
+                novoPrincipal.setPrincipal(true);
+                enderecoRepository.save(novoPrincipal);
+            }
+        }
+    }
+    
+    private boolean atualizarCamposEndereco(Endereco endereco, EnderecoRequestDTO dto) {
+        boolean alterado = false;
+        
+        if (dto.getLogradouro() != null && !dto.getLogradouro().equals(endereco.getLogradouro())) {
+            endereco.setLogradouro(dto.getLogradouro());
+            alterado = true;
+        }
+        if (dto.getNumero() != null && !dto.getNumero().equals(endereco.getNumero())) {
+            endereco.setNumero(dto.getNumero());
+            alterado = true;
+        }
+        if (dto.getComplemento() != null && !dto.getComplemento().equals(endereco.getComplemento())) {
+            endereco.setComplemento(dto.getComplemento());
+            alterado = true;
+        }
+        if (dto.getBairro() != null && !dto.getBairro().equals(endereco.getBairro())) {
+            endereco.setBairro(dto.getBairro());
+            alterado = true;
+        }
+        if (dto.getCidade() != null && !dto.getCidade().equals(endereco.getCidade())) {
+            endereco.setCidade(dto.getCidade());
+            alterado = true;
+        }
+        if (dto.getEstado() != null && !dto.getEstado().toUpperCase().equals(endereco.getEstado())) {
+            endereco.setEstado(dto.getEstado().toUpperCase());
+            alterado = true;
+        }
+        if (dto.getCep() != null) {
+            String cepLimpo = dto.getCep().replaceAll("[^0-9]", "");
+            if (!cepLimpo.equals(endereco.getCep())) {
+                endereco.setCep(cepLimpo);
+                alterado = true;
+            }
+        }
+        
+        if (alterado) {
+            enderecoValidator.validate(endereco);
+        }
+        
+        return alterado;
     }
 }
 
