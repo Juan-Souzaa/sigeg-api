@@ -31,11 +31,14 @@ import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Pageable;    
+import com.siseg.util.TempoEstimadoCalculator;
 
 import com.siseg.dto.restaurante.RestauranteBuscaDTO;
+import com.siseg.dto.geocoding.ResultadoCalculo;
 import com.siseg.model.Cliente;
 import com.siseg.model.Endereco;
+import com.siseg.model.enumerations.TipoVeiculo;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -43,6 +46,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -77,6 +81,9 @@ class RestauranteServiceUnitTest {
 
     @Mock
     private RestauranteMapper restauranteMapper;
+
+    @Mock
+    private TempoEstimadoCalculator tempoEstimadoCalculator;
 
     @InjectMocks
     private RestauranteService restauranteService;
@@ -587,12 +594,27 @@ class RestauranteServiceUnitTest {
         dto2.setNome("Restaurante Longe");
         dto2.setDistanciaKm(new BigDecimal("10.00"));
         
+        ResultadoCalculo resultado1 = new ResultadoCalculo(new BigDecimal("1.50"), 5, false);
+        ResultadoCalculo resultado2 = new ResultadoCalculo(new BigDecimal("10.00"), 30, false);
+        
         when(restauranteRepository.findAll()).thenReturn(List.of(restaurante1, restaurante2));
         when(clienteRepository.findByUserId(1L)).thenReturn(Optional.of(cliente));
         when(enderecoService.buscarEnderecoPrincipalCliente(1L)).thenReturn(Optional.of(enderecoCliente));
         when(enderecoService.buscarEnderecoPrincipalRestaurante(1L)).thenReturn(Optional.of(enderecoRest1));
         when(enderecoService.buscarEnderecoPrincipalRestaurante(2L)).thenReturn(Optional.of(enderecoRest2));
         when(restauranteMapper.toRestauranteBuscaDTO(restaurante1, cliente)).thenReturn(dto1);
+        when(tempoEstimadoCalculator.calculateDistanceAndTime(
+            any(BigDecimal.class), any(BigDecimal.class), 
+            any(BigDecimal.class), any(BigDecimal.class), 
+            eq(TipoVeiculo.MOTO)
+        )).thenAnswer(invocation -> {
+            BigDecimal lat2 = invocation.getArgument(2);
+            if (lat2.compareTo(new BigDecimal("-23.5515")) == 0) {
+                return resultado1;
+            } else {
+                return resultado2;
+            }
+        });
         
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
