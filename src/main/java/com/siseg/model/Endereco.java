@@ -73,11 +73,6 @@ public class Endereco {
         StringBuilder sb = new StringBuilder();
         sb.append(logradouro).append(", ");
         sb.append(numero);
-        
-        if (complemento != null && !complemento.trim().isEmpty()) {
-            sb.append(", ").append(complemento);
-        }
-        
         sb.append(", ").append(bairro);
         sb.append(", ").append(cidade);
         sb.append(", ").append(estado);

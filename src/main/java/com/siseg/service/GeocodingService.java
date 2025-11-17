@@ -198,7 +198,6 @@ public class GeocodingService {
         sb.append(endereco.getLogradouro()).append(", ");
         sb.append(endereco.getNumero());
         
-        adicionarComplemento(sb, endereco);
         adicionarBairro(sb, endereco);
         
         sb.append(", ").append(endereco.getCidade());
@@ -206,16 +205,6 @@ public class GeocodingService {
         sb.append(", Brasil");
         
         return sb.toString();
-    }
-    
-    private void adicionarComplemento(StringBuilder sb, Endereco endereco) {
-        if (temComplemento(endereco)) {
-            sb.append(", ").append(endereco.getComplemento());
-        }
-    }
-    
-    private boolean temComplemento(Endereco endereco) {
-        return endereco.getComplemento() != null && !endereco.getComplemento().trim().isEmpty();
     }
     
     private void adicionarBairro(StringBuilder sb, Endereco endereco) {
