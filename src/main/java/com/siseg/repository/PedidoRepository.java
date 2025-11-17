@@ -5,6 +5,8 @@ import com.siseg.model.enumerations.StatusPedido;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
@@ -26,4 +28,10 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
     Page<Pedido> findByStatusAndEntregadorIsNull(StatusPedido status, Pageable pageable);
     List<Pedido> findByStatusAndRestauranteIdAndCriadoEmBetween(StatusPedido status, Long restauranteId, Instant inicio, Instant fim);
     List<Pedido> findByStatusAndEntregadorIdAndCriadoEmBetween(StatusPedido status, Long entregadorId, Instant inicio, Instant fim);
+    
+    @Query("SELECT COUNT(p) > 0 FROM Pedido p WHERE p.cliente.id = :clienteId AND p.status IN :statuses")
+    boolean existsByClienteIdAndStatusIn(@Param("clienteId") Long clienteId, @Param("statuses") List<StatusPedido> statuses);
+    
+    @Query("SELECT COUNT(p) > 0 FROM Pedido p WHERE p.restaurante.id = :restauranteId AND p.status IN :statuses")
+    boolean existsByRestauranteIdAndStatusIn(@Param("restauranteId") Long restauranteId, @Param("statuses") List<StatusPedido> statuses);
 }
