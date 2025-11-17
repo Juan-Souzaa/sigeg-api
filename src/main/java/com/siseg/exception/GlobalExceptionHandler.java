@@ -92,6 +92,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(err);
     }
 
+    @ExceptionHandler(PagamentoJaReembolsadoException.class)
+    public ResponseEntity<ErrorResponse> handlePagamentoJaReembolsado(PagamentoJaReembolsadoException ex, HttpServletRequest req) {
+        ErrorResponse err = new ErrorResponse(
+                Instant.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                ex.getMessage(),
+                req.getRequestURI(),
+                null
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(err);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest req) {
         ErrorResponse err = new ErrorResponse(
