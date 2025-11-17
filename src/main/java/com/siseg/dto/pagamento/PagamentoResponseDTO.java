@@ -17,6 +17,9 @@ public class PagamentoResponseDTO {
     private BigDecimal troco;
     private String qrCode;
     private String qrCodeImageUrl;
+    private BigDecimal valorReembolsado;
+    private Instant dataReembolso;
+    private String asaasRefundId;
     private Instant criadoEm;
     private Instant atualizadoEm;
 }

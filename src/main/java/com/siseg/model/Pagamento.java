@@ -46,6 +46,14 @@ public class Pagamento {
     private String asaasPaymentId;
     private String asaasCustomerId;
 
+    // Campos de reembolso
+    @Column(precision = 10, scale = 2)
+    private BigDecimal valorReembolsado;
+    
+    private Instant dataReembolso;
+    
+    private String asaasRefundId;
+
     @Column(nullable = false, updatable = false)
     private Instant criadoEm = Instant.now();
 

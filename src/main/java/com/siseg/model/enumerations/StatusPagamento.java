@@ -5,5 +5,6 @@ public enum StatusPagamento {
     AUTHORIZED,
     PAID,
     CANCELED,
-    REFUSED
+    REFUSED,
+    REFUNDED
 }
