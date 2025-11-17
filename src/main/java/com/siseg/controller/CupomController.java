@@ -53,5 +53,19 @@ public class CupomController {
         CupomResponseDTO response = cupomService.desativarCupom(id);
         return ResponseEntity.ok(response);
     }
+
+    @GetMapping("/disponiveis")
+    @Operation(summary = "Listar cupons disponíveis para clientes")
+    public ResponseEntity<Page<CupomResponseDTO>> listarCuponsDisponiveis(Pageable pageable) {
+        Page<CupomResponseDTO> response = cupomService.listarCuponsDisponiveis(pageable);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{codigo}/validar")
+    @Operation(summary = "Validar cupom antes de aplicar")
+    public ResponseEntity<CupomResponseDTO> validarCupom(@PathVariable String codigo) {
+        CupomResponseDTO response = cupomService.validarCupom(codigo);
+        return ResponseEntity.ok(response);
+    }
 }
 

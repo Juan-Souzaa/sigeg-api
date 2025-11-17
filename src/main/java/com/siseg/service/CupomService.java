@@ -55,6 +55,13 @@ public class CupomService {
         Page<Cupom> cupons = cupomRepository.findByAtivoTrue(pageable);
         return cupons.map(cupomMapper::toResponseDTO);
     }
+    
+    @Transactional(readOnly = true)
+    public Page<CupomResponseDTO> listarCuponsDisponiveis(Pageable pageable) {
+        LocalDate hoje = LocalDate.now();
+        Page<Cupom> cupons = cupomRepository.findCuponsDisponiveis(hoje, pageable);
+        return cupons.map(cupomMapper::toResponseDTO);
+    }
 
     public CupomResponseDTO desativarCupom(Long id) {
         Cupom cupom = buscarCupomPorId(id);
@@ -66,6 +73,17 @@ public class CupomService {
     public void incrementarUsoCupom(Cupom cupom) {
         cupom.setUsosAtuais(cupom.getUsosAtuais() + 1);
         cupomRepository.save(cupom);
+    }
+    
+    @Transactional(readOnly = true)
+    public CupomResponseDTO validarCupom(String codigo) {
+        Cupom cupom = buscarPorCodigo(codigo);
+        
+        if (cupom.getUsosAtuais() >= cupom.getUsosMaximos()) {
+            throw new IllegalStateException("Cupom esgotado");
+        }
+        
+        return cupomMapper.toResponseDTO(cupom);
     }
 
     private Cupom buscarCupomPorId(Long id) {

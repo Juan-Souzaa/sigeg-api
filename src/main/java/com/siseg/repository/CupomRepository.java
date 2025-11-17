@@ -26,5 +26,12 @@ public interface CupomRepository extends JpaRepository<Cupom, Long> {
                                                            @Param("data") LocalDate data);
     
     Page<Cupom> findByAtivoTrue(Pageable pageable);
+    
+    @Query("SELECT c FROM Cupom c WHERE c.ativo = true " +
+           "AND c.dataInicio <= :dataAtual " +
+           "AND c.dataFim >= :dataAtual " +
+           "AND c.usosAtuais < c.usosMaximos " +
+           "ORDER BY c.valorDesconto DESC, c.criadoEm DESC")
+    Page<Cupom> findCuponsDisponiveis(@Param("dataAtual") LocalDate dataAtual, Pageable pageable);
 }
 
