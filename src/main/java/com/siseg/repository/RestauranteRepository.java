@@ -16,6 +16,8 @@ public interface RestauranteRepository extends JpaRepository<Restaurante, Long> 
     
     Optional<Restaurante> findByUserId(Long userId);
     
+    Optional<Restaurante> findByEmail(String email);
+    
     @Query("SELECT r FROM Restaurante r WHERE r.status = 'APPROVED' " +
            "AND (:cozinha IS NULL OR LOWER(r.nome) LIKE LOWER(CONCAT('%', :cozinha, '%')))")
     Page<Restaurante> buscarRestaurantesAprovados(@Param("cozinha") String cozinha, Pageable pageable);

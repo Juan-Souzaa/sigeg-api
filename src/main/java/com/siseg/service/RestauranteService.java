@@ -6,6 +6,7 @@ import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
 import com.siseg.dto.restaurante.RestauranteUpdateDTO;
 import com.siseg.exception.ResourceNotFoundException;
+import com.siseg.exception.UserAlreadyExistsException;
 import com.siseg.mapper.RestauranteMapper;
 import com.siseg.model.Cliente;
 import com.siseg.model.Restaurante;
@@ -70,6 +71,10 @@ public class RestauranteService {
     }
     
     public RestauranteResponseDTO criarRestaurante(RestauranteRequestDTO dto) {
+        if (restauranteRepository.findByEmail(dto.getEmail()).isPresent()) {
+            throw new UserAlreadyExistsException("Já existe um restaurante com este email.");
+        }
+        
         User currentUser = SecurityUtils.getCurrentUser();
         
         Restaurante restaurante = modelMapper.map(dto, Restaurante.class);
@@ -105,6 +110,12 @@ public class RestauranteService {
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + id));
         
         SecurityUtils.validateRestauranteOwnership(restaurante);
+        
+        if (!restaurante.getEmail().equals(dto.getEmail())) {
+            if (restauranteRepository.findByEmail(dto.getEmail()).isPresent()) {
+                throw new UserAlreadyExistsException("Já existe um restaurante com este email.");
+            }
+        }
         
         restaurante.setNome(dto.getNome());
         restaurante.setEmail(dto.getEmail());

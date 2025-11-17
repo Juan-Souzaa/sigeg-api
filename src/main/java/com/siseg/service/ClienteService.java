@@ -6,6 +6,7 @@ import com.siseg.dto.cliente.ClienteResponseDTO;
 import com.siseg.dto.cliente.ClienteUpdateDTO;
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
+import com.siseg.exception.UserAlreadyExistsException;
 import com.siseg.model.Cliente;
 import com.siseg.model.Role;
 import com.siseg.model.User;
@@ -52,6 +53,10 @@ public class ClienteService {
     }
 
     public ClienteResponseDTO criarCliente(ClienteRequestDTO dto) {
+        if (userRepository.findByUsername(dto.getEmail()).isPresent()) {
+            throw new UserAlreadyExistsException("Já existe um usuário com este email.");
+        }
+        
         User user = new User();
         user.setUsername(dto.getEmail());
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
@@ -113,6 +118,12 @@ public class ClienteService {
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + id));
         
         validateClienteOwnership(cliente);
+        
+        if (!cliente.getEmail().equals(dto.getEmail())) {
+            if (userRepository.findByUsername(dto.getEmail()).isPresent()) {
+                throw new UserAlreadyExistsException("Já existe um usuário com este email.");
+            }
+        }
         
         cliente.setNome(dto.getNome());
         cliente.setEmail(dto.getEmail());
