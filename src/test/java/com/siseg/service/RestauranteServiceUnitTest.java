@@ -30,6 +30,11 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import com.siseg.dto.restaurante.RestauranteBuscaDTO;
+import com.siseg.model.Cliente;
+import com.siseg.model.Endereco;
+
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -411,6 +416,168 @@ class RestauranteServiceUnitTest {
 
             assertThrows(IllegalArgumentException.class, 
                     () -> restauranteService.atualizarSenha(1L, dto));
+        }
+    }
+
+    @Test
+    void deveCriarRestauranteComRaioEntrega() {
+        User mockUser = new User();
+        mockUser.setId(1L);
+        mockUser.setUsername("testuser");
+        
+        restauranteRequestDTO.setRaioEntregaKm(new BigDecimal("15.00"));
+        
+        when(modelMapper.map(restauranteRequestDTO, Restaurante.class)).thenReturn(restaurante);
+        when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
+        when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+        when(enderecoService.criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class)))
+                .thenReturn(new Endereco());
+        when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
+
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
+
+            restauranteService.criarRestaurante(restauranteRequestDTO);
+
+            verify(restauranteRepository, times(1)).save(argThat(r -> 
+                r.getRaioEntregaKm() != null && r.getRaioEntregaKm().compareTo(new BigDecimal("15.00")) == 0
+            ));
+        }
+    }
+
+    @Test
+    void deveCriarRestauranteComRaioPadraoQuandoNaoInformado() {
+        User mockUser = new User();
+        mockUser.setId(1L);
+        mockUser.setUsername("testuser");
+        
+        restauranteRequestDTO.setRaioEntregaKm(null);
+        
+        when(modelMapper.map(restauranteRequestDTO, Restaurante.class)).thenReturn(restaurante);
+        when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
+        when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+        when(enderecoService.criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class)))
+                .thenReturn(new Endereco());
+        when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
+
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
+
+            restauranteService.criarRestaurante(restauranteRequestDTO);
+
+            verify(restauranteRepository, times(1)).save(argThat(r -> 
+                r.getRaioEntregaKm() != null && r.getRaioEntregaKm().compareTo(new BigDecimal("10.00")) == 0
+            ));
+        }
+    }
+
+    @Test
+    void deveAtualizarRaioEntregaComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(new User());
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            restaurante.setRaioEntregaKm(new BigDecimal("5.00"));
+            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+            when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
+
+            restauranteService.atualizarRaioEntrega(1L, new BigDecimal("20.00"));
+
+            assertEquals(new BigDecimal("20.00"), restaurante.getRaioEntregaKm());
+            verify(restauranteRepository, times(1)).save(restaurante);
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoRaioEntregaMenorQueMinimo() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(new User());
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+
+            assertThrows(IllegalArgumentException.class, 
+                    () -> restauranteService.atualizarRaioEntrega(1L, new BigDecimal("0.05")));
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoRaioEntregaMaiorQueMaximo() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(new User());
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+
+            assertThrows(IllegalArgumentException.class, 
+                    () -> restauranteService.atualizarRaioEntrega(1L, new BigDecimal("51.00")));
+        }
+    }
+
+    @Test
+    void deveFiltrarRestaurantesPorRaioEntrega() {
+        User mockUser = new User();
+        mockUser.setId(1L);
+        
+        Cliente cliente = new Cliente();
+        cliente.setId(1L);
+        cliente.setUser(mockUser);
+        
+        Endereco enderecoCliente = new Endereco();
+        enderecoCliente.setLatitude(new BigDecimal("-23.5505"));
+        enderecoCliente.setLongitude(new BigDecimal("-46.6333"));
+        enderecoCliente.setPrincipal(true);
+        
+        Restaurante restaurante1 = new Restaurante();
+        restaurante1.setId(1L);
+        restaurante1.setNome("Restaurante Próximo");
+        restaurante1.setStatus(StatusRestaurante.APPROVED);
+        restaurante1.setAtivo(true);
+        restaurante1.setRaioEntregaKm(new BigDecimal("5.00"));
+        
+        Restaurante restaurante2 = new Restaurante();
+        restaurante2.setId(2L);
+        restaurante2.setNome("Restaurante Longe");
+        restaurante2.setStatus(StatusRestaurante.APPROVED);
+        restaurante2.setAtivo(true);
+        restaurante2.setRaioEntregaKm(new BigDecimal("5.00"));
+        
+        Endereco enderecoRest1 = new Endereco();
+        enderecoRest1.setLatitude(new BigDecimal("-23.5515"));
+        enderecoRest1.setLongitude(new BigDecimal("-46.6343"));
+        enderecoRest1.setPrincipal(true);
+        
+        Endereco enderecoRest2 = new Endereco();
+        enderecoRest2.setLatitude(new BigDecimal("-23.6000"));
+        enderecoRest2.setLongitude(new BigDecimal("-46.7000"));
+        enderecoRest2.setPrincipal(true);
+        
+        RestauranteBuscaDTO dto1 = new RestauranteBuscaDTO();
+        dto1.setId(1L);
+        dto1.setNome("Restaurante Próximo");
+        dto1.setDistanciaKm(new BigDecimal("1.50"));
+        
+        RestauranteBuscaDTO dto2 = new RestauranteBuscaDTO();
+        dto2.setId(2L);
+        dto2.setNome("Restaurante Longe");
+        dto2.setDistanciaKm(new BigDecimal("10.00"));
+        
+        when(restauranteRepository.findAll()).thenReturn(List.of(restaurante1, restaurante2));
+        when(clienteRepository.findByUserId(1L)).thenReturn(Optional.of(cliente));
+        when(enderecoService.buscarEnderecoPrincipalCliente(1L)).thenReturn(Optional.of(enderecoCliente));
+        when(enderecoService.buscarEnderecoPrincipalRestaurante(1L)).thenReturn(Optional.of(enderecoRest1));
+        when(enderecoService.buscarEnderecoPrincipalRestaurante(2L)).thenReturn(Optional.of(enderecoRest2));
+        when(restauranteMapper.toRestauranteBuscaDTO(restaurante1, cliente)).thenReturn(dto1);
+        
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
+            
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<RestauranteBuscaDTO> result = restauranteService.buscarRestaurantes(null, pageable);
+            
+            assertNotNull(result);
+            assertEquals(1, result.getContent().size());
+            assertEquals("Restaurante Próximo", result.getContent().get(0).getNome());
         }
     }
 }
