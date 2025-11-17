@@ -158,5 +158,46 @@ class CupomServiceUnitTest {
         assertEquals(usosIniciais + 1, cupom.getUsosAtuais());
         verify(cupomRepository).save(cupom);
     }
+
+    @Test
+    void deveListarCuponsDisponiveisComSucesso() {
+        Pageable pageable = Pageable.ofSize(10);
+        Page<Cupom> cuponsPage = new PageImpl<>(List.of(cupom));
+        LocalDate hoje = LocalDate.now();
+        when(cupomRepository.findCuponsDisponiveis(hoje, pageable)).thenReturn(cuponsPage);
+        when(cupomMapper.toResponseDTO(cupom)).thenReturn(responseDTO);
+
+        Page<CupomResponseDTO> resultado = cupomService.listarCuponsDisponiveis(pageable);
+
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getContent().size());
+        verify(cupomRepository).findCuponsDisponiveis(hoje, pageable);
+    }
+
+    @Test
+    void deveValidarCupomComSucesso() {
+        LocalDate hoje = LocalDate.now();
+        cupom.setUsosAtuais(50);
+        cupom.setUsosMaximos(100);
+        when(cupomRepository.findByCodigoAndAtivoTrueAndDataValida("DESCONTO10", true, hoje))
+                .thenReturn(Optional.of(cupom));
+        when(cupomMapper.toResponseDTO(cupom)).thenReturn(responseDTO);
+
+        CupomResponseDTO resultado = cupomService.validarCupom("DESCONTO10");
+
+        assertNotNull(resultado);
+        assertEquals("DESCONTO10", resultado.getCodigo());
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoCupomEsgotado() {
+        LocalDate hoje = LocalDate.now();
+        cupom.setUsosAtuais(100);
+        cupom.setUsosMaximos(100);
+        when(cupomRepository.findByCodigoAndAtivoTrueAndDataValida("DESCONTO10", true, hoje))
+                .thenReturn(Optional.of(cupom));
+
+        assertThrows(IllegalStateException.class, () -> cupomService.validarCupom("DESCONTO10"));
+    }
 }
 

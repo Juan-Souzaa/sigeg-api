@@ -1,14 +1,21 @@
 package com.siseg.service;
 
+import com.siseg.dto.AtualizarSenhaDTO;
 import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
+import com.siseg.dto.restaurante.RestauranteUpdateDTO;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.mapper.RestauranteMapper;
+import com.siseg.model.Prato;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.StatusRestaurante;
+import com.siseg.repository.ClienteRepository;
+import com.siseg.repository.PedidoRepository;
+import com.siseg.repository.PratoRepository;
 import com.siseg.repository.RestauranteRepository;
+import com.siseg.repository.UserRepository;
 import com.siseg.util.SecurityUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +48,21 @@ class RestauranteServiceUnitTest {
 
     @Mock
     private EnderecoService enderecoService;
+
+    @Mock
+    private ClienteRepository clienteRepository;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private PedidoRepository pedidoRepository;
+
+    @Mock
+    private PratoRepository pratoRepository;
+
+    @Mock
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     @Mock
     private RestauranteMapper restauranteMapper;
@@ -253,6 +275,142 @@ class RestauranteServiceUnitTest {
                 r.getUser() != null && r.getUser().getId().equals(mockUser.getId())
             ));
             verify(enderecoService, times(1)).criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class));
+        }
+    }
+
+    @Test
+    void deveAtualizarRestauranteComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(new User());
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            User user = new User();
+            user.setId(1L);
+            user.setUsername("restaurante@teste.com");
+            restaurante.setUser(user);
+
+            RestauranteUpdateDTO updateDTO = new RestauranteUpdateDTO();
+            updateDTO.setNome("Restaurante Atualizado");
+            updateDTO.setEmail("restaurante.atualizado@teste.com");
+            updateDTO.setTelefone("(11) 88888-8888");
+
+            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+            when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
+            when(userRepository.save(any(User.class))).thenReturn(user);
+            when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
+
+            RestauranteResponseDTO result = restauranteService.atualizarRestaurante(1L, updateDTO);
+
+            assertNotNull(result);
+            assertEquals("Restaurante Atualizado", restaurante.getNome());
+            assertEquals("restaurante.atualizado@teste.com", restaurante.getEmail());
+            verify(restauranteRepository, times(1)).save(restaurante);
+            verify(userRepository, times(1)).save(user);
+        }
+    }
+
+    @Test
+    void deveExcluirRestauranteComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(new User());
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            restaurante.setAtivo(true);
+            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+            when(pedidoRepository.existsByRestauranteIdAndStatusIn(eq(1L), anyList())).thenReturn(false);
+            when(pratoRepository.findByRestauranteId(eq(1L), any(org.springframework.data.domain.Pageable.class)))
+                    .thenReturn(org.springframework.data.domain.Page.empty());
+            when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
+
+            restauranteService.excluirRestaurante(1L);
+
+            assertFalse(restaurante.getAtivo());
+            verify(restauranteRepository, times(1)).save(restaurante);
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoRestauranteTemPedidosEmAndamento() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(new User());
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+            when(pedidoRepository.existsByRestauranteIdAndStatusIn(eq(1L), anyList())).thenReturn(true);
+
+            assertThrows(IllegalStateException.class, 
+                    () -> restauranteService.excluirRestaurante(1L));
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoRestauranteTemPratosAtivos() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(new User());
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            Prato pratoAtivo = new Prato();
+            pratoAtivo.setDisponivel(true);
+            org.springframework.data.domain.Page<Prato> pratosPage = 
+                    new org.springframework.data.domain.PageImpl<>(List.of(pratoAtivo));
+
+            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+            when(pedidoRepository.existsByRestauranteIdAndStatusIn(eq(1L), anyList())).thenReturn(false);
+            when(pratoRepository.findByRestauranteId(eq(1L), any(org.springframework.data.domain.Pageable.class)))
+                    .thenReturn(pratosPage);
+
+            assertThrows(IllegalStateException.class, 
+                    () -> restauranteService.excluirRestaurante(1L));
+        }
+    }
+
+    @Test
+    void deveAtualizarSenhaRestauranteComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(new User());
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            User user = new User();
+            user.setId(1L);
+            user.setPassword("encodedOldPassword");
+            restaurante.setUser(user);
+
+            AtualizarSenhaDTO dto = new AtualizarSenhaDTO();
+            dto.setSenhaAtual("senha123");
+            dto.setNovaSenha("novaSenha456");
+
+            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+            when(passwordEncoder.matches("senha123", "encodedOldPassword")).thenReturn(true);
+            when(passwordEncoder.encode("novaSenha456")).thenReturn("encodedNewPassword");
+            when(userRepository.save(any(User.class))).thenReturn(user);
+
+            restauranteService.atualizarSenha(1L, dto);
+
+            verify(passwordEncoder, times(1)).matches("senha123", "encodedOldPassword");
+            verify(passwordEncoder, times(1)).encode("novaSenha456");
+            verify(userRepository, times(1)).save(user);
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoSenhaAtualIncorretaRestaurante() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(new User());
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            User user = new User();
+            user.setPassword("encodedOldPassword");
+            restaurante.setUser(user);
+
+            AtualizarSenhaDTO dto = new AtualizarSenhaDTO();
+            dto.setSenhaAtual("senhaErrada");
+            dto.setNovaSenha("novaSenha456");
+
+            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
+            when(passwordEncoder.matches("senhaErrada", "encodedOldPassword")).thenReturn(false);
+
+            assertThrows(IllegalArgumentException.class, 
+                    () -> restauranteService.atualizarSenha(1L, dto));
         }
     }
 }

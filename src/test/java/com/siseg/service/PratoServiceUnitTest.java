@@ -10,6 +10,8 @@ import com.siseg.model.Prato;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.CategoriaMenu;
+import com.siseg.model.PedidoItem;
+import com.siseg.repository.PedidoItemRepository;
 import com.siseg.repository.PratoRepository;
 import com.siseg.repository.RestauranteRepository;
 import com.siseg.util.SecurityUtils;
@@ -45,6 +47,9 @@ class PratoServiceUnitTest {
 
     @Mock
     private RestauranteRepository restauranteRepository;
+
+    @Mock
+    private PedidoItemRepository pedidoItemRepository;
 
     @Mock
     private ModelMapper modelMapper;
@@ -319,6 +324,73 @@ class PratoServiceUnitTest {
         assertNotNull(result);
         assertEquals(1L, result.getRestauranteId());
         verify(pratoRepository, times(1)).findByRestauranteId(1L, pageable);
+    }
+
+    @Test
+    void deveBuscarPratoPorIdComSucesso() {
+        when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
+        when(modelMapper.map(prato, PratoResponseDTO.class)).thenReturn(pratoResponseDTO);
+
+        PratoResponseDTO result = pratoService.buscarPorId(1L);
+
+        assertNotNull(result);
+        assertEquals(1L, result.getId());
+        verify(pratoRepository, times(1)).findById(1L);
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoPratoNaoEncontradoAoBuscarPorId() {
+        when(pratoRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, 
+                () -> pratoService.buscarPorId(1L));
+    }
+
+    @Test
+    void deveExcluirPratoComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
+            when(pedidoItemRepository.findByPratoIdAndPedidoStatusIn(eq(1L), anyList())).thenReturn(List.of());
+
+            pratoService.excluirPrato(1L, 1L);
+
+            verify(pratoRepository, times(1)).delete(prato);
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoPratoNaoPertenceAoRestaurante() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            Restaurante outroRestaurante = new Restaurante();
+            outroRestaurante.setId(2L);
+            prato.setRestaurante(outroRestaurante);
+
+            when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
+
+            assertThrows(IllegalArgumentException.class, 
+                    () -> pratoService.excluirPrato(1L, 1L));
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoPratoEstaEmPedidosEmAndamento() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            PedidoItem item = new PedidoItem();
+            when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
+            when(pedidoItemRepository.findByPratoIdAndPedidoStatusIn(eq(1L), anyList())).thenReturn(List.of(item));
+
+            assertThrows(IllegalStateException.class, 
+                    () -> pratoService.excluirPrato(1L, 1L));
+        }
     }
 }
 

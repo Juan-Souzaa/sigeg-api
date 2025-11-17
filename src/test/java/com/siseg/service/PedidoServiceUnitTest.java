@@ -955,5 +955,71 @@ class PedidoServiceUnitTest {
                     .findByRestauranteId(restauranteNaoAprovado.getId(), pageable);
         }
     }
+
+    @Test
+    void deveCancelarPedidoComStatusCreated() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            pedido.setStatus(StatusPedido.CREATED);
+            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+
+            PedidoResponseDTO result = pedidoService.cancelarPedido(1L);
+
+            assertNotNull(result);
+            assertEquals(StatusPedido.CANCELED, pedido.getStatus());
+            verify(pedidoRepository, times(1)).save(pedido);
+        }
+    }
+
+    @Test
+    void deveCancelarPedidoComStatusConfirmed() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            pedido.setStatus(StatusPedido.CONFIRMED);
+            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
+            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+
+            PedidoResponseDTO result = pedidoService.cancelarPedido(1L);
+
+            assertNotNull(result);
+            assertEquals(StatusPedido.CANCELED, pedido.getStatus());
+            verify(pedidoRepository, times(1)).save(pedido);
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoPedidoNaoPodeSerCancelado() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            pedido.setStatus(StatusPedido.PREPARING);
+            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+
+            assertThrows(IllegalStateException.class, 
+                    () -> pedidoService.cancelarPedido(1L));
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoPedidoJaSaiuParaEntrega() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            pedido.setStatus(StatusPedido.OUT_FOR_DELIVERY);
+            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
+
+            assertThrows(IllegalStateException.class, 
+                    () -> pedidoService.cancelarPedido(1L));
+        }
+    }
 }
 

@@ -1,8 +1,10 @@
 package com.siseg.service;
 
+import com.siseg.dto.AtualizarSenhaDTO;
 import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.dto.cliente.ClienteRequestDTO;
 import com.siseg.dto.cliente.ClienteResponseDTO;
+import com.siseg.dto.cliente.ClienteUpdateDTO;
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Cliente;
@@ -10,6 +12,7 @@ import com.siseg.model.Role;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.ERole;
 import com.siseg.repository.ClienteRepository;
+import com.siseg.repository.PedidoRepository;
 import com.siseg.repository.RoleRepository;
 import com.siseg.repository.UserRepository;
 import com.siseg.util.SecurityUtils;
@@ -54,6 +57,9 @@ class ClienteServiceUnitTest {
 
     @Mock
     private EnderecoService enderecoService;
+
+    @Mock
+    private PedidoRepository pedidoRepository;
 
     @InjectMocks
     private ClienteService clienteService;
@@ -260,6 +266,108 @@ class ClienteServiceUnitTest {
             assertEquals(1, result.getTotalElements());
             verify(clienteRepository, times(1)).findByUserId(user.getId(), pageable);
             verify(clienteRepository, never()).findAll(any(Pageable.class));
+        }
+    }
+
+    @Test
+    void deveAtualizarClienteComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            ClienteUpdateDTO updateDTO = new ClienteUpdateDTO();
+            updateDTO.setNome("Cliente Atualizado");
+            updateDTO.setEmail("cliente.atualizado@teste.com");
+            updateDTO.setTelefone("(11) 99999-8888");
+
+            when(clienteRepository.findById(1L)).thenReturn(Optional.of(cliente));
+            when(clienteRepository.save(any(Cliente.class))).thenReturn(cliente);
+            when(userRepository.save(any(User.class))).thenReturn(user);
+            when(enderecoService.buscarEnderecoPrincipalCliente(1L)).thenReturn(Optional.empty());
+            when(modelMapper.map(any(Cliente.class), eq(ClienteResponseDTO.class))).thenReturn(clienteResponseDTO);
+
+            ClienteResponseDTO result = clienteService.atualizarCliente(1L, updateDTO);
+
+            assertNotNull(result);
+            assertEquals("Cliente Atualizado", cliente.getNome());
+            assertEquals("cliente.atualizado@teste.com", cliente.getEmail());
+            verify(clienteRepository, times(1)).save(cliente);
+            verify(userRepository, times(1)).save(user);
+        }
+    }
+
+    @Test
+    void deveExcluirClienteComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            cliente.setAtivo(true);
+            when(clienteRepository.findById(1L)).thenReturn(Optional.of(cliente));
+            when(pedidoRepository.existsByClienteIdAndStatusIn(eq(1L), anyList())).thenReturn(false);
+            when(clienteRepository.save(any(Cliente.class))).thenReturn(cliente);
+
+            clienteService.excluirCliente(1L);
+
+            assertFalse(cliente.getAtivo());
+            verify(clienteRepository, times(1)).save(cliente);
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoClienteTemPedidosEmAndamento() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            when(clienteRepository.findById(1L)).thenReturn(Optional.of(cliente));
+            when(pedidoRepository.existsByClienteIdAndStatusIn(eq(1L), anyList())).thenReturn(true);
+
+            assertThrows(IllegalStateException.class, 
+                    () -> clienteService.excluirCliente(1L));
+        }
+    }
+
+    @Test
+    void deveAtualizarSenhaComSucesso() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            AtualizarSenhaDTO dto = new AtualizarSenhaDTO();
+            dto.setSenhaAtual("senha123");
+            dto.setNovaSenha("novaSenha456");
+
+            user.setPassword("encodedOldPassword");
+            when(clienteRepository.findById(1L)).thenReturn(Optional.of(cliente));
+            when(passwordEncoder.matches("senha123", "encodedOldPassword")).thenReturn(true);
+            when(passwordEncoder.encode("novaSenha456")).thenReturn("encodedNewPassword");
+            when(userRepository.save(any(User.class))).thenReturn(user);
+
+            clienteService.atualizarSenha(1L, dto);
+
+            verify(passwordEncoder, times(1)).matches("senha123", "encodedOldPassword");
+            verify(passwordEncoder, times(1)).encode("novaSenha456");
+            verify(userRepository, times(1)).save(user);
+        }
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoSenhaAtualIncorreta() {
+        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
+            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+            AtualizarSenhaDTO dto = new AtualizarSenhaDTO();
+            dto.setSenhaAtual("senhaErrada");
+            dto.setNovaSenha("novaSenha456");
+
+            user.setPassword("encodedOldPassword");
+            when(clienteRepository.findById(1L)).thenReturn(Optional.of(cliente));
+            when(passwordEncoder.matches("senhaErrada", "encodedOldPassword")).thenReturn(false);
+
+            assertThrows(IllegalArgumentException.class, 
+                    () -> clienteService.atualizarSenha(1L, dto));
         }
     }
 }

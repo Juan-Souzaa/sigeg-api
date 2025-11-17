@@ -5,6 +5,7 @@ import com.siseg.dto.EnderecoResponseDTO;
 import com.siseg.mapper.EnderecoMapper;
 import com.siseg.model.Cliente;
 import com.siseg.model.Endereco;
+import com.siseg.dto.EnderecoCepResponseDTO;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
 import com.siseg.repository.ClienteRepository;
@@ -260,6 +261,34 @@ class EnderecoServiceUnitTest {
         verify(enderecoRepository).delete(enderecoPrincipal);
         verify(enderecoRepository).save(enderecoSecundario);
         assertTrue(enderecoSecundario.getPrincipal());
+    }
+
+    @Test
+    void deveBuscarEnderecoPorCepComSucesso() {
+        EnderecoCepResponseDTO dto = new EnderecoCepResponseDTO();
+        dto.setLogradouro("Rua Teste");
+        dto.setBairro("Centro");
+        dto.setCidade("São Paulo");
+        dto.setEstado("SP");
+        dto.setCep("01310100");
+
+        when(geocodingService.buscarEnderecoPorCep("01310100")).thenReturn(java.util.Optional.of(dto));
+
+        EnderecoCepResponseDTO result = enderecoService.buscarEnderecoPorCep("01310100");
+
+        assertNotNull(result);
+        assertEquals("Rua Teste", result.getLogradouro());
+        assertEquals("São Paulo", result.getCidade());
+        assertEquals("SP", result.getEstado());
+        verify(geocodingService, times(1)).buscarEnderecoPorCep("01310100");
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoCepNaoEncontrado() {
+        when(geocodingService.buscarEnderecoPorCep("00000000")).thenReturn(java.util.Optional.empty());
+
+        assertThrows(com.siseg.exception.ResourceNotFoundException.class, 
+                () -> enderecoService.buscarEnderecoPorCep("00000000"));
     }
 
 }
