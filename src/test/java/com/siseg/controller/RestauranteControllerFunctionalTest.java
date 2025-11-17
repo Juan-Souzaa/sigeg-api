@@ -71,10 +71,10 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante de Teste");
         requestDTO.setEmail("teste@restaurante.com");
         requestDTO.setTelefone("(11) 99999-9999");
+        requestDTO.setPassword("123456");
         requestDTO.setEndereco(criarEnderecoDTO("Rua Teste", "123"));
 
         mockMvc.perform(post("/api/restaurantes")
-                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO)))
                 .andDo(print())
@@ -94,7 +94,6 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setTelefone("(11) 99999-9999");
 
         mockMvc.perform(post("/api/restaurantes")
-                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO)))
                 .andDo(print())
@@ -122,10 +121,10 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante para Listagem");
         requestDTO.setEmail("listagem@restaurante.com");
         requestDTO.setTelefone("(11) 88888-8888");
+        requestDTO.setPassword("123456");
         requestDTO.setEndereco(criarEnderecoDTO("Rua Listagem", "456"));
 
         mockMvc.perform(post("/api/restaurantes")
-                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk());
@@ -147,10 +146,10 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante para Busca");
         requestDTO.setEmail("busca@restaurante.com");
         requestDTO.setTelefone("(11) 77777-7777");
+        requestDTO.setPassword("123456");
         requestDTO.setEndereco(criarEnderecoDTO("Rua Busca", "789"));
 
         String response = mockMvc.perform(post("/api/restaurantes")
-                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
@@ -178,10 +177,10 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante para Aprovar");
         requestDTO.setEmail("aprovar@restaurante.com");
         requestDTO.setTelefone("(11) 66666-6666");
+        requestDTO.setPassword("123456");
         requestDTO.setEndereco(criarEnderecoDTO("Rua Aprovar", "101"));
 
         String response = mockMvc.perform(post("/api/restaurantes")
-                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
@@ -208,10 +207,10 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante para Rejeitar");
         requestDTO.setEmail("rejeitar@restaurante.com");
         requestDTO.setTelefone("(11) 55555-5555");
+        requestDTO.setPassword("123456");
         requestDTO.setEndereco(criarEnderecoDTO("Rua Rejeitar", "202"));
 
         String response = mockMvc.perform(post("/api/restaurantes")
-                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())
@@ -238,10 +237,10 @@ class RestauranteControllerFunctionalTest {
         requestDTO.setNome("Restaurante para Teste Admin");
         requestDTO.setEmail("admin-test@restaurante.com");
         requestDTO.setTelefone("(11) 44444-4444");
+        requestDTO.setPassword("123456");
         requestDTO.setEndereco(criarEnderecoDTO("Rua Admin Test", "303"));
 
         String response = mockMvc.perform(post("/api/restaurantes")
-                .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO)))
                 .andExpect(status().isOk())

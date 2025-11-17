@@ -11,10 +11,13 @@ import com.siseg.model.Prato;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.StatusRestaurante;
+import com.siseg.model.Role;
+import com.siseg.model.enumerations.ERole;
 import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.PedidoRepository;
 import com.siseg.repository.PratoRepository;
 import com.siseg.repository.RestauranteRepository;
+import com.siseg.repository.RoleRepository;
 import com.siseg.repository.UserRepository;
 import com.siseg.util.SecurityUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,6 +64,9 @@ class RestauranteServiceUnitTest {
     private UserRepository userRepository;
 
     @Mock
+    private RoleRepository roleRepository;
+
+    @Mock
     private PedidoRepository pedidoRepository;
 
     @Mock
@@ -94,6 +100,7 @@ class RestauranteServiceUnitTest {
         restauranteRequestDTO.setNome("Restaurante de Teste");
         restauranteRequestDTO.setEmail("teste@restaurante.com");
         restauranteRequestDTO.setTelefone("(11) 99999-9999");
+        restauranteRequestDTO.setPassword("123456");
         restauranteRequestDTO.setEndereco(enderecoDTO);
 
         restauranteResponseDTO = new RestauranteResponseDTO();
@@ -255,32 +262,36 @@ class RestauranteServiceUnitTest {
     @Test
     void deveCriarRestauranteSemCoordenadasSeGeocodificacaoFalhar() {
         // Given
-        User mockUser = new User();
-        mockUser.setId(1L);
-        mockUser.setUsername("testuser");
+        User savedUser = new User();
+        savedUser.setId(1L);
+        savedUser.setUsername("teste@restaurante.com");
+        
+        Role restauranteRole = new Role();
+        restauranteRole.setId(1L);
+        restauranteRole.setRoleName(ERole.ROLE_RESTAURANTE);
         
         com.siseg.model.Endereco endereco = new com.siseg.model.Endereco();
         endereco.setId(1L);
         
+        when(userRepository.findByUsername(restauranteRequestDTO.getEmail())).thenReturn(Optional.empty());
+        when(restauranteRepository.findByEmail(restauranteRequestDTO.getEmail())).thenReturn(Optional.empty());
+        when(roleRepository.findByRoleName(ERole.ROLE_RESTAURANTE)).thenReturn(Optional.of(restauranteRole));
+        when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
+        when(userRepository.save(any(User.class))).thenReturn(savedUser);
         when(modelMapper.map(restauranteRequestDTO, Restaurante.class)).thenReturn(restaurante);
         when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
         when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
         when(enderecoService.criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class))).thenReturn(endereco);
         when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
+        RestauranteResponseDTO result = restauranteService.criarRestaurante(restauranteRequestDTO);
 
-            RestauranteResponseDTO result = restauranteService.criarRestaurante(restauranteRequestDTO);
-
-            // Then
-            assertNotNull(result);
-            // Restaurante deve ser criado mesmo sem coordenadas
-            verify(restauranteRepository, times(1)).save(argThat(r -> 
-                r.getUser() != null && r.getUser().getId().equals(mockUser.getId())
-            ));
-            verify(enderecoService, times(1)).criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class));
-        }
+        // Then
+        assertNotNull(result);
+        // Restaurante deve ser criado mesmo sem coordenadas
+        verify(userRepository, times(1)).save(any(User.class));
+        verify(restauranteRepository, times(1)).save(any(Restaurante.class));
+        verify(enderecoService, times(1)).criarEndereco(any(EnderecoRequestDTO.class), any(Restaurante.class));
     }
 
     @Test
@@ -421,12 +432,21 @@ class RestauranteServiceUnitTest {
 
     @Test
     void deveCriarRestauranteComRaioEntrega() {
-        User mockUser = new User();
-        mockUser.setId(1L);
-        mockUser.setUsername("testuser");
+        User savedUser = new User();
+        savedUser.setId(1L);
+        savedUser.setUsername("teste@restaurante.com");
+        
+        Role restauranteRole = new Role();
+        restauranteRole.setId(1L);
+        restauranteRole.setRoleName(ERole.ROLE_RESTAURANTE);
         
         restauranteRequestDTO.setRaioEntregaKm(new BigDecimal("15.00"));
         
+        when(userRepository.findByUsername(restauranteRequestDTO.getEmail())).thenReturn(Optional.empty());
+        when(restauranteRepository.findByEmail(restauranteRequestDTO.getEmail())).thenReturn(Optional.empty());
+        when(roleRepository.findByRoleName(ERole.ROLE_RESTAURANTE)).thenReturn(Optional.of(restauranteRole));
+        when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
+        when(userRepository.save(any(User.class))).thenReturn(savedUser);
         when(modelMapper.map(restauranteRequestDTO, Restaurante.class)).thenReturn(restaurante);
         when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
         when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
@@ -434,25 +454,30 @@ class RestauranteServiceUnitTest {
                 .thenReturn(new Endereco());
         when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
+        restauranteService.criarRestaurante(restauranteRequestDTO);
 
-            restauranteService.criarRestaurante(restauranteRequestDTO);
-
-            verify(restauranteRepository, times(1)).save(argThat(r -> 
-                r.getRaioEntregaKm() != null && r.getRaioEntregaKm().compareTo(new BigDecimal("15.00")) == 0
-            ));
-        }
+        verify(restauranteRepository, times(1)).save(argThat(r -> 
+            r.getRaioEntregaKm() != null && r.getRaioEntregaKm().compareTo(new BigDecimal("15.00")) == 0
+        ));
     }
 
     @Test
     void deveCriarRestauranteComRaioPadraoQuandoNaoInformado() {
-        User mockUser = new User();
-        mockUser.setId(1L);
-        mockUser.setUsername("testuser");
+        User savedUser = new User();
+        savedUser.setId(1L);
+        savedUser.setUsername("teste@restaurante.com");
+        
+        Role restauranteRole = new Role();
+        restauranteRole.setId(1L);
+        restauranteRole.setRoleName(ERole.ROLE_RESTAURANTE);
         
         restauranteRequestDTO.setRaioEntregaKm(null);
         
+        when(userRepository.findByUsername(restauranteRequestDTO.getEmail())).thenReturn(Optional.empty());
+        when(restauranteRepository.findByEmail(restauranteRequestDTO.getEmail())).thenReturn(Optional.empty());
+        when(roleRepository.findByRoleName(ERole.ROLE_RESTAURANTE)).thenReturn(Optional.of(restauranteRole));
+        when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
+        when(userRepository.save(any(User.class))).thenReturn(savedUser);
         when(modelMapper.map(restauranteRequestDTO, Restaurante.class)).thenReturn(restaurante);
         when(restauranteRepository.save(any(Restaurante.class))).thenReturn(restaurante);
         when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
@@ -460,15 +485,11 @@ class RestauranteServiceUnitTest {
                 .thenReturn(new Endereco());
         when(restauranteMapper.toResponseDTO(any(Restaurante.class))).thenReturn(restauranteResponseDTO);
 
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(mockUser);
+        restauranteService.criarRestaurante(restauranteRequestDTO);
 
-            restauranteService.criarRestaurante(restauranteRequestDTO);
-
-            verify(restauranteRepository, times(1)).save(argThat(r -> 
-                r.getRaioEntregaKm() != null && r.getRaioEntregaKm().compareTo(new BigDecimal("10.00")) == 0
-            ));
-        }
+        verify(restauranteRepository, times(1)).save(argThat(r -> 
+            r.getRaioEntregaKm() != null && r.getRaioEntregaKm().compareTo(new BigDecimal("10.00")) == 0
+        ));
     }
 
     @Test
