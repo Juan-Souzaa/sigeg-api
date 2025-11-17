@@ -3,9 +3,12 @@ package com.siseg.dto.restaurante;
 import com.siseg.dto.EnderecoRequestDTO;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+
+import java.math.BigDecimal;
 
 @Data
 public class RestauranteRequestDTO {
@@ -22,4 +25,7 @@ public class RestauranteRequestDTO {
     @Email(message = "Email deve ser válido")
     @NotBlank(message = "Email é obrigatório")
     private String email;
+
+    @DecimalMin(value = "0.1", message = "Raio de entrega deve ser no mínimo 0.1 km")
+    private BigDecimal raioEntregaKm;
 }

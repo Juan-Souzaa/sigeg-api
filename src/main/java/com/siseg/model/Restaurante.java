@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -42,6 +43,9 @@ public class Restaurante {
 
     @Column(nullable = false)
     private Boolean ativo = true;
+
+    @Column(precision = 5, scale = 2)
+    private BigDecimal raioEntregaKm;
 
     @Column(nullable = false, updatable = false)
     private Instant criadoEm = Instant.now();

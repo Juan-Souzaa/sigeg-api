@@ -12,6 +12,7 @@ public class RestauranteBuscaDTO {
     private String telefone;
     private BigDecimal distanciaKm;
     private Integer tempoEstimadoMinutos;
+    private BigDecimal raioEntregaKm;
     private BigDecimal mediaAvaliacao;
     private Long totalAvaliacoes;
 }
