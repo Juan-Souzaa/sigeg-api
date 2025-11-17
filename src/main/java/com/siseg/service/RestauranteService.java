@@ -26,8 +26,16 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.siseg.util.DistanceCalculator;
+import com.siseg.model.Endereco;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -68,6 +76,12 @@ public class RestauranteService {
         restaurante.setStatus(StatusRestaurante.PENDING_APPROVAL);
         restaurante.setUser(currentUser);
         
+        if (dto.getRaioEntregaKm() != null) {
+            restaurante.setRaioEntregaKm(dto.getRaioEntregaKm());
+        } else {
+            restaurante.setRaioEntregaKm(new BigDecimal("10.00"));
+        }
+        
         Restaurante saved = restauranteRepository.save(restaurante);
         
         enderecoService.criarEndereco(dto.getEndereco(), saved);
@@ -95,6 +109,10 @@ public class RestauranteService {
         restaurante.setNome(dto.getNome());
         restaurante.setEmail(dto.getEmail());
         restaurante.setTelefone(dto.getTelefone());
+        
+        if (dto.getRaioEntregaKm() != null) {
+            restaurante.setRaioEntregaKm(dto.getRaioEntregaKm());
+        }
         
         if (restaurante.getUser() != null) {
             restaurante.getUser().setUsername(dto.getEmail());
@@ -143,17 +161,150 @@ public class RestauranteService {
     
     @Transactional(readOnly = true)
     public Page<RestauranteBuscaDTO> buscarRestaurantes(String cozinha, Pageable pageable) {
+        Cliente cliente = buscarClienteAutenticado();
+        List<Restaurante> restaurantesAprovados = buscarRestaurantesAprovados(cozinha);
+        Optional<Endereco> enderecoCliente = buscarEnderecoCliente(cliente);
+        
+        List<RestauranteBuscaDTO> dtos = processarRestaurantes(restaurantesAprovados, cliente, enderecoCliente);
+        List<RestauranteBuscaDTO> ordenados = ordenarPorDistancia(dtos);
+        
+        return aplicarPaginacao(ordenados, pageable);
+    }
+    
+    private Cliente buscarClienteAutenticado() {
         User currentUser = SecurityUtils.getCurrentUser();
-        Cliente cliente = clienteRepository.findByUserId(currentUser.getId())
-                .orElse(null);
+        return clienteRepository.findByUserId(currentUser.getId()).orElse(null);
+    }
+    
+    private List<Restaurante> buscarRestaurantesAprovados(String cozinha) {
+        return restauranteRepository.findAll().stream()
+                .filter(r -> r.getStatus() == StatusRestaurante.APPROVED && Boolean.TRUE.equals(r.getAtivo()))
+                .filter(r -> filtrarPorCozinha(r, cozinha))
+                .collect(Collectors.toList());
+    }
+    
+    private boolean filtrarPorCozinha(Restaurante restaurante, String cozinha) {
+        return cozinha == null || cozinha.isEmpty() || 
+               restaurante.getNome().toLowerCase().contains(cozinha.toLowerCase());
+    }
+    
+    private Optional<Endereco> buscarEnderecoCliente(Cliente cliente) {
+        if (cliente == null) {
+            return Optional.empty();
+        }
+        return enderecoService.buscarEnderecoPrincipalCliente(cliente.getId());
+    }
+    
+    private List<RestauranteBuscaDTO> processarRestaurantes(List<Restaurante> restaurantes, 
+                                                             Cliente cliente, 
+                                                             Optional<Endereco> enderecoCliente) {
+        List<RestauranteBuscaDTO> dtos = new ArrayList<>();
+        BigDecimal raioPadrao = new BigDecimal("10.00");
         
-        Page<Restaurante> restaurantes = restauranteRepository.buscarRestaurantesAprovados(cozinha, pageable);
+        for (Restaurante restaurante : restaurantes) {
+            if (deveIncluirRestaurante(restaurante, enderecoCliente, raioPadrao)) {
+                RestauranteBuscaDTO dto = criarDTOComDistancia(restaurante, cliente, enderecoCliente);
+                dtos.add(dto);
+            }
+        }
         
-        List<RestauranteBuscaDTO> dtos = restaurantes.getContent().stream()
-                .map(r -> restauranteMapper.toRestauranteBuscaDTO(r, cliente))
-                .toList();
+        return dtos;
+    }
+    
+    private boolean deveIncluirRestaurante(Restaurante restaurante, 
+                                            Optional<Endereco> enderecoCliente, 
+                                            BigDecimal raioPadrao) {
+        if (!enderecoCliente.isPresent()) {
+            return true;
+        }
         
-        return new PageImpl<>(dtos, pageable, restaurantes.getTotalElements());
+        Optional<Endereco> enderecoRestaurante = enderecoService.buscarEnderecoPrincipalRestaurante(restaurante.getId());
+        if (!enderecoRestaurante.isPresent()) {
+            return true;
+        }
+        
+        BigDecimal distancia = calcularDistancia(enderecoCliente.get(), enderecoRestaurante.get());
+        if (distancia == null) {
+            return true;
+        }
+        
+        BigDecimal raioRestaurante = obterRaioEntrega(restaurante, raioPadrao);
+        return distancia.compareTo(raioRestaurante) <= 0;
+    }
+    
+    private BigDecimal calcularDistancia(Endereco enderecoCliente, Endereco enderecoRestaurante) {
+        if (!temCoordenadasValidas(enderecoCliente) || !temCoordenadasValidas(enderecoRestaurante)) {
+            return null;
+        }
+        
+        return DistanceCalculator.calculateDistance(
+            enderecoCliente.getLatitude(), enderecoCliente.getLongitude(),
+            enderecoRestaurante.getLatitude(), enderecoRestaurante.getLongitude()
+        );
+    }
+    
+    private boolean temCoordenadasValidas(Endereco endereco) {
+        return endereco.getLatitude() != null && endereco.getLongitude() != null;
+    }
+    
+    private BigDecimal obterRaioEntrega(Restaurante restaurante, BigDecimal raioPadrao) {
+        return restaurante.getRaioEntregaKm() != null ? restaurante.getRaioEntregaKm() : raioPadrao;
+    }
+    
+    private RestauranteBuscaDTO criarDTOComDistancia(Restaurante restaurante, 
+                                                       Cliente cliente, 
+                                                       Optional<Endereco> enderecoCliente) {
+        RestauranteBuscaDTO dto = restauranteMapper.toRestauranteBuscaDTO(restaurante, cliente);
+        
+        if (enderecoCliente.isPresent()) {
+            Optional<Endereco> enderecoRestaurante = enderecoService.buscarEnderecoPrincipalRestaurante(restaurante.getId());
+            if (enderecoRestaurante.isPresent()) {
+                BigDecimal distancia = calcularDistancia(enderecoCliente.get(), enderecoRestaurante.get());
+                if (distancia != null) {
+                    dto.setDistanciaKm(distancia);
+                }
+            }
+        }
+        
+        return dto;
+    }
+    
+    private List<RestauranteBuscaDTO> ordenarPorDistancia(List<RestauranteBuscaDTO> dtos) {
+        BigDecimal distanciaMaxima = new BigDecimal("999999");
+        
+        dtos.sort(Comparator
+                .comparing((RestauranteBuscaDTO dto) -> 
+                    dto.getDistanciaKm() != null ? dto.getDistanciaKm() : distanciaMaxima)
+                .thenComparing(RestauranteBuscaDTO::getNome));
+        
+        return dtos;
+    }
+    
+    private Page<RestauranteBuscaDTO> aplicarPaginacao(List<RestauranteBuscaDTO> dtos, Pageable pageable) {
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), dtos.size());
+        List<RestauranteBuscaDTO> paginatedDtos = start < dtos.size() ? 
+                dtos.subList(start, end) : new ArrayList<>();
+        
+        return new PageImpl<>(paginatedDtos, pageable, dtos.size());
+    }
+    
+    public void atualizarRaioEntrega(Long id, BigDecimal raioEntregaKm) {
+        Restaurante restaurante = restauranteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + id));
+        
+        SecurityUtils.validateRestauranteOwnership(restaurante);
+        
+        if (raioEntregaKm.compareTo(new BigDecimal("0.1")) < 0) {
+            throw new IllegalArgumentException("Raio de entrega deve ser no mínimo 0.1 km");
+        }
+        
+        if (raioEntregaKm.compareTo(new BigDecimal("50.0")) > 0) {
+            throw new IllegalArgumentException("Raio de entrega não pode ser maior que 50 km");
+        }
+        
+        restaurante.setRaioEntregaKm(raioEntregaKm);
+        restauranteRepository.save(restaurante);
     }
     
     public void excluirRestaurante(Long id) {

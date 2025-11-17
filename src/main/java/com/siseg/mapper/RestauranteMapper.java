@@ -37,6 +37,9 @@ public class RestauranteMapper {
                 endereco -> dto.setEndereco(endereco.toGeocodingString()),
                 () -> dto.setEndereco(null)
             );
+        if (restaurante.getRaioEntregaKm() == null) {
+            dto.setRaioEntregaKm(new BigDecimal("10.00"));
+        }
         return dto;
     }
     
@@ -79,6 +82,12 @@ public class RestauranteMapper {
                 }
             }
         }
+        
+        BigDecimal raioEntrega = restaurante.getRaioEntregaKm();
+        if (raioEntrega == null) {
+            raioEntrega = new BigDecimal("10.00");
+        }
+        dto.setRaioEntregaKm(raioEntrega);
         
         BigDecimal mediaAvaliacao = avaliacaoRepository.calcularMediaNotaRestaurante(restaurante.getId());
         long totalAvaliacoes = avaliacaoRepository.countByRestauranteId(restaurante.getId());
