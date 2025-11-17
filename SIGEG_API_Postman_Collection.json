@@ -283,10 +283,6 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
-							},
-							{
-								"key": "Authorization",
-								"value": "Bearer {{jwt_token}}"
 							}
 						],
 						"body": {
@@ -298,7 +294,7 @@
 								}
 							}
 						},
-						"description": "Cria um novo cliente.\n\nEndereço Obrigatório:\n- O endereço é obrigatório e deve ser enviado como objeto com os seguintes campos:\n  - logradouro (obrigatório): Ex: \"Rua das Flores\"\n  - numero (obrigatório): Ex: \"123\"\n  - complemento (opcional): Ex: \"Apto 45\"\n  - bairro (obrigatório): Ex: \"Centro\"\n  - cidade (obrigatório): Ex: \"São Paulo\"\n  - estado (obrigatório): Ex: \"SP\" (2 letras maiúsculas)\n  - cep (obrigatório): Ex: \"01310100\" ou \"01310-100\" (8 dígitos)\n  - principal (opcional): true/false (primeiro endereço vira principal automaticamente)\n\nGeocodificação Automática:\n- As coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap\n- O endereço é formatado e geocodificado após a criação\n\nDICA: Após cadastrar, as credenciais (email e senha) são salvas automaticamente no environment para facilitar o login posterior.",
+						"description": "Cria um novo cliente.\n\nENDPOINT PÚBLICO - Não requer autenticação.\n\nEndereço Obrigatório:\n- O endereço é obrigatório e deve ser enviado como objeto com os seguintes campos:\n  - logradouro (obrigatório): Ex: \"Rua das Flores\"\n  - numero (obrigatório): Ex: \"123\"\n  - complemento (opcional): Ex: \"Apto 45\"\n  - bairro (obrigatório): Ex: \"Centro\"\n  - cidade (obrigatório): Ex: \"São Paulo\"\n  - estado (obrigatório): Ex: \"SP\" (2 letras maiúsculas)\n  - cep (obrigatório): Ex: \"01310100\" ou \"01310-100\" (8 dígitos)\n  - principal (opcional): true/false (primeiro endereço vira principal automaticamente)\n\nGeocodificação Automática:\n- As coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap\n- O endereço é formatado e geocodificado após a criação\n\nDICA: Após cadastrar, as credenciais (email e senha) são salvas automaticamente no environment para facilitar o login posterior.",
 						"url": {
 							"raw": "{{baseUrl}}/api/clientes",
 							"host": [
@@ -528,10 +524,6 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
-							},
-							{
-								"key": "Authorization",
-								"value": "Bearer {{jwt_token}}"
 							}
 						],
 						"body": {
@@ -543,7 +535,7 @@
 								}
 							}
 						},
-						"description": "Cria um novo restaurante.\n\nEndereço Obrigatório:\n- O endereço é obrigatório e deve ser enviado como objeto com os seguintes campos:\n  - logradouro (obrigatório): Ex: \"Avenida Paulista\"\n  - numero (obrigatório): Ex: \"1578\"\n  - complemento (opcional): Ex: \"\" ou \"Sala 10\"\n  - bairro (obrigatório): Ex: \"Bela Vista\"\n  - cidade (obrigatório): Ex: \"São Paulo\"\n  - estado (obrigatório): Ex: \"SP\" (2 letras maiúsculas)\n  - cep (obrigatório): Ex: \"01310100\" ou \"01310-100\" (8 dígitos)\n  - principal (opcional): true/false (primeiro endereço vira principal automaticamente)\n\nGeocodificação Automática:\n- As coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap\n- O endereço é formatado e geocodificado após a criação\n- O restaurante é associado automaticamente ao usuário autenticado",
+						"description": "Cria um novo restaurante.\n\nENDPOINT PÚBLICO - Não requer autenticação.\n\nIMPORTANTE:\n- O restaurante é criado com status PENDING_APPROVAL\n- É necessário que um ADMIN aprove o restaurante antes que ele possa operar\n- Após a criação, um usuário é criado automaticamente com as credenciais fornecidas\n\nEndereço Obrigatório:\n- O endereço é obrigatório e deve ser enviado como objeto com os seguintes campos:\n  - logradouro (obrigatório): Ex: \"Avenida Paulista\"\n  - numero (obrigatório): Ex: \"1578\"\n  - complemento (opcional): Ex: \"\" ou \"Sala 10\"\n  - bairro (obrigatório): Ex: \"Bela Vista\"\n  - cidade (obrigatório): Ex: \"São Paulo\"\n  - estado (obrigatório): Ex: \"SP\" (2 letras maiúsculas)\n  - cep (obrigatório): Ex: \"01310100\" ou \"01310-100\" (8 dígitos)\n  - principal (opcional): true/false (primeiro endereço vira principal automaticamente)\n\nGeocodificação Automática:\n- As coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap\n- O endereço é formatado e geocodificado após a criação",
 						"url": {
 							"raw": "{{baseUrl}}/api/restaurantes",
 							"host": [
@@ -2287,10 +2279,6 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
-							},
-							{
-								"key": "Authorization",
-								"value": "Bearer {{jwt_token}}"
 							}
 						],
 						"body": {
@@ -2307,7 +2295,7 @@
 								"entregadores"
 							]
 						},
-						"description": "Cadastra um novo entregador com status PENDING_APPROVAL. Requer aprovação do admin.\n\nDICA: Após cadastrar, as credenciais (email e senha) são salvas automaticamente no environment para facilitar o login posterior."
+						"description": "Cadastra um novo entregador.\n\nENDPOINT PÚBLICO - Não requer autenticação.\n\nIMPORTANTE:\n- O entregador é criado com status PENDING_APPROVAL\n- É necessário que um ADMIN aprove o entregador antes que ele possa aceitar pedidos\n- Após a criação, um usuário é criado automaticamente com as credenciais fornecidas\n\nDICA: Após cadastrar, as credenciais (email e senha) são salvas automaticamente no environment para facilitar o login posterior."
 					},
 					"event": [
 						{
