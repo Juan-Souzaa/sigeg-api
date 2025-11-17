@@ -1,5 +1,6 @@
 package com.siseg.service;
 
+import com.siseg.dto.EnderecoCepResponseDTO;
 import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.dto.EnderecoResponseDTO;
 import com.siseg.exception.ResourceNotFoundException;
@@ -376,6 +377,12 @@ public class EnderecoService {
         }
         
         return alterado;
+    }
+    
+    @Transactional(readOnly = true)
+    public EnderecoCepResponseDTO buscarEnderecoPorCep(String cep) {
+        return geocodingService.buscarEnderecoPorCep(cep)
+                .orElseThrow(() -> new ResourceNotFoundException("CEP não encontrado: " + cep));
     }
 }
 

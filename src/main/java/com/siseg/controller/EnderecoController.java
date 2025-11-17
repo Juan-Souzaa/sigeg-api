@@ -1,5 +1,6 @@
 package com.siseg.controller;
 
+import com.siseg.dto.EnderecoCepResponseDTO;
 import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.dto.EnderecoResponseDTO;
 import com.siseg.model.Cliente;
@@ -147,6 +148,13 @@ public class EnderecoController {
             @PathVariable Long enderecoId) {
         enderecoService.definirEnderecoPrincipalRestaurante(enderecoId, restauranteId);
         EnderecoResponseDTO response = enderecoService.buscarEnderecoPorIdRestaurante(enderecoId, restauranteId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/cep/{cep}")
+    @Operation(summary = "Buscar endereço completo pelo CEP")
+    public ResponseEntity<EnderecoCepResponseDTO> buscarEnderecoPorCep(@PathVariable String cep) {
+        EnderecoCepResponseDTO response = enderecoService.buscarEnderecoPorCep(cep);
         return ResponseEntity.ok(response);
     }
 }

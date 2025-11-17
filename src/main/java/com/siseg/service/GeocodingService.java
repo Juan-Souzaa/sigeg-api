@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import com.siseg.dto.EnderecoCepResponseDTO;
 import com.siseg.dto.geocoding.Coordinates;
 import com.siseg.dto.geocoding.NominatimResponse;
 import com.siseg.dto.geocoding.OsrmRoute;
@@ -94,7 +95,7 @@ public class GeocodingService {
         try {
             String enderecoCompleto = enderecoFormatado;
             if (endereco.getCep() != null && endereco.getCep().length() == 8) {
-                Optional<String> enderecoViaCep = buscarEnderecoPorCep(endereco.getCep());
+                Optional<String> enderecoViaCep = buscarEnderecoPorCepString(endereco.getCep());
                 if (enderecoViaCep.isPresent()) {
                     enderecoCompleto = construirEnderecoCompleto(enderecoViaCep.get(), endereco);
                     logger.info("Endereço encontrado via CEP: " + enderecoCompleto);
@@ -139,7 +140,7 @@ public class GeocodingService {
         return sb.toString();
     }
     
-    private Optional<String> buscarEnderecoPorCep(String cep) {
+    public Optional<EnderecoCepResponseDTO> buscarEnderecoPorCep(String cep) {
         try {
             String cepLimpo = cep.replaceAll("[^0-9]", "");
             
@@ -155,24 +156,13 @@ public class GeocodingService {
                     .block();
             
             if (response != null && response.getErro() == null && response.getLogradouro() != null) {
-                StringBuilder endereco = new StringBuilder();
-                endereco.append(response.getLogradouro());
-                
-                if (response.getBairro() != null && !response.getBairro().isEmpty()) {
-                    endereco.append(", ").append(response.getBairro());
-                }
-                
-                if (response.getLocalidade() != null && !response.getLocalidade().isEmpty()) {
-                    endereco.append(", ").append(response.getLocalidade());
-                }
-                
-                if (response.getUf() != null && !response.getUf().isEmpty()) {
-                    endereco.append(", ").append(response.getUf());
-                }
-                
-                endereco.append(", Brasil");
-                
-                return Optional.of(endereco.toString());
+                EnderecoCepResponseDTO dto = new EnderecoCepResponseDTO();
+                dto.setLogradouro(response.getLogradouro());
+                dto.setBairro(response.getBairro());
+                dto.setCidade(response.getLocalidade());
+                dto.setEstado(response.getUf());
+                dto.setCep(cepLimpo);
+                return Optional.of(dto);
             } else {
                 logger.warning("CEP não encontrado ou erro na resposta ViaCEP: " + cep);
                 return Optional.empty();
@@ -182,6 +172,32 @@ public class GeocodingService {
             logger.warning("Erro ao buscar CEP no ViaCEP: " + e.getMessage());
             return Optional.empty();
         }
+    }
+    
+    private Optional<String> buscarEnderecoPorCepString(String cep) {
+        Optional<EnderecoCepResponseDTO> dtoOpt = buscarEnderecoPorCep(cep);
+        if (dtoOpt.isPresent()) {
+            EnderecoCepResponseDTO dto = dtoOpt.get();
+            StringBuilder endereco = new StringBuilder();
+            endereco.append(dto.getLogradouro());
+            
+            if (dto.getBairro() != null && !dto.getBairro().isEmpty()) {
+                endereco.append(", ").append(dto.getBairro());
+            }
+            
+            if (dto.getCidade() != null && !dto.getCidade().isEmpty()) {
+                endereco.append(", ").append(dto.getCidade());
+            }
+            
+            if (dto.getEstado() != null && !dto.getEstado().isEmpty()) {
+                endereco.append(", ").append(dto.getEstado());
+            }
+            
+            endereco.append(", Brasil");
+            
+            return Optional.of(endereco.toString());
+        }
+        return Optional.empty();
     }
     
     private Optional<Coordinates> geocodeWithNominatim(String endereco) {
