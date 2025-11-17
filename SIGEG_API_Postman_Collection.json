@@ -2148,6 +2148,67 @@
 					}
 				},
 				{
+					"name": "Estornar Pagamento (Reembolso)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"motivo\": \"Reembolso solicitado pelo cliente\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/pagamentos/pedidos/{{pedido_id}}/reembolso",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pagamentos",
+								"pedidos",
+								"{{pedido_id}}",
+								"reembolso"
+							]
+						},
+						"description": "Estorna (reembolsa) um pagamento de um pedido.\n\nREQUISITOS:\n- Permissão: ADMIN ou RESTAURANTE\n- Pagamento deve estar com status PAID ou AUTHORIZED\n- Pagamento não pode já ter sido reembolsado\n- Para pagamentos eletrônicos (PIX/Cartão): requer integração com Asaas\n- Para pagamentos em dinheiro: reembolso é processado localmente\n\nCOMPORTAMENTO:\n- Status do pagamento muda para REFUNDED\n- Status do pedido muda para CANCELED\n- Campos atualizados: valorReembolsado, dataReembolso, asaasRefundId (se aplicável)\n\nRESPOSTAS:\n- 200 OK: Reembolso processado com sucesso\n- 400 Bad Request: Pagamento já foi reembolsado ou status inválido\n- 404 Not Found: Pedido ou pagamento não encontrado\n- 403 Forbidden: Sem permissão (requer ADMIN ou RESTAURANTE)"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.test(\"Status do pagamento é REFUNDED\", function () {",
+									"        pm.expect(response.status).to.eql(\"REFUNDED\");",
+									"    });",
+									"    console.log('Reembolso processado com sucesso!');",
+									"    console.log('Valor reembolsado:', response.valorReembolsado);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
 					"name": "Webhook Asaas (Simulação)",
 					"request": {
 						"method": "POST",
