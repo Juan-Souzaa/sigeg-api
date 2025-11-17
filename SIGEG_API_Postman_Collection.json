@@ -732,7 +732,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"nome\": \"Restaurante Atualizado\",\n  \"email\": \"restaurante.atualizado@teste.com\",\n  \"telefone\": \"(11) 88888-8888\"\n}",
+							"raw": "{\n  \"nome\": \"Restaurante Atualizado\",\n  \"email\": \"restaurante.atualizado@teste.com\",\n  \"telefone\": \"(11) 88888-8888\",\n  \"raioEntregaKm\": 12.50\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -750,7 +750,7 @@
 								"{{restaurante_id}}"
 							]
 						},
-						"description": "Atualiza os dados do restaurante (nome, email, telefone). Requer ownership do restaurante."
+						"description": "Atualiza os dados do restaurante (nome, email, telefone, raioEntregaKm). Requer ownership do restaurante.\n\nO campo raioEntregaKm é opcional e permite atualizar o raio de entrega junto com os outros dados."
 					}
 				},
 				{
@@ -775,6 +775,44 @@
 							]
 						},
 						"description": "Exclui um restaurante (soft delete). Não é possível excluir restaurantes com pedidos em andamento ou pratos ativos."
+					}
+				},
+				{
+					"name": "Atualizar Raio de Entrega",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"raioEntregaKm\": 15.00\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/raio-entrega",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"raio-entrega"
+							]
+						},
+						"description": "Atualiza o raio de entrega do restaurante.\n\nREQUISITOS:\n- Permissão: ADMIN ou RESTAURANTE (próprio restaurante)\n- Raio mínimo: 0.1 km\n- Raio máximo: 50 km\n- Se não configurado, o padrão é 10 km\n\nCOMPORTAMENTO:\n- O raio de entrega determina até que distância o restaurante aceita entregas\n- Na busca de restaurantes, apenas restaurantes dentro do raio configurado são retornados\n- A distância é calculada usando coordenadas reais (fórmula de Haversine)\n\nEXEMPLO:\n- Raio pequeno (5 km): Ideal para restaurantes locais\n- Raio médio (10-15 km): Padrão para maioria dos restaurantes\n- Raio grande (20-50 km): Para restaurantes com entrega ampla"
 					}
 				},
 				{
@@ -1551,7 +1589,8 @@
 									"value": "nome"
 								}
 							]
-						}
+						},
+						"description": "Busca restaurantes aprovados com ordenação por distância e filtro por raio de entrega.\n\nFUNCIONALIDADES:\n- Ordena restaurantes por distância (mais próximo primeiro)\n- Filtra automaticamente restaurantes dentro do raio de entrega configurado por cada restaurante\n- Se o restaurante não tiver raio configurado, usa 10km como padrão\n- Se o cliente não tiver endereço ou coordenadas, retorna todos os restaurantes sem ordenação por distância\n- Calcula distância usando coordenadas reais (fórmula de Haversine)\n- Retorna também tempo estimado de entrega e avaliações\n\nPARÂMETROS:\n- cozinha (opcional): Filtra por nome/tipo de cozinha\n- page, size, sort: Paginação padrão do Spring\n\nRESPOSTA:\n- Lista de restaurantes ordenados por distância\n- Cada restaurante inclui: distanciaKm, tempoEstimadoMinutos, raioEntregaKm, mediaAvaliacao"
 					}
 				},
 				{
