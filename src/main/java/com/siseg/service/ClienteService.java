@@ -1,14 +1,18 @@
 package com.siseg.service;
 
+import com.siseg.dto.AtualizarSenhaDTO;
 import com.siseg.dto.cliente.ClienteRequestDTO;
 import com.siseg.dto.cliente.ClienteResponseDTO;
+import com.siseg.dto.cliente.ClienteUpdateDTO;
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Cliente;
 import com.siseg.model.Role;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.ERole;
+import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.ClienteRepository;
+import com.siseg.repository.PedidoRepository;
 import com.siseg.repository.RoleRepository;
 import com.siseg.repository.UserRepository;
 import com.siseg.util.SecurityUtils;
@@ -20,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -32,16 +37,18 @@ public class ClienteService {
     private final PasswordEncoder passwordEncoder;
     private final ModelMapper modelMapper;
     private final EnderecoService enderecoService;
+    private final PedidoRepository pedidoRepository;
 
     public ClienteService(ClienteRepository clienteRepository, UserRepository userRepository, 
                          RoleRepository roleRepository, PasswordEncoder passwordEncoder, ModelMapper modelMapper,
-                         EnderecoService enderecoService) {
+                         EnderecoService enderecoService, PedidoRepository pedidoRepository) {
         this.clienteRepository = clienteRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.modelMapper = modelMapper;
         this.enderecoService = enderecoService;
+        this.pedidoRepository = pedidoRepository;
     }
 
     public ClienteResponseDTO criarCliente(ClienteRequestDTO dto) {
@@ -99,6 +106,66 @@ public class ClienteService {
                 () -> dto.setEndereco(null)
             );
         return dto;
+    }
+    
+    public ClienteResponseDTO atualizarCliente(Long id, ClienteUpdateDTO dto) {
+        Cliente cliente = clienteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + id));
+        
+        validateClienteOwnership(cliente);
+        
+        cliente.setNome(dto.getNome());
+        cliente.setEmail(dto.getEmail());
+        cliente.setTelefone(dto.getTelefone());
+        
+        if (cliente.getUser() != null) {
+            cliente.getUser().setUsername(dto.getEmail());
+            userRepository.save(cliente.getUser());
+        }
+        
+        Cliente saved = clienteRepository.save(cliente);
+        return toResponseDTO(saved);
+    }
+    
+    public void excluirCliente(Long id) {
+        Cliente cliente = clienteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + id));
+        
+        validateClienteOwnership(cliente);
+        
+        List<StatusPedido> statusesEmAndamento = List.of(
+            StatusPedido.CREATED,
+            StatusPedido.CONFIRMED,
+            StatusPedido.PREPARING,
+            StatusPedido.OUT_FOR_DELIVERY
+        );
+        
+        boolean temPedidosEmAndamento = pedidoRepository.existsByClienteIdAndStatusIn(id, statusesEmAndamento);
+        
+        if (temPedidosEmAndamento) {
+            throw new IllegalStateException("Não é possível excluir cliente com pedidos em andamento");
+        }
+        
+        cliente.setAtivo(false);
+        clienteRepository.save(cliente);
+    }
+    
+    public void atualizarSenha(Long id, AtualizarSenhaDTO dto) {
+        Cliente cliente = clienteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + id));
+        
+        validateClienteOwnership(cliente);
+        
+        if (cliente.getUser() == null) {
+            throw new ResourceNotFoundException("Usuário não encontrado para o cliente");
+        }
+        
+        if (!passwordEncoder.matches(dto.getSenhaAtual(), cliente.getUser().getPassword())) {
+            throw new IllegalArgumentException("Senha atual incorreta");
+        }
+        
+        cliente.getUser().setPassword(passwordEncoder.encode(dto.getNovaSenha()));
+        userRepository.save(cliente.getUser());
     }
     
     private void validateClienteOwnership(Cliente cliente) {

@@ -1,8 +1,9 @@
 package com.siseg.controller;
 
+import com.siseg.dto.AtualizarSenhaDTO;
 import com.siseg.dto.cliente.ClienteRequestDTO;
 import com.siseg.dto.cliente.ClienteResponseDTO;
-import com.siseg.model.Cliente;
+import com.siseg.dto.cliente.ClienteUpdateDTO;
 import com.siseg.service.ClienteService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,5 +43,30 @@ public class ClienteController {
     public ResponseEntity<Page<ClienteResponseDTO>> listarTodos(Pageable pageable) {
         Page<ClienteResponseDTO> response = clienteService.listarTodos(pageable);
         return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Atualizar cliente")
+    public ResponseEntity<ClienteResponseDTO> atualizarCliente(
+            @PathVariable Long id,
+            @Valid @RequestBody ClienteUpdateDTO dto) {
+        ClienteResponseDTO response = clienteService.atualizarCliente(id, dto);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Excluir cliente (soft delete)")
+    public ResponseEntity<Void> excluirCliente(@PathVariable Long id) {
+        clienteService.excluirCliente(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}/senha")
+    @Operation(summary = "Atualizar senha do cliente")
+    public ResponseEntity<Void> atualizarSenha(
+            @PathVariable Long id,
+            @Valid @RequestBody AtualizarSenhaDTO dto) {
+        clienteService.atualizarSenha(id, dto);
+        return ResponseEntity.noContent().build();
     }
 }
