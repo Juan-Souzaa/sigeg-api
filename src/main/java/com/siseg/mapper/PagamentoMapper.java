@@ -98,7 +98,7 @@ public class PagamentoMapper {
         AsaasCustomerRequestDTO request = new AsaasCustomerRequestDTO();
         request.setName(cliente.getNome());
         request.setEmail(cliente.getEmail());
-        request.setPhone(cliente.getTelefone());
+        request.setPhone(extrairTelefoneNumerico(cliente.getTelefone()));
         request.setCpfCnpj(cpfCnpj);
         return request;
     }
