@@ -154,5 +154,27 @@ public class SecurityUtils {
             throw new AccessDeniedException("Você não tem permissão para acessar este entregador");
         }
     }
+    
+    /**
+     * Valida se o usuário autenticado tem permissão para acessar o cliente.
+     * Permite acesso se o usuário for admin ou dono do cliente.
+     * @param cliente Cliente a ser validado
+     * @throws AccessDeniedException se o usuário não tiver permissão
+     */
+    public static void validateClienteOwnership(Cliente cliente) {
+        if (cliente == null) {
+            throw new AccessDeniedException("Cliente não encontrado");
+        }
+        
+        if (isAdmin()) {
+            return;
+        }
+        
+        User currentUser = getCurrentUser();
+        
+        if (cliente.getUser() == null || !cliente.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Você não tem permissão para acessar este cliente");
+        }
+    }
 }
 
