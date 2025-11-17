@@ -528,14 +528,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"nome\": \"Restaurante Teste\",\n  \"email\": \"teste@restaurante.com\",\n  \"telefone\": \"11999999999\",\n  \"endereco\": {\n    \"logradouro\": \"Avenida Paulista\",\n    \"numero\": \"1578\",\n    \"complemento\": \"\",\n    \"bairro\": \"Bela Vista\",\n    \"cidade\": \"São Paulo\",\n    \"estado\": \"SP\",\n    \"cep\": \"01310100\",\n    \"principal\": true\n  }\n}",
+							"raw": "{\n  \"nome\": \"Restaurante Teste\",\n  \"email\": \"teste@restaurante.com\",\n  \"telefone\": \"11999999999\",\n  \"password\": \"123456\",\n  \"endereco\": {\n    \"logradouro\": \"Avenida Paulista\",\n    \"numero\": \"1578\",\n    \"complemento\": \"\",\n    \"bairro\": \"Bela Vista\",\n    \"cidade\": \"São Paulo\",\n    \"estado\": \"SP\",\n    \"cep\": \"01310100\",\n    \"principal\": true\n  }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
 								}
 							}
 						},
-						"description": "Cria um novo restaurante.\n\nENDPOINT PÚBLICO - Não requer autenticação.\n\nIMPORTANTE:\n- O restaurante é criado com status PENDING_APPROVAL\n- É necessário que um ADMIN aprove o restaurante antes que ele possa operar\n- Após a criação, um usuário é criado automaticamente com as credenciais fornecidas\n\nEndereço Obrigatório:\n- O endereço é obrigatório e deve ser enviado como objeto com os seguintes campos:\n  - logradouro (obrigatório): Ex: \"Avenida Paulista\"\n  - numero (obrigatório): Ex: \"1578\"\n  - complemento (opcional): Ex: \"\" ou \"Sala 10\"\n  - bairro (obrigatório): Ex: \"Bela Vista\"\n  - cidade (obrigatório): Ex: \"São Paulo\"\n  - estado (obrigatório): Ex: \"SP\" (2 letras maiúsculas)\n  - cep (obrigatório): Ex: \"01310100\" ou \"01310-100\" (8 dígitos)\n  - principal (opcional): true/false (primeiro endereço vira principal automaticamente)\n\nGeocodificação Automática:\n- As coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap\n- O endereço é formatado e geocodificado após a criação",
+						"description": "Cria um novo restaurante.\n\nENDPOINT PÚBLICO - Não requer autenticação.\n\nIMPORTANTE:\n- O restaurante é criado com status PENDING_APPROVAL\n- É necessário que um ADMIN aprove o restaurante antes que ele possa operar\n- Após a criação, um usuário é criado automaticamente com as credenciais fornecidas (email e senha)\n- A senha é obrigatória e deve ter entre 6 e 20 caracteres\n\nCampos Obrigatórios:\n- nome: Nome do restaurante\n- email: Email do restaurante (será usado como username para login)\n- telefone: Telefone de contato\n- password: Senha para acesso (6-20 caracteres)\n- endereco: Objeto com os dados do endereço\n\nEndereço Obrigatório:\n- O endereço é obrigatório e deve ser enviado como objeto com os seguintes campos:\n  - logradouro (obrigatório): Ex: \"Avenida Paulista\"\n  - numero (obrigatório): Ex: \"1578\"\n  - complemento (opcional): Ex: \"\" ou \"Sala 10\"\n  - bairro (obrigatório): Ex: \"Bela Vista\"\n  - cidade (obrigatório): Ex: \"São Paulo\"\n  - estado (obrigatório): Ex: \"SP\" (2 letras maiúsculas)\n  - cep (obrigatório): Ex: \"01310100\" ou \"01310-100\" (8 dígitos)\n  - principal (opcional): true/false (primeiro endereço vira principal automaticamente)\n\nGeocodificação Automática:\n- As coordenadas (latitude/longitude) são calculadas automaticamente via OpenStreetMap\n- O endereço é formatado e geocodificado após a criação\n\nDICA: Após cadastrar, as credenciais (email e senha) são salvas automaticamente no environment para facilitar o login posterior.",
 						"url": {
 							"raw": "{{baseUrl}}/api/restaurantes",
 							"host": [
@@ -549,13 +549,43 @@
 					},
 					"event": [
 						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Extrai email e senha do body para salvar no environment",
+									"const body = pm.request.body.raw;",
+									"try {",
+									"    const bodyJson = JSON.parse(body);",
+									"    if (bodyJson.email) {",
+									"        pm.environment.set('restaurante_username', bodyJson.email);",
+									"    }",
+									"    if (bodyJson.password) {",
+									"        pm.environment.set('restaurante_password', bodyJson.password);",
+									"    }",
+									"} catch (e) {",
+									"    // Ignora erro de parsing",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
 							"listen": "test",
 							"script": {
 								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
 									"if (pm.response.code === 200) {",
 									"    const response = pm.response.json();",
 									"    pm.environment.set('restaurante_id', response.id);",
-									"    console.log('Restaurante ID salvo:', response.id);",
+									"    console.log('Restaurante cadastrado com sucesso!');",
+									"    console.log('ID salvo:', response.id);",
+									"    console.log('Credenciais salvas no environment para login rápido');",
+									"    console.log('   Use: Login como Restaurante');",
+									"} else {",
+									"    console.log('Erro ao cadastrar restaurante:', pm.response.text());",
 									"}"
 								],
 								"type": "text/javascript"
