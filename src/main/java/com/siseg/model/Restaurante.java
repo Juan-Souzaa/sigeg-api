@@ -40,6 +40,9 @@ public class Restaurante {
     @JoinColumn(name = "user_id")
     private User user;
 
+    @Column(nullable = false)
+    private Boolean ativo = true;
+
     @Column(nullable = false, updatable = false)
     private Instant criadoEm = Instant.now();
     

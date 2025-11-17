@@ -35,6 +35,9 @@ public class Cliente {
     @OneToMany(mappedBy = "cliente", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Endereco> enderecos;
 
+    @Column(nullable = false)
+    private Boolean ativo = true;
+
     @Column(nullable = false, updatable = false)
     private Instant criadoEm = Instant.now();
     
