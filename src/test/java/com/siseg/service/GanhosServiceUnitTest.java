@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -134,7 +135,7 @@ class GanhosServiceUnitTest {
         pedidoComCupom.setTaxaPlataformaEntregador(new BigDecimal("1.50"));
         pedidoComCupom.setValorLiquidoRestaurante(new BigDecimal("90.00"));
         pedidoComCupom.setValorLiquidoEntregador(new BigDecimal("8.50"));
-        pedidoComCupom.setCriadoEm(Instant.now());
+        pedidoComCupom.setCriadoEm(Instant.now().minus(Duration.ofDays(1)));
 
         when(pedidoRepository.findByStatus(StatusPedido.DELIVERED))
                 .thenReturn(List.of(pedidoComCupom));
@@ -150,8 +151,8 @@ class GanhosServiceUnitTest {
                 eq(new BigDecimal("90.00")),
                 eq(new BigDecimal("8.50")),
                 eq(new BigDecimal("11.50")),
-                anyString(),
-                anyString()))
+                eq("MES"),
+                eq("INSUFICIENTE")))
                 .thenReturn(relatorio);
 
         RelatorioDistribuicaoDTO resultado = ganhosService.gerarRelatorioDistribuicao(Periodo.MES);
@@ -163,8 +164,8 @@ class GanhosServiceUnitTest {
                 eq(new BigDecimal("90.00")),
                 eq(new BigDecimal("8.50")),
                 eq(new BigDecimal("11.50")),
-                anyString(),
-                anyString());
+                eq("MES"),
+                eq("INSUFICIENTE"));
     }
 }
 
