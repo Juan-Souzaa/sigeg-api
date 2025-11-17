@@ -3,28 +3,22 @@ package com.siseg.mapper;
 import com.siseg.dto.restaurante.RestauranteBuscaDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
 import com.siseg.model.Cliente;
-import com.siseg.model.Endereco;
 import com.siseg.model.Restaurante;
-import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.repository.AvaliacaoRepository;
 import com.siseg.service.EnderecoService;
-import com.siseg.util.TempoEstimadoCalculator;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.util.Optional;
 
 @Component
 public class RestauranteMapper {
     
-    private final TempoEstimadoCalculator tempoEstimadoCalculator;
     private final AvaliacaoRepository avaliacaoRepository;
     private final ModelMapper modelMapper;
     private final EnderecoService enderecoService;
     
-    public RestauranteMapper(TempoEstimadoCalculator tempoEstimadoCalculator, AvaliacaoRepository avaliacaoRepository, ModelMapper modelMapper, EnderecoService enderecoService) {
-        this.tempoEstimadoCalculator = tempoEstimadoCalculator;
+    public RestauranteMapper(AvaliacaoRepository avaliacaoRepository, ModelMapper modelMapper, EnderecoService enderecoService) {
         this.avaliacaoRepository = avaliacaoRepository;
         this.modelMapper = modelMapper;
         this.enderecoService = enderecoService;
@@ -56,32 +50,6 @@ public class RestauranteMapper {
                 );
         
         dto.setTelefone(restaurante.getTelefone());
-        
-        // Buscar coordenadas do endereço principal
-        Optional<Endereco> enderecoPrincipal = restaurante.getEnderecoPrincipal();
-        Optional<Endereco> enderecoCliente = cliente != null ? cliente.getEnderecoPrincipal() : Optional.empty();
-        
-        if (enderecoCliente.isPresent() && enderecoPrincipal.isPresent()) {
-            Endereco endCliente = enderecoCliente.get();
-            Endereco endRestaurante = enderecoPrincipal.get();
-            
-            if (endCliente.getLatitude() != null && endCliente.getLongitude() != null &&
-                endRestaurante.getLatitude() != null && endRestaurante.getLongitude() != null) {
-                var resultado = tempoEstimadoCalculator.calculateDistanceAndTime(
-                    endCliente.getLatitude(), endCliente.getLongitude(),
-                    endRestaurante.getLatitude(), endRestaurante.getLongitude(),
-                    TipoVeiculo.MOTO
-                );
-            
-                if (resultado.getDistanciaKm() != null) {
-                    dto.setDistanciaKm(resultado.getDistanciaKm());
-                }
-                
-                if (resultado.getTempoMinutos() > 0) {
-                    dto.setTempoEstimadoMinutos(resultado.getTempoMinutos());
-                }
-            }
-        }
         
         BigDecimal raioEntrega = restaurante.getRaioEntregaKm();
         if (raioEntrega == null) {

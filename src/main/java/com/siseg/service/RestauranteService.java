@@ -30,8 +30,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.siseg.util.DistanceCalculator;
+import com.siseg.dto.geocoding.ResultadoCalculo;
+import com.siseg.util.TempoEstimadoCalculator;
 import com.siseg.model.Endereco;
+import com.siseg.model.enumerations.TipoVeiculo;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -59,13 +61,14 @@ public class RestauranteService {
     private final PratoRepository pratoRepository;
     private final PasswordEncoder passwordEncoder;
     private final RestauranteMapper restauranteMapper;
+    private final TempoEstimadoCalculator tempoEstimadoCalculator;
     
     public RestauranteService(RestauranteRepository restauranteRepository, ModelMapper modelMapper, 
                               EnderecoService enderecoService, 
                               ClienteRepository clienteRepository, UserRepository userRepository,
                               RoleRepository roleRepository, PedidoRepository pedidoRepository, 
                               PratoRepository pratoRepository, PasswordEncoder passwordEncoder, 
-                              RestauranteMapper restauranteMapper) {
+                              RestauranteMapper restauranteMapper, TempoEstimadoCalculator tempoEstimadoCalculator) {
         this.restauranteRepository = restauranteRepository;
         this.modelMapper = modelMapper;
         this.enderecoService = enderecoService;
@@ -76,6 +79,7 @@ public class RestauranteService {
         this.pratoRepository = pratoRepository;
         this.passwordEncoder = passwordEncoder;
         this.restauranteMapper = restauranteMapper;
+        this.tempoEstimadoCalculator = tempoEstimadoCalculator;
     }
     
     public RestauranteResponseDTO criarRestaurante(RestauranteRequestDTO dto) {
@@ -256,28 +260,34 @@ public class RestauranteService {
             return true;
         }
         
-        BigDecimal distancia = calcularDistancia(enderecoCliente.get(), enderecoRestaurante.get());
-        if (distancia == null) {
+        Endereco endCliente = enderecoCliente.get();
+        Endereco endRestaurante = enderecoRestaurante.get();
+        
+        if (!temCoordenadasValidas(endCliente) || !temCoordenadasValidas(endRestaurante)) {
+            return true;
+        }
+        
+        ResultadoCalculo resultado = tempoEstimadoCalculator.calculateDistanceAndTime(
+            endCliente.getLatitude(), endCliente.getLongitude(),
+            endRestaurante.getLatitude(), endRestaurante.getLongitude(),
+            TipoVeiculo.MOTO
+        );
+        
+        if (resultado == null || resultado.getDistanciaKm() == null) {
             return true;
         }
         
         BigDecimal raioRestaurante = obterRaioEntrega(restaurante, raioPadrao);
-        return distancia.compareTo(raioRestaurante) <= 0;
-    }
-    
-    private BigDecimal calcularDistancia(Endereco enderecoCliente, Endereco enderecoRestaurante) {
-        if (!temCoordenadasValidas(enderecoCliente) || !temCoordenadasValidas(enderecoRestaurante)) {
-            return null;
-        }
-        
-        return DistanceCalculator.calculateDistance(
-            enderecoCliente.getLatitude(), enderecoCliente.getLongitude(),
-            enderecoRestaurante.getLatitude(), enderecoRestaurante.getLongitude()
-        );
+        return resultado.getDistanciaKm().compareTo(raioRestaurante) <= 0;
     }
     
     private boolean temCoordenadasValidas(Endereco endereco) {
-        return endereco.getLatitude() != null && endereco.getLongitude() != null;
+        if (endereco.getLatitude() == null || endereco.getLongitude() == null) {
+            return false;
+        }
+        return true;
+        
+     
     }
     
     private BigDecimal obterRaioEntrega(Restaurante restaurante, BigDecimal raioPadrao) {
@@ -292,9 +302,23 @@ public class RestauranteService {
         if (enderecoCliente.isPresent()) {
             Optional<Endereco> enderecoRestaurante = enderecoService.buscarEnderecoPrincipalRestaurante(restaurante.getId());
             if (enderecoRestaurante.isPresent()) {
-                BigDecimal distancia = calcularDistancia(enderecoCliente.get(), enderecoRestaurante.get());
-                if (distancia != null) {
-                    dto.setDistanciaKm(distancia);
+                Endereco endCliente = enderecoCliente.get();
+                Endereco endRestaurante = enderecoRestaurante.get();
+                
+                if (temCoordenadasValidas(endCliente) && temCoordenadasValidas(endRestaurante)) {
+                    ResultadoCalculo resultado = tempoEstimadoCalculator.calculateDistanceAndTime(
+                        endCliente.getLatitude(), endCliente.getLongitude(),
+                        endRestaurante.getLatitude(), endRestaurante.getLongitude(),
+                        TipoVeiculo.MOTO
+                    );
+                    
+                    if (resultado != null && resultado.getDistanciaKm() != null) {
+                        dto.setDistanciaKm(resultado.getDistanciaKm());
+                    }
+                    
+                    if (resultado != null && resultado.getTempoMinutos() > 0) {
+                        dto.setTempoEstimadoMinutos(resultado.getTempoMinutos());
+                    }
                 }
             }
         }
