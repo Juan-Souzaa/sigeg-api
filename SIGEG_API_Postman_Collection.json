@@ -680,6 +680,354 @@
 			]
 		},
 		{
+			"name": "Endereços",
+			"description": "Endpoints para gerenciamento de endereços de clientes e restaurantes.\n\nIMPORTANTE:\n- Clientes só podem gerenciar seus próprios endereços\n- Restaurantes só podem gerenciar seus próprios endereços\n- Administradores podem gerenciar qualquer endereço\n- Não é possível excluir o único endereço de um cliente/restaurante\n- Ao excluir um endereço principal, outro endereço é automaticamente marcado como principal",
+			"item": [
+				{
+					"name": "Listar Endereços do Cliente",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/{{cliente_id}}/enderecos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"{{cliente_id}}",
+								"enderecos"
+							]
+						}
+					},
+					"description": "Lista todos os endereços de um cliente.\n\nRequer role CLIENTE.\nO cliente deve ser o dono dos endereços ou ser admin."
+				},
+				{
+					"name": "Buscar Endereço do Cliente",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/{{cliente_id}}/enderecos/{{endereco_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"{{cliente_id}}",
+								"enderecos",
+								"{{endereco_id}}"
+							]
+						}
+					},
+					"description": "Busca um endereço específico de um cliente.\n\nRequer role CLIENTE.\nO cliente deve ser o dono do endereço ou ser admin."
+				},
+				{
+					"name": "Adicionar Endereço ao Cliente",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"logradouro\": \"Rua Nova\",\n  \"numero\": \"456\",\n  \"complemento\": \"Apto 101\",\n  \"bairro\": \"Centro\",\n  \"cidade\": \"São Paulo\",\n  \"estado\": \"SP\",\n  \"cep\": \"01310-100\",\n  \"principal\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/{{cliente_id}}/enderecos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"{{cliente_id}}",
+								"enderecos"
+							]
+						}
+					},
+					"description": "Adiciona um novo endereço a um cliente.\n\nRequer role CLIENTE.\nO endereço é geocodificado automaticamente.\nSe for o primeiro endereço, será marcado como principal automaticamente."
+				},
+				{
+					"name": "Atualizar Endereço do Cliente",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"logradouro\": \"Rua Atualizada\",\n  \"numero\": \"789\",\n  \"complemento\": \"Apto 202\",\n  \"bairro\": \"Novo Bairro\",\n  \"cidade\": \"São Paulo\",\n  \"estado\": \"SP\",\n  \"cep\": \"01310-200\",\n  \"principal\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/{{cliente_id}}/enderecos/{{endereco_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"{{cliente_id}}",
+								"enderecos",
+								"{{endereco_id}}"
+							]
+						}
+					},
+					"description": "Atualiza um endereço existente de um cliente.\n\nRequer role CLIENTE.\nSe marcar como principal, outros endereços serão desmarcados.\nO endereço será re-geocodificado se as coordenadas não existirem."
+				},
+				{
+					"name": "Excluir Endereço do Cliente",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/{{cliente_id}}/enderecos/{{endereco_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"{{cliente_id}}",
+								"enderecos",
+								"{{endereco_id}}"
+							]
+						}
+					},
+					"description": "Exclui um endereço de um cliente.\n\nRequer role CLIENTE.\nNão é possível excluir o único endereço.\nSe o endereço excluído for principal, outro será marcado como principal automaticamente."
+				},
+				{
+					"name": "Definir Endereço Principal do Cliente",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/{{cliente_id}}/enderecos/{{endereco_id}}/principal",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"{{cliente_id}}",
+								"enderecos",
+								"{{endereco_id}}",
+								"principal"
+							]
+						}
+					},
+					"description": "Define um endereço como principal do cliente.\n\nRequer role CLIENTE.\nOutros endereços serão automaticamente desmarcados como principais."
+				},
+				{
+					"name": "Listar Endereços do Restaurante",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/enderecos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"enderecos"
+							]
+						}
+					},
+					"description": "Lista todos os endereços de um restaurante.\n\nRequer role RESTAURANTE ou ADMIN.\nO restaurante deve ser o dono dos endereços ou ser admin."
+				},
+				{
+					"name": "Buscar Endereço do Restaurante",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/enderecos/{{endereco_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"enderecos",
+								"{{endereco_id}}"
+							]
+						}
+					},
+					"description": "Busca um endereço específico de um restaurante.\n\nRequer role RESTAURANTE ou ADMIN.\nO restaurante deve ser o dono do endereço ou ser admin."
+				},
+				{
+					"name": "Adicionar Endereço ao Restaurante",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"logradouro\": \"Avenida Nova\",\n  \"numero\": \"1000\",\n  \"complemento\": \"Loja 5\",\n  \"bairro\": \"Jardins\",\n  \"cidade\": \"São Paulo\",\n  \"estado\": \"SP\",\n  \"cep\": \"01410-000\",\n  \"principal\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/enderecos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"enderecos"
+							]
+						}
+					},
+					"description": "Adiciona um novo endereço a um restaurante.\n\nRequer role RESTAURANTE ou ADMIN.\nO endereço é geocodificado automaticamente.\nSe for o primeiro endereço, será marcado como principal automaticamente."
+				},
+				{
+					"name": "Atualizar Endereço do Restaurante",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"logradouro\": \"Avenida Atualizada\",\n  \"numero\": \"2000\",\n  \"complemento\": \"Loja 10\",\n  \"bairro\": \"Vila Nova\",\n  \"cidade\": \"São Paulo\",\n  \"estado\": \"SP\",\n  \"cep\": \"01420-000\",\n  \"principal\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/enderecos/{{endereco_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"enderecos",
+								"{{endereco_id}}"
+							]
+						}
+					},
+					"description": "Atualiza um endereço existente de um restaurante.\n\nRequer role RESTAURANTE ou ADMIN.\nSe marcar como principal, outros endereços serão desmarcados.\nO endereço será re-geocodificado se as coordenadas não existirem."
+				},
+				{
+					"name": "Excluir Endereço do Restaurante",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/enderecos/{{endereco_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"enderecos",
+								"{{endereco_id}}"
+							]
+						}
+					},
+					"description": "Exclui um endereço de um restaurante.\n\nRequer role RESTAURANTE ou ADMIN.\nNão é possível excluir o único endereço.\nSe o endereço excluído for principal, outro será marcado como principal automaticamente."
+				},
+				{
+					"name": "Definir Endereço Principal do Restaurante",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/enderecos/{{endereco_id}}/principal",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"enderecos",
+								"{{endereco_id}}",
+								"principal"
+							]
+						}
+					},
+					"description": "Define um endereço como principal do restaurante.\n\nRequer role RESTAURANTE ou ADMIN.\nOutros endereços serão automaticamente desmarcados como principais."
+				}
+			]
+		},
+		{
 			"name": "Pratos",
 			"item": [
 				{
