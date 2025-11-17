@@ -1,5 +1,7 @@
 package com.siseg.controller;
 
+import com.siseg.dto.admin.AdminRequestDTO;
+import com.siseg.dto.admin.AdminResponseDTO;
 import com.siseg.dto.configuracao.ConfiguracaoTaxaRequestDTO;
 import com.siseg.dto.configuracao.ConfiguracaoTaxaResponseDTO;
 import com.siseg.dto.ganhos.RelatorioDistribuicaoDTO;
@@ -8,6 +10,7 @@ import com.siseg.model.enumerations.Periodo;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.TipoTaxa;
 import com.siseg.repository.PedidoRepository;
+import com.siseg.service.AdminService;
 import com.siseg.service.ConfiguracaoTaxaService;
 import com.siseg.service.GanhosService;
 import com.siseg.service.PedidoService;
@@ -33,13 +36,16 @@ public class AdminController {
     private final GanhosService ganhosService;
     private final ConfiguracaoTaxaService configuracaoTaxaService;
     private final PedidoRepository pedidoRepository;
+    private final AdminService adminService;
 
     public AdminController(PedidoService pedidoService, GanhosService ganhosService,
-                          ConfiguracaoTaxaService configuracaoTaxaService, PedidoRepository pedidoRepository) {
+                          ConfiguracaoTaxaService configuracaoTaxaService, PedidoRepository pedidoRepository,
+                          AdminService adminService) {
         this.pedidoService = pedidoService;
         this.ganhosService = ganhosService;
         this.configuracaoTaxaService = configuracaoTaxaService;
         this.pedidoRepository = pedidoRepository;
+        this.adminService = adminService;
     }
 
     @GetMapping("/pedidos/andamento")
@@ -83,6 +89,13 @@ public class AdminController {
     public ResponseEntity<List<ConfiguracaoTaxaResponseDTO>> listarHistoricoTaxas(
             @RequestParam TipoTaxa tipoTaxa) {
         List<ConfiguracaoTaxaResponseDTO> response = configuracaoTaxaService.listarHistoricoTaxas(tipoTaxa);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/admins")
+    @Operation(summary = "Criar novo administrador")
+    public ResponseEntity<AdminResponseDTO> criarAdmin(@Valid @RequestBody AdminRequestDTO dto) {
+        AdminResponseDTO response = adminService.criarAdmin(dto);
         return ResponseEntity.ok(response);
     }
 }
