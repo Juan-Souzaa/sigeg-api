@@ -1,6 +1,7 @@
 package com.siseg.service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +15,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import com.siseg.dto.EnderecoCepResponseDTO;
@@ -24,7 +26,9 @@ import com.siseg.dto.geocoding.OsrmRouteResponse;
 import com.siseg.dto.geocoding.RouteResult;
 import com.siseg.dto.geocoding.ViaCepResponse;
 import com.siseg.model.Endereco;
+import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.util.PolylineDecoder;
+import com.siseg.util.VehicleConstants;
 
 @Service
 public class GeocodingService {
@@ -72,101 +76,174 @@ public class GeocodingService {
     }
     
     public void geocodeAddress(Endereco endereco) {
-        if (endereco == null || !endereco.isCompleto()) {
-            logger.warning("Endereço nulo ou incompleto para geocodificação");
+        if (!isEnderecoValidoParaGeocodificacao(endereco)) {
             return;
         }
         
-        if (endereco.getLatitude() != null && endereco.getLongitude() != null) {
-            logger.fine("Endereço já possui coordenadas: " + endereco.toGeocodingString());
+        if (enderecoJaPossuiCoordenadas(endereco)) {
             return;
         }
         
         String enderecoFormatado = endereco.toGeocodingString();
         
-        if (cache.containsKey(enderecoFormatado)) {
-            Coordinates coords = cache.get(enderecoFormatado);
-            endereco.setLatitude(coords.getLatitude());
-            endereco.setLongitude(coords.getLongitude());
-            logger.fine("Coordenadas encontradas no cache para: " + enderecoFormatado);
+        if (aplicarCoordenadasDoCache(endereco, enderecoFormatado)) {
             return;
         }
         
         try {
-            String enderecoCompleto = enderecoFormatado;
-            if (endereco.getCep() != null && endereco.getCep().length() == 8) {
-                Optional<String> enderecoViaCep = buscarEnderecoPorCepString(endereco.getCep());
-                if (enderecoViaCep.isPresent()) {
-                    enderecoCompleto = construirEnderecoCompleto(enderecoViaCep.get(), endereco);
-                    logger.info("Endereço encontrado via CEP: " + enderecoCompleto);
-                }
-            }
-            
+            String enderecoCompleto = atualizarEnderecoComCep(endereco, enderecoFormatado);
             Optional<Coordinates> coordenadas = geocodeWithNominatim(enderecoCompleto);
-            
-            if (coordenadas.isPresent()) {
-                endereco.setLatitude(coordenadas.get().getLatitude());
-                endereco.setLongitude(coordenadas.get().getLongitude());
-                cache.put(enderecoFormatado, coordenadas.get());
-                if (!enderecoCompleto.equals(enderecoFormatado)) {
-                    cache.put(enderecoCompleto, coordenadas.get());
-                }
-                logger.info("Coordenadas geocodificadas e salvas: " + enderecoFormatado);
-            } else {
-                logger.warning("Não foi possível geocodificar endereço: " + enderecoFormatado);
-            }
-            
+            salvarCoordenadas(endereco, enderecoFormatado, enderecoCompleto, coordenadas);
         } catch (Exception e) {
             logger.warning("Erro ao geocodificar endereço '" + enderecoFormatado + "': " + e.getMessage());
         }
     }
     
-    private String construirEnderecoCompleto(String enderecoViaCep, Endereco endereco) {
+    private boolean isEnderecoValidoParaGeocodificacao(Endereco endereco) {
+        if (endereco == null || !endereco.isCompleto()) {
+            logger.warning("Endereço nulo ou incompleto para geocodificação");
+            return false;
+        }
+        return true;
+    }
+    
+    private boolean enderecoJaPossuiCoordenadas(Endereco endereco) {
+        if (endereco.getLatitude() != null && endereco.getLongitude() != null) {
+            logger.fine("Endereço já possui coordenadas: " + endereco.toGeocodingString());
+            return true;
+        }
+        return false;
+    }
+    
+    private boolean aplicarCoordenadasDoCache(Endereco endereco, String enderecoFormatado) {
+        if (cache.containsKey(enderecoFormatado)) {
+            Coordinates coords = cache.get(enderecoFormatado);
+            endereco.setLatitude(coords.getLatitude());
+            endereco.setLongitude(coords.getLongitude());
+            logger.fine("Coordenadas encontradas no cache para: " + enderecoFormatado);
+            return true;
+        }
+        return false;
+    }
+    
+    private String atualizarEnderecoComCep(Endereco endereco, String enderecoFormatado) {
+        if (!temCepValido(endereco)) {
+            return enderecoFormatado;
+        }
+        
+        Optional<EnderecoCepResponseDTO> enderecoViaCepDTO = buscarEnderecoPorCep(endereco.getCep());
+        if (enderecoViaCepDTO.isEmpty()) {
+            return enderecoFormatado;
+        }
+        
+        EnderecoCepResponseDTO dto = enderecoViaCepDTO.get();
+        String logradouroOriginal = endereco.getLogradouro();
+        
+        atualizarCamposDoEndereco(endereco, dto);
+        String enderecoCompleto = construirEnderecoCompleto(dto, endereco);
+        logarAtualizacaoEndereco(logradouroOriginal, dto.getLogradouro(), enderecoCompleto);
+        
+        return enderecoCompleto;
+    }
+    
+    private boolean temCepValido(Endereco endereco) {
+        return endereco.getCep() != null && endereco.getCep().length() == 8;
+    }
+    
+    private void atualizarCamposDoEndereco(Endereco endereco, EnderecoCepResponseDTO dto) {
+        endereco.setLogradouro(dto.getLogradouro());
+        if (temBairroValido(dto)) {
+            endereco.setBairro(dto.getBairro());
+        }
+        endereco.setCidade(dto.getCidade());
+        endereco.setEstado(dto.getEstado().toUpperCase());
+    }
+    
+    private boolean temBairroValido(EnderecoCepResponseDTO dto) {
+        return dto.getBairro() != null && !dto.getBairro().isEmpty();
+    }
+    
+    private void logarAtualizacaoEndereco(String logradouroOriginal, String logradouroNovo, String enderecoCompleto) {
+        if (!logradouroOriginal.equals(logradouroNovo)) {
+            logger.info("Endereço corrigido via CEP: logradouro atualizado de '" + 
+                       logradouroOriginal + "' para '" + logradouroNovo + 
+                       "'. Endereço completo: " + enderecoCompleto);
+        } else {
+            logger.info("Endereço validado via CEP: " + enderecoCompleto);
+        }
+    }
+    
+    private void salvarCoordenadas(Endereco endereco, String enderecoFormatado, 
+                                   String enderecoCompleto, Optional<Coordinates> coordenadas) {
+        if (coordenadas.isEmpty()) {
+            logger.warning("Não foi possível geocodificar endereço: " + enderecoCompleto);
+            return;
+        }
+        
+        Coordinates coords = coordenadas.get();
+        endereco.setLatitude(coords.getLatitude());
+        endereco.setLongitude(coords.getLongitude());
+        
+        cache.put(enderecoFormatado, coords);
+        if (!enderecoCompleto.equals(enderecoFormatado)) {
+            cache.put(enderecoCompleto, coords);
+        }
+        
+        logger.info("Coordenadas geocodificadas e salvas: " + enderecoCompleto);
+    }
+    
+    private String construirEnderecoCompleto(EnderecoCepResponseDTO dto, Endereco endereco) {
         StringBuilder sb = new StringBuilder();
         
-        String logradouroViaCep = enderecoViaCep.split(",")[0].trim();
-        sb.append(logradouroViaCep).append(", ");
+        sb.append(endereco.getLogradouro()).append(", ");
         sb.append(endereco.getNumero());
         
-        if (endereco.getComplemento() != null && !endereco.getComplemento().trim().isEmpty()) {
-            sb.append(", ").append(endereco.getComplemento());
-        }
+        adicionarComplemento(sb, endereco);
+        adicionarBairro(sb, endereco);
         
-        String[] partes = enderecoViaCep.split(",", 2);
-        if (partes.length > 1) {
-            sb.append(", ").append(partes[1].trim());
-        }
+        sb.append(", ").append(endereco.getCidade());
+        sb.append(", ").append(endereco.getEstado());
+        sb.append(", Brasil");
         
         return sb.toString();
     }
     
+    private void adicionarComplemento(StringBuilder sb, Endereco endereco) {
+        if (temComplemento(endereco)) {
+            sb.append(", ").append(endereco.getComplemento());
+        }
+    }
+    
+    private boolean temComplemento(Endereco endereco) {
+        return endereco.getComplemento() != null && !endereco.getComplemento().trim().isEmpty();
+    }
+    
+    private void adicionarBairro(StringBuilder sb, Endereco endereco) {
+        if (temBairro(endereco)) {
+            sb.append(", ").append(endereco.getBairro());
+        }
+    }
+    
+    private boolean temBairro(Endereco endereco) {
+        return endereco.getBairro() != null && !endereco.getBairro().isEmpty();
+    }
+    
     public Optional<EnderecoCepResponseDTO> buscarEnderecoPorCep(String cep) {
         try {
-            String cepLimpo = cep.replaceAll("[^0-9]", "");
+            String cepLimpo = limparCep(cep);
             
-            if (cepLimpo.length() != 8) {
-                logger.warning("CEP inválido: " + cep);
+            if (!isCepValido(cepLimpo, cep)) {
                 return Optional.empty();
             }
             
-            ViaCepResponse response = viacepClient.get()
-                    .uri("/ws/{cep}/json/", cepLimpo)
-                    .retrieve()
-                    .bodyToMono(ViaCepResponse.class)
-                    .block();
+            ViaCepResponse response = buscarCepNoViaCep(cepLimpo);
             
-            if (response != null && response.getErro() == null && response.getLogradouro() != null) {
-                EnderecoCepResponseDTO dto = new EnderecoCepResponseDTO();
-                dto.setLogradouro(response.getLogradouro());
-                dto.setBairro(response.getBairro());
-                dto.setCidade(response.getLocalidade());
-                dto.setEstado(response.getUf());
-                dto.setCep(cepLimpo);
-                return Optional.of(dto);
-            } else {
-                logger.warning("CEP não encontrado ou erro na resposta ViaCEP: " + cep);
-                return Optional.empty();
+            if (isRespostaViaCepValida(response)) {
+                return criarEnderecoCepResponseDTO(response, cepLimpo);
             }
+            
+            logger.warning("CEP não encontrado ou erro na resposta ViaCEP: " + cep);
+            return Optional.empty();
             
         } catch (Exception e) {
             logger.warning("Erro ao buscar CEP no ViaCEP: " + e.getMessage());
@@ -174,70 +251,95 @@ public class GeocodingService {
         }
     }
     
-    private Optional<String> buscarEnderecoPorCepString(String cep) {
-        Optional<EnderecoCepResponseDTO> dtoOpt = buscarEnderecoPorCep(cep);
-        if (dtoOpt.isPresent()) {
-            EnderecoCepResponseDTO dto = dtoOpt.get();
-            StringBuilder endereco = new StringBuilder();
-            endereco.append(dto.getLogradouro());
-            
-            if (dto.getBairro() != null && !dto.getBairro().isEmpty()) {
-                endereco.append(", ").append(dto.getBairro());
-            }
-            
-            if (dto.getCidade() != null && !dto.getCidade().isEmpty()) {
-                endereco.append(", ").append(dto.getCidade());
-            }
-            
-            if (dto.getEstado() != null && !dto.getEstado().isEmpty()) {
-                endereco.append(", ").append(dto.getEstado());
-            }
-            
-            endereco.append(", Brasil");
-            
-            return Optional.of(endereco.toString());
-        }
-        return Optional.empty();
+    private String limparCep(String cep) {
+        return cep.replaceAll("[^0-9]", "");
     }
+    
+    private boolean isCepValido(String cepLimpo, String cepOriginal) {
+        if (cepLimpo.length() != 8) {
+            logger.warning("CEP inválido: " + cepOriginal);
+            return false;
+        }
+        return true;
+    }
+    
+    private ViaCepResponse buscarCepNoViaCep(String cepLimpo) {
+        return viacepClient.get()
+                .uri("/ws/{cep}/json/", cepLimpo)
+                .retrieve()
+                .bodyToMono(ViaCepResponse.class)
+                .block();
+    }
+    
+    private boolean isRespostaViaCepValida(ViaCepResponse response) {
+        return response != null && response.getErro() == null && response.getLogradouro() != null;
+    }
+    
+    private Optional<EnderecoCepResponseDTO> criarEnderecoCepResponseDTO(ViaCepResponse response, String cepLimpo) {
+        EnderecoCepResponseDTO dto = new EnderecoCepResponseDTO();
+        dto.setLogradouro(response.getLogradouro());
+        dto.setBairro(response.getBairro());
+        dto.setCidade(response.getLocalidade());
+        dto.setEstado(response.getUf());
+        dto.setCep(cepLimpo);
+        return Optional.of(dto);
+    }
+    
     
     private Optional<Coordinates> geocodeWithNominatim(String endereco) {
         try {
             respeitarRateLimit();
+            NominatimResponse[] responses = buscarNoNominatim(endereco);
             
-            NominatimResponse[] responses = nominatimClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/search")
-                            .queryParam("q", endereco)
-                            .queryParam("format", "json")
-                            .queryParam("limit", "1")
-                            .queryParam("addressdetails", "1")
-                            .build())
-                    .retrieve()
-                    .bodyToMono(NominatimResponse[].class)
-                    .block();
-            
-            if (responses != null && responses.length > 0) {
-                NominatimResponse response = responses[0];
-                if (response.getLat() != null && response.getLon() != null) {
-                    BigDecimal latitude = new BigDecimal(response.getLat());
-                    BigDecimal longitude = new BigDecimal(response.getLon());
-                    
-                    Coordinates coords = new Coordinates(latitude, longitude);
-                    logger.info("Geocodificação bem-sucedida: " + endereco + " -> (" + latitude + ", " + longitude + ")");
-                    return Optional.of(coords);
-                }
+            if (temRespostasValidas(responses)) {
+                return extrairCoordenadas(responses[0], endereco);
             }
             
             logger.warning("Nenhum resultado encontrado para: " + endereco);
             return Optional.empty();
             
-        } catch (org.springframework.web.reactive.function.client.WebClientException e) {
+        } catch (WebClientException e) {
             logger.warning("Erro de conexão com Nominatim: " + e.getMessage());
             return Optional.empty();
         } catch (Exception e) {
             logger.warning("Erro ao geocodificar com Nominatim: " + e.getMessage());
             return Optional.empty();
         }
+    }
+    
+    private NominatimResponse[] buscarNoNominatim(String endereco) {
+        return nominatimClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/search")
+                        .queryParam("q", endereco)
+                        .queryParam("format", "json")
+                        .queryParam("limit", "1")
+                        .queryParam("addressdetails", "1")
+                        .build())
+                .retrieve()
+                .bodyToMono(NominatimResponse[].class)
+                .block();
+    }
+    
+    private boolean temRespostasValidas(NominatimResponse[] responses) {
+        return responses != null && responses.length > 0;
+    }
+    
+    private Optional<Coordinates> extrairCoordenadas(NominatimResponse response, String endereco) {
+        if (!temCoordenadasValidas(response)) {
+            return Optional.empty();
+        }
+        
+        BigDecimal latitude = new BigDecimal(response.getLat());
+        BigDecimal longitude = new BigDecimal(response.getLon());
+        Coordinates coords = new Coordinates(latitude, longitude);
+        
+        logger.info("Geocodificação bem-sucedida: " + endereco + " -> (" + latitude + ", " + longitude + ")");
+        return Optional.of(coords);
+    }
+    
+    private boolean temCoordenadasValidas(NominatimResponse response) {
+        return response.getLat() != null && response.getLon() != null;
     }
     
     private void respeitarRateLimit() {
@@ -297,7 +399,7 @@ public class GeocodingService {
                     break;
                 }
                 
-            } catch (org.springframework.web.reactive.function.client.WebClientException e) {
+            } catch (WebClientException e) {
                 lastException = e;
                 logger.warning(String.format(
                     "Erro de conexão com OSRM (tentativa %d/%d): %s",
@@ -335,13 +437,30 @@ public class GeocodingService {
     private Optional<RouteResult> calcularRotaComOSRM(BigDecimal origemLat, BigDecimal origemLon,
                                                      BigDecimal destinoLat, BigDecimal destinoLon,
                                                      String profile, boolean includeWaypoints) {
-        String coordinates = String.format("%s,%s;%s,%s",
-            origemLon, origemLat,
-            destinoLon, destinoLat);
+        String coordinates = formatarCoordenadas(origemLat, origemLon, destinoLat, destinoLon);
+        String routeProfile = obterProfile(profile);
         
-        String routeProfile = (profile != null && !profile.isEmpty()) ? profile : "driving";
+        OsrmRouteResponse response = buscarRotaNoOSRM(routeProfile, coordinates, includeWaypoints);
         
-        OsrmRouteResponse response = osrmClient.get()
+        if (!isRespostaOSRMValida(response)) {
+            return Optional.empty();
+        }
+        
+        OsrmRoute route = response.getRoutes().get(0);
+        return criarRouteResult(route, includeWaypoints);
+    }
+    
+    private String formatarCoordenadas(BigDecimal origemLat, BigDecimal origemLon,
+                                       BigDecimal destinoLat, BigDecimal destinoLon) {
+        return String.format("%s,%s;%s,%s", origemLon, origemLat, destinoLon, destinoLat);
+    }
+    
+    private String obterProfile(String profile) {
+        return (profile != null && !profile.isEmpty()) ? profile : "driving";
+    }
+    
+    private OsrmRouteResponse buscarRotaNoOSRM(String routeProfile, String coordinates, boolean includeWaypoints) {
+        return osrmClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path("/route/v1/{profile}/{coordinates}")
                         .queryParam("overview", includeWaypoints ? "full" : "false")
@@ -352,61 +471,91 @@ public class GeocodingService {
                 .retrieve()
                 .bodyToMono(OsrmRouteResponse.class)
                 .block(Duration.ofMillis(osrmTimeout));
-        
+    }
+    
+    private boolean isRespostaOSRMValida(OsrmRouteResponse response) {
         if (response == null || response.getCode() == null || !"Ok".equals(response.getCode())) {
             logger.warning("OSRM retornou código inválido: " + (response != null ? response.getCode() : "null"));
-            return Optional.empty();
+            return false;
         }
         
         if (response.getRoutes() == null || response.getRoutes().isEmpty()) {
             logger.warning("OSRM não retornou rotas");
-            return Optional.empty();
+            return false;
         }
         
-        OsrmRoute route = response.getRoutes().get(0);
-        
-        double distanciaMetros = route.getDistance();
-        BigDecimal distanciaKm = BigDecimal.valueOf(distanciaMetros / 1000.0)
-                .setScale(2, java.math.RoundingMode.HALF_UP);
-        
-        double tempoSegundos = route.getDuration();
-        int tempoMinutos = (int) Math.ceil(tempoSegundos / 60.0);
-        
-        List<Coordinates> waypoints = null;
-        if (includeWaypoints) {
-            waypoints = extrairWaypoints(route);
-        }
+        return true;
+    }
+    
+    private Optional<RouteResult> criarRouteResult(OsrmRoute route, boolean includeWaypoints) {
+        BigDecimal distanciaKm = calcularDistanciaKm(route);
+        int tempoMinutos = calcularTempoMinutos(route);
+        List<Coordinates> waypoints = includeWaypoints ? extrairWaypoints(route) : null;
         
         RouteResult result = new RouteResult(distanciaKm, tempoMinutos, waypoints);
-        logger.fine("Rota calculada via OSRM: " + distanciaKm + " km, " + tempoMinutos + " min" + 
-                   (waypoints != null ? ", " + waypoints.size() + " waypoints" : ""));
+        logarRotaCalculada(distanciaKm, tempoMinutos, waypoints);
         return Optional.of(result);
     }
     
+    private BigDecimal calcularDistanciaKm(OsrmRoute route) {
+        double distanciaMetros = route.getDistance();
+        return BigDecimal.valueOf(distanciaMetros / 1000.0)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+    
+    private int calcularTempoMinutos(OsrmRoute route) {
+        double tempoSegundos = route.getDuration();
+        return (int) Math.ceil(tempoSegundos / 60.0);
+    }
+    
+    private void logarRotaCalculada(BigDecimal distanciaKm, int tempoMinutos, List<Coordinates> waypoints) {
+        String waypointsInfo = waypoints != null ? ", " + waypoints.size() + " waypoints" : "";
+        logger.fine("Rota calculada via OSRM: " + distanciaKm + " km, " + tempoMinutos + " min" + waypointsInfo);
+    }
+    
     private List<Coordinates> extrairWaypoints(OsrmRoute route) {
-        List<Coordinates> waypoints = new ArrayList<>();
-        
-        List<List<Double>> coordinates = route.getCoordinates();
-        if (coordinates != null && !coordinates.isEmpty()) {
-            for (List<Double> coord : coordinates) {
-                if (coord != null && coord.size() >= 2) {
-                    BigDecimal longitude = BigDecimal.valueOf(coord.get(0));
-                    BigDecimal latitude = BigDecimal.valueOf(coord.get(1));
-                    waypoints.add(new Coordinates(latitude, longitude));
-                }
-            }
-        } else {
-            String geometryStr = route.getGeometryAsString();
-            if (geometryStr != null && !geometryStr.isEmpty()) {
-                waypoints = PolylineDecoder.decode(geometryStr);
-            }
+        if (temCoordenadasNaRota(route)) {
+            return extrairWaypointsDeCoordenadas(route.getCoordinates());
         }
         
+        return extrairWaypointsDeGeometry(route);
+    }
+    
+    private boolean temCoordenadasNaRota(OsrmRoute route) {
+        List<List<Double>> coordinates = route.getCoordinates();
+        return coordinates != null && !coordinates.isEmpty();
+    }
+    
+    private List<Coordinates> extrairWaypointsDeCoordenadas(List<List<Double>> coordinates) {
+        List<Coordinates> waypoints = new ArrayList<>();
+        for (List<Double> coord : coordinates) {
+            if (isCoordenadaValida(coord)) {
+                BigDecimal longitude = BigDecimal.valueOf(coord.get(0));
+                BigDecimal latitude = BigDecimal.valueOf(coord.get(1));
+                waypoints.add(new Coordinates(latitude, longitude));
+            }
+        }
         return waypoints;
     }
     
-    public String obterProfileOSRM(com.siseg.model.enumerations.TipoVeiculo tipoVeiculo) {
-        return com.siseg.util.VehicleConstants.getOsrmProfile(tipoVeiculo);
+    private boolean isCoordenadaValida(List<Double> coord) {
+        return coord != null && coord.size() >= 2;
+    }
+    
+    private List<Coordinates> extrairWaypointsDeGeometry(OsrmRoute route) {
+        String geometryStr = route.getGeometryAsString();
+        if (temGeometryValida(geometryStr)) {
+            return PolylineDecoder.decode(geometryStr);
+        }
+        return new ArrayList<>();
+    }
+    
+    private boolean temGeometryValida(String geometryStr) {
+        return geometryStr != null && !geometryStr.isEmpty();
+    }
+    
+    public String obterProfileOSRM(TipoVeiculo tipoVeiculo) {
+        return VehicleConstants.getOsrmProfile(tipoVeiculo);
     }
     
     public void clearCache() {
