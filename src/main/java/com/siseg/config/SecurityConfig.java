@@ -62,6 +62,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/users/register").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/clientes").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/restaurantes").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/entregadores").permitAll()
                 .requestMatchers("/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/pagamentos/webhook").permitAll()
                 .anyRequest().authenticated()
