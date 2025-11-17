@@ -10,7 +10,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Logger;
 
 @Service
@@ -41,7 +45,7 @@ public class AsaasService {
                 return customerId;
             }
             return criarCliente(cliente);
-        } catch (org.springframework.web.reactive.function.client.WebClientException e) {
+        } catch (WebClientException e) {
             logger.severe("Erro de conexão ao buscar/criar cliente no Asaas: " + e.getMessage());
             throw new PaymentGatewayException("Erro de conexão com o gateway de pagamento. Verifique sua conexão com a internet.", e);
         } catch (Exception e) {
@@ -68,12 +72,50 @@ public class AsaasService {
                     .retrieve()
                     .bodyToMono(AsaasQrCodeResponseDTO.class)
                     .block();
-        } catch (org.springframework.web.reactive.function.client.WebClientException e) {
+        } catch (WebClientException e) {
             logger.severe("Erro de conexão ao obter QR Code PIX: " + e.getMessage());
             throw new PaymentGatewayException("Erro de conexão com o gateway de pagamento. Verifique sua conexão com a internet.", e);
         } catch (Exception e) {
             logger.severe("Erro ao obter QR Code PIX: " + e.getMessage());
             throw new PaymentGatewayException("Erro ao obter QR Code PIX: " + e.getMessage());
+        }
+    }
+    
+    public AsaasPaymentResponseDTO buscarPagamento(String asaasPaymentId) {
+        try {
+            return webClient.get()
+                    .uri("/payments/{id}", asaasPaymentId)
+                    .retrieve()
+                    .bodyToMono(AsaasPaymentResponseDTO.class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            logger.severe("Erro do Asaas ao buscar pagamento (HTTP " + e.getStatusCode() + "): " + e.getResponseBodyAsString());
+            throw new PaymentGatewayException("Erro ao buscar pagamento no Asaas: " + e.getResponseBodyAsString(), e);
+        } catch (WebClientException e) {
+            logger.severe("Erro de conexão ao buscar pagamento: " + e.getMessage());
+            throw new PaymentGatewayException("Erro de conexão com o gateway de pagamento. Verifique sua conexão com a internet.", e);
+        } catch (Exception e) {
+            logger.severe("Erro ao buscar pagamento: " + e.getMessage());
+            throw new PaymentGatewayException("Erro ao buscar pagamento: " + e.getMessage());
+        }
+    }
+    
+    public void confirmarPagamentoSandbox(String asaasPaymentId) {
+        try {
+            webClient.post()
+                    .uri("/sandbox/payment/{id}/confirm", asaasPaymentId)
+                    .retrieve()
+                    .bodyToMono(Void.class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            logger.severe("Erro do Asaas ao confirmar pagamento no sandbox (HTTP " + e.getStatusCode() + "): " + e.getResponseBodyAsString());
+            throw new PaymentGatewayException("Erro ao confirmar pagamento no sandbox: " + e.getResponseBodyAsString(), e);
+        } catch (WebClientException e) {
+            logger.severe("Erro de conexão ao confirmar pagamento no sandbox: " + e.getMessage());
+            throw new PaymentGatewayException("Erro de conexão com o gateway de pagamento. Verifique sua conexão com a internet.", e);
+        } catch (Exception e) {
+            logger.severe("Erro ao confirmar pagamento no sandbox: " + e.getMessage());
+            throw new PaymentGatewayException("Erro ao confirmar pagamento no sandbox: " + e.getMessage());
         }
     }
     
@@ -112,12 +154,17 @@ public class AsaasService {
     }
     
     private AsaasCustomerResponseDTO criarClienteNaApi(AsaasCustomerRequestDTO customerRequest) {
-        return webClient.post()
-                .uri("/customers")
-                .bodyValue(customerRequest)
-                .retrieve()
-                .bodyToMono(AsaasCustomerResponseDTO.class)
-                .block();
+        try {
+            return webClient.post()
+                    .uri("/customers")
+                    .bodyValue(customerRequest)
+                    .retrieve()
+                    .bodyToMono(AsaasCustomerResponseDTO.class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            logger.severe("Erro do Asaas ao criar cliente (HTTP " + e.getStatusCode() + "): " + e.getResponseBodyAsString());
+            throw new PaymentGatewayException("Erro ao criar cliente no Asaas: " + e.getResponseBodyAsString(), e);
+        }
     }
     
     private AsaasCustomerRequestDTO criarRequestCliente(Cliente cliente) {
@@ -139,7 +186,7 @@ public class AsaasService {
                     .retrieve()
                     .bodyToMono(AsaasPaymentResponseDTO.class)
                     .block();
-        } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
+        } catch (WebClientResponseException e) {
             logger.severe("Erro do Asaas (HTTP " + e.getStatusCode() + "): " + e.getResponseBodyAsString());
             throw e;
         }
@@ -147,6 +194,34 @@ public class AsaasService {
     
     private String obterCpfCnpjCliente(Cliente cliente) {
         return "24971563792";
+    }
+    
+    public AsaasRefundResponseDTO estornarPagamento(String asaasPaymentId, String description) {
+        try {
+            return webClient.post()
+                    .uri("/payments/{id}/refund", asaasPaymentId)
+                    .bodyValue(createRefundRequest(description))
+                    .retrieve()
+                    .bodyToMono(AsaasRefundResponseDTO.class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            logger.severe("Erro do Asaas ao estornar pagamento (HTTP " + e.getStatusCode() + "): " + e.getResponseBodyAsString());
+            throw new PaymentGatewayException("Erro ao estornar pagamento: " + e.getResponseBodyAsString(), e);
+        } catch (WebClientException e) {
+            logger.severe("Erro de conexão ao estornar pagamento no Asaas: " + e.getMessage());
+            throw new PaymentGatewayException("Erro de conexão com o gateway de pagamento. Verifique sua conexão com a internet.", e);
+        } catch (Exception e) {
+            logger.severe("Erro ao estornar pagamento: " + e.getMessage());
+            throw new PaymentGatewayException("Erro ao estornar pagamento: " + e.getMessage());
+        }
+    }
+    
+    private Map<String, String> createRefundRequest(String description) {
+        Map<String, String> request = new HashMap<>();
+        if (description != null && !description.isEmpty()) {
+            request.put("description", description);
+        }
+        return request;
     }
 }
 
