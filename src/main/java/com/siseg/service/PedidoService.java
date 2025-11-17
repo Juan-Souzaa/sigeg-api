@@ -8,6 +8,7 @@ import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.*;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
+import com.siseg.model.enumerations.StatusPagamento;
 import com.siseg.model.enumerations.TipoDesconto;
 import com.siseg.repository.*;
 import com.siseg.mapper.PedidoMapper;
@@ -48,6 +49,8 @@ public class PedidoService {
     private final PedidoValidator pedidoValidator;
     private final CarrinhoService carrinhoService;
     private final CupomService cupomService;
+    private final PagamentoService pagamentoService;
+    private final PagamentoRepository pagamentoRepository;
     private final TaxaCalculoService taxaCalculoService;
 
     public PedidoService(PedidoRepository pedidoRepository, ClienteRepository clienteRepository,
@@ -56,7 +59,8 @@ public class PedidoService {
                          EnderecoService enderecoService, 
                          RastreamentoService rastreamentoService, TempoEstimadoCalculator tempoEstimadoCalculator, 
                          PedidoMapper pedidoMapper, PedidoValidator pedidoValidator, CarrinhoService carrinhoService, 
-                         CupomService cupomService, TaxaCalculoService taxaCalculoService) {
+                         CupomService cupomService, PagamentoService pagamentoService, PagamentoRepository pagamentoRepository, 
+                         TaxaCalculoService taxaCalculoService) {
         this.pedidoRepository = pedidoRepository;
         this.clienteRepository = clienteRepository;
         this.restauranteRepository = restauranteRepository;
@@ -70,6 +74,8 @@ public class PedidoService {
         this.pedidoValidator = pedidoValidator;
         this.carrinhoService = carrinhoService;
         this.cupomService = cupomService;
+        this.pagamentoService = pagamentoService;
+        this.pagamentoRepository = pagamentoRepository;
         this.taxaCalculoService = taxaCalculoService;
     }
     
@@ -604,12 +610,33 @@ public class PedidoService {
             throw new IllegalStateException("Não é possível cancelar pedido que já saiu para entrega ou foi entregue");
         }
         
+        processarReembolsoSeNecessario(pedido);
+        
         pedido.setStatus(StatusPedido.CANCELED);
         Pedido saved = pedidoRepository.save(pedido);
         
         logger.info("Pedido " + id + " cancelado");
         
         return pedidoMapper.toResponseDTO(saved);
+    }
+    
+    private void processarReembolsoSeNecessario(Pedido pedido) {
+        try {
+            pagamentoRepository.findByPedidoId(pedido.getId()).ifPresent(pagamento -> {
+                if (deveReembolsar(pagamento)) {
+                    String motivo = "Reembolso automático por cancelamento de pedido #" + pedido.getId();
+                    pagamentoService.processarReembolso(pedido.getId(), motivo);
+                    logger.info("Reembolso automático processado para pedido " + pedido.getId());
+                }
+            });
+        } catch (Exception e) {
+            logger.warning("Erro ao processar reembolso automático para pedido " + pedido.getId() + ": " + e.getMessage());
+        }
+    }
+    
+    private boolean deveReembolsar(Pagamento pagamento) {
+        return pagamento.getStatus() == StatusPagamento.PAID ||
+               pagamento.getStatus() == StatusPagamento.AUTHORIZED;
     }
     
     private Page<Pedido> buscarPedidosRestauranteComFiltros(Long restauranteId, StatusPedido status, Instant dataInicio, Instant dataFim, Pageable pageable) {

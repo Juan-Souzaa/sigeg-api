@@ -1,14 +1,19 @@
 package com.siseg.service;
 
-import com.siseg.dto.pagamento.*;
-import com.siseg.exception.ResourceNotFoundException;
+import com.siseg.dto.pagamento.AsaasPaymentResponseDTO;
+import com.siseg.dto.pagamento.AsaasQrCodeResponseDTO;
+import com.siseg.dto.pagamento.AsaasRefundResponseDTO;
+import com.siseg.dto.pagamento.CartaoCreditoRequestDTO;
+import com.siseg.dto.pagamento.PagamentoResponseDTO;
 import com.siseg.exception.PaymentGatewayException;
+import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Pagamento;
 import com.siseg.model.Pedido;
 import com.siseg.model.enumerations.MetodoPagamento;
 import com.siseg.model.enumerations.StatusPagamento;
 import com.siseg.model.enumerations.StatusPedido;
-import com.siseg.repository.*;
+import com.siseg.repository.PagamentoRepository;
+import com.siseg.repository.PedidoRepository;
 import com.siseg.util.SecurityUtils;
 import com.siseg.validator.PagamentoValidator;
 import org.modelmapper.ModelMapper;
@@ -172,5 +177,72 @@ public class PagamentoService {
     
     private void validatePedidoOwnership(Pedido pedido) {
         SecurityUtils.validatePedidoOwnership(pedido);
+    }
+    
+    @Transactional
+    public PagamentoResponseDTO processarReembolso(Long pedidoId, String motivo) {
+        Pedido pedido = buscarPedidoValido(pedidoId);
+        Pagamento pagamento = buscarPagamentoPorPedidoId(pedidoId);
+        
+        pagamentoValidator.validateReembolsoPossivel(pagamento);
+        
+        if (pagamento.getMetodo() == MetodoPagamento.CASH) {
+            processarReembolsoDinheiro(pagamento, motivo);
+        } else {
+            processarReembolsoEletronico(pagamento, motivo);
+        }
+        
+        Pagamento saved = pagamentoRepository.save(pagamento);
+        pedidoRepository.save(pedido);
+        
+        logger.info("Reembolso processado para pedido " + pedidoId + " - Valor: R$ " + pagamento.getValorReembolsado());
+        
+        PagamentoResponseDTO response = modelMapper.map(saved, PagamentoResponseDTO.class);
+        response.setPedidoId(saved.getPedido().getId());
+        return response;
+    }
+    
+    private void processarReembolsoDinheiro(Pagamento pagamento, String motivo) {
+        pagamento.setStatus(StatusPagamento.REFUNDED);
+        pagamento.setValorReembolsado(pagamento.getValor());
+        pagamento.setDataReembolso(java.time.Instant.now());
+        pagamento.setAtualizadoEm(java.time.Instant.now());
+        
+        if (pagamento.getPedido() != null) {
+            pagamento.getPedido().setStatus(StatusPedido.CANCELED);
+        }
+        
+        logger.info("Reembolso de dinheiro processado - Motivo: " + motivo);
+    }
+    
+    private void processarReembolsoEletronico(Pagamento pagamento, String motivo) {
+        try {
+            String descricao = motivo != null ? motivo : "Reembolso de pedido cancelado";
+            AsaasRefundResponseDTO refundResponse = asaasService.estornarPagamento(
+                pagamento.getAsaasPaymentId(), 
+                descricao
+            );
+            
+            atualizarPagamentoComReembolso(pagamento, refundResponse);
+            
+            if (pagamento.getPedido() != null) {
+                pagamento.getPedido().setStatus(StatusPedido.CANCELED);
+            }
+            
+        } catch (org.springframework.web.reactive.function.client.WebClientException e) {
+            logger.severe("Erro de conexão ao processar reembolso: " + e.getMessage());
+            throw new PaymentGatewayException("Erro de conexão com o gateway de pagamento ao processar reembolso.", e);
+        } catch (Exception e) {
+            logger.severe("Erro ao processar reembolso: " + e.getMessage());
+            throw new PaymentGatewayException("Erro ao processar reembolso: " + e.getMessage());
+        }
+    }
+    
+    private void atualizarPagamentoComReembolso(Pagamento pagamento, AsaasRefundResponseDTO refundResponse) {
+        pagamento.setStatus(StatusPagamento.REFUNDED);
+        pagamento.setValorReembolsado(new java.math.BigDecimal(refundResponse.getValue()));
+        pagamento.setDataReembolso(java.time.Instant.now());
+        pagamento.setAsaasRefundId(refundResponse.getId());
+        pagamento.setAtualizadoEm(java.time.Instant.now());
     }
 }
