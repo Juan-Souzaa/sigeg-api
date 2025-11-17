@@ -33,6 +33,10 @@ public class PedidoMapper {
             response.setEntregador(toEntregadorSimplesDTO(pedido));
         }
         
+        if (pedido.getEnderecoEntrega() != null) {
+            response.setEnderecoEntrega(pedido.getEnderecoEntrega().toGeocodingString());
+        }
+        
         response.setTempoEstimadoEntrega(pedido.getTempoEstimadoEntrega());
         response.setItens(toPedidoItemResponseDTOList(pedido));
         

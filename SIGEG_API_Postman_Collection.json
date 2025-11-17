@@ -1647,14 +1647,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"restauranteId\": {{restaurante_id}},\n  \"metodoPagamento\": \"PIX\",\n  \"troco\": 0,\n  \"observacoes\": \"Sem cebola\",\n  \"enderecoEntrega\": \"01310-100\",\n  \"carrinhoId\": null,\n  \"itens\": [\n    {\n      \"pratoId\": {{prato_id}},\n      \"quantidade\": 2\n    }\n  ]\n}",
+							"raw": "{\n  \"restauranteId\": {{restaurante_id}},\n  \"metodoPagamento\": \"PIX\",\n  \"troco\": 0,\n  \"observacoes\": \"Sem cebola\",\n  \"enderecoId\": {{endereco_id}},\n  \"carrinhoId\": null,\n  \"itens\": [\n    {\n      \"pratoId\": {{prato_id}},\n      \"quantidade\": 2\n    }\n  ]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
 								}
 							}
 						},
-						"description": "Cria um novo pedido.\n\nOpções:\n- Se fornecer 'carrinhoId', os itens serão obtidos do carrinho e o cupom será aplicado automaticamente\n- Se 'carrinhoId' for null, use 'itens' para especificar os pratos manualmente\n- O clienteId é obtido automaticamente do usuário autenticado\n- O endereço de entrega pode ser CEP (12345678 ou 12345-678) ou endereço completo\n- Coordenadas (latitudeEntrega/longitudeEntrega) são calculadas automaticamente\n- Se o endereço for igual ao do cliente, as coordenadas são reutilizadas (otimização)\n- Ao aceitar pedido, a distância e tempo estimado são calculados usando coordenadas reais do restaurante → endereço de entrega\n- Exemplo com CEP: \"01310-100\"\n- Exemplo com endereço: \"Avenida Paulista, 1578, Bela Vista, São Paulo, SP\"",
+						"description": "Cria um novo pedido.\n\nOpções:\n- Se fornecer 'carrinhoId', os itens serão obtidos do carrinho e o cupom será aplicado automaticamente\n- Se 'carrinhoId' for null, use 'itens' para especificar os pratos manualmente\n- O clienteId é obtido automaticamente do usuário autenticado\n- O 'enderecoId' é opcional: se não fornecido, será usado o endereço principal do cliente\n- Se fornecido, o endereço deve pertencer ao cliente autenticado\n- Coordenadas são calculadas automaticamente se o endereço não as possuir\n- Ao aceitar pedido, a distância e tempo estimado são calculados usando coordenadas reais do restaurante → endereço de entrega",
 						"url": {
 							"raw": "{{baseUrl}}/api/pedidos",
 							"host": [
