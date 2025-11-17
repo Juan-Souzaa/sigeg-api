@@ -415,6 +415,105 @@
 							]
 						}
 					}
+				},
+				{
+					"name": "Atualizar Cliente",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nome\": \"Cliente Atualizado\",\n  \"email\": \"cliente.atualizado@teste.com\",\n  \"telefone\": \"(11) 99999-8888\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/{{cliente_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"{{cliente_id}}"
+							]
+						},
+						"description": "Atualiza os dados do cliente (nome, email, telefone). Requer ownership do cliente."
+					}
+				},
+				{
+					"name": "Excluir Cliente (Soft Delete)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/{{cliente_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"{{cliente_id}}"
+							]
+						},
+						"description": "Exclui um cliente (soft delete). Não é possível excluir clientes com pedidos em andamento."
+					}
+				},
+				{
+					"name": "Atualizar Senha do Cliente",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"senhaAtual\": \"123456\",\n  \"novaSenha\": \"novaSenha123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/{{cliente_id}}/senha",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"{{cliente_id}}",
+								"senha"
+							]
+						},
+						"description": "Atualiza a senha do cliente. Requer a senha atual e a nova senha."
+					}
 				}
 			]
 		},
@@ -615,6 +714,105 @@
 								"rejeitar"
 							]
 						}
+					}
+				},
+				{
+					"name": "Atualizar Restaurante",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nome\": \"Restaurante Atualizado\",\n  \"email\": \"restaurante.atualizado@teste.com\",\n  \"telefone\": \"(11) 88888-8888\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}"
+							]
+						},
+						"description": "Atualiza os dados do restaurante (nome, email, telefone). Requer ownership do restaurante."
+					}
+				},
+				{
+					"name": "Excluir Restaurante (Soft Delete)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}"
+							]
+						},
+						"description": "Exclui um restaurante (soft delete). Não é possível excluir restaurantes com pedidos em andamento ou pratos ativos."
+					}
+				},
+				{
+					"name": "Atualizar Senha do Restaurante",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"senhaAtual\": \"123456\",\n  \"novaSenha\": \"novaSenha123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/senha",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"senha"
+							]
+						},
+						"description": "Atualiza a senha do restaurante. Requer a senha atual e a nova senha."
 					}
 				},
 				{
@@ -1024,6 +1222,25 @@
 						}
 					},
 					"description": "Define um endereço como principal do restaurante.\n\nRequer role RESTAURANTE ou ADMIN.\nOutros endereços serão automaticamente desmarcados como principais."
+				},
+				{
+					"name": "Buscar Endereço por CEP",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/cep/01310100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cep",
+								"01310100"
+							]
+						},
+						"description": "Busca o endereço completo pelo CEP usando a API ViaCEP.\n\nEndpoint público, não requer autenticação.\nO CEP pode ser enviado com ou sem hífen (ex: 01310100 ou 01310-100).\nRetorna: logradouro, bairro, cidade, estado e CEP formatado."
+					}
 				}
 			]
 		},
@@ -1237,6 +1454,58 @@
 								"disponibilidade"
 							]
 						}
+					}
+				},
+				{
+					"name": "Buscar Prato por ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/pratos/{{prato_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"pratos",
+								"{{prato_id}}"
+							]
+						},
+						"description": "Busca um prato específico por ID."
+					}
+				},
+				{
+					"name": "Excluir Prato",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/{{restaurante_id}}/pratos/{{prato_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"{{restaurante_id}}",
+								"pratos",
+								"{{prato_id}}"
+							]
+						},
+						"description": "Exclui um prato. Não é possível excluir pratos que estão em pedidos em andamento."
 					}
 				}
 			]
@@ -1634,6 +1903,57 @@
 							]
 						},
 						"description": "Marca pedido como PREPARING. Apenas o dono do restaurante."
+					}
+				},
+				{
+					"name": "Cancelar Pedido (Cliente)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/pedidos/{{pedido_id}}/cancelar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pedidos",
+								"{{pedido_id}}",
+								"cancelar"
+							]
+						},
+						"description": "Cancela um pedido. Apenas o cliente dono do pedido.\n\nSó é possível cancelar pedidos com status CREATED ou CONFIRMED.\nNão é possível cancelar pedidos que já saíram para entrega (OUT_FOR_DELIVERY) ou foram entregues (DELIVERED)."
+					}
+				},
+				{
+					"name": "Cancelar Pedido (Restaurante)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/restaurantes/pedidos/{{pedido_id}}/cancelar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"restaurantes",
+								"pedidos",
+								"{{pedido_id}}",
+								"cancelar"
+							]
+						},
+						"description": "Cancela um pedido. Apenas o restaurante dono do pedido.\n\nRequer role RESTAURANTE ou ADMIN.\nSó é possível cancelar pedidos com status CREATED ou CONFIRMED.\nNão é possível cancelar pedidos que já saíram para entrega (OUT_FOR_DELIVERY) ou foram entregues (DELIVERED)."
 					}
 				},
 				{
@@ -3174,6 +3494,55 @@
 							]
 						},
 						"description": "Lista cupons ativos. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Listar Cupons Disponíveis (Público)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/cupons/disponiveis?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cupons",
+								"disponiveis"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista cupons disponíveis para clientes. Endpoint público, não requer autenticação."
+					}
+				},
+				{
+					"name": "Validar Cupom",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/cupons/DESCONTO10/validar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cupons",
+								"DESCONTO10",
+								"validar"
+							]
+						},
+						"description": "Valida um cupom antes de aplicar. Verifica se o cupom está ativo, válido e não esgotado. Endpoint público."
 					}
 				},
 				{
