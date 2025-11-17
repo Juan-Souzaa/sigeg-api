@@ -14,6 +14,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
@@ -51,6 +52,7 @@ public class DataInitializer implements CommandLineRunner {
     private EnderecoService enderecoService;
 
     @Override
+    @Transactional
     public void run(String... args) throws Exception {
         // Criar roles se não existirem
         if (roleRepository.count() == 0) {
@@ -211,6 +213,7 @@ public class DataInitializer implements CommandLineRunner {
         System.out.println("   Cliente 3: Pedro Oliveira (ID: 3) - Email: pedro.oliveira@email.com - Senha: 123456");
     }
 
+    @Transactional
     private void createTestRestaurantAndData() {
         // Criar usuário do restaurante
         User restauranteUser = new User();
@@ -283,8 +286,8 @@ public class DataInitializer implements CommandLineRunner {
         pedido.setRestaurante(restaurante);
         pedido.setStatus(StatusPedido.CREATED);
         pedido.setMetodoPagamento(MetodoPagamento.CREDIT_CARD);
-        // Usar endereço principal do cliente
-        Endereco enderecoEntrega = cliente.getEnderecoPrincipal()
+        // Buscar endereço principal do cliente usando o serviço
+        Endereco enderecoEntrega = enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())
                 .orElseThrow(() -> new RuntimeException("Cliente não possui endereço cadastrado"));
         pedido.setEnderecoEntrega(enderecoEntrega);
         pedido.setSubtotal(new BigDecimal("25.90"));
