@@ -10,13 +10,16 @@ import com.siseg.exception.UserAlreadyExistsException;
 import com.siseg.mapper.RestauranteMapper;
 import com.siseg.model.Cliente;
 import com.siseg.model.Restaurante;
+import com.siseg.model.Role;
 import com.siseg.model.User;
+import com.siseg.model.enumerations.ERole;
 import com.siseg.model.enumerations.StatusRestaurante;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.ClienteRepository;
 import com.siseg.repository.PedidoRepository;
 import com.siseg.repository.PratoRepository;
 import com.siseg.repository.RestauranteRepository;
+import com.siseg.repository.RoleRepository;
 import com.siseg.repository.UserRepository;
 import com.siseg.util.SecurityUtils;
 import org.modelmapper.ModelMapper;
@@ -33,8 +36,10 @@ import com.siseg.model.Endereco;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -49,6 +54,7 @@ public class RestauranteService {
     private final EnderecoService enderecoService;
     private final ClienteRepository clienteRepository;
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final PedidoRepository pedidoRepository;
     private final PratoRepository pratoRepository;
     private final PasswordEncoder passwordEncoder;
@@ -57,13 +63,15 @@ public class RestauranteService {
     public RestauranteService(RestauranteRepository restauranteRepository, ModelMapper modelMapper, 
                               EnderecoService enderecoService, 
                               ClienteRepository clienteRepository, UserRepository userRepository,
-                              PedidoRepository pedidoRepository, PratoRepository pratoRepository,
-                              PasswordEncoder passwordEncoder, RestauranteMapper restauranteMapper) {
+                              RoleRepository roleRepository, PedidoRepository pedidoRepository, 
+                              PratoRepository pratoRepository, PasswordEncoder passwordEncoder, 
+                              RestauranteMapper restauranteMapper) {
         this.restauranteRepository = restauranteRepository;
         this.modelMapper = modelMapper;
         this.enderecoService = enderecoService;
         this.clienteRepository = clienteRepository;
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
         this.pedidoRepository = pedidoRepository;
         this.pratoRepository = pratoRepository;
         this.passwordEncoder = passwordEncoder;
@@ -71,15 +79,29 @@ public class RestauranteService {
     }
     
     public RestauranteResponseDTO criarRestaurante(RestauranteRequestDTO dto) {
+        if (userRepository.findByUsername(dto.getEmail()).isPresent()) {
+            throw new UserAlreadyExistsException("Já existe um usuário com este email.");
+        }
+        
         if (restauranteRepository.findByEmail(dto.getEmail()).isPresent()) {
             throw new UserAlreadyExistsException("Já existe um restaurante com este email.");
         }
         
-        User currentUser = SecurityUtils.getCurrentUser();
+        User user = new User();
+        user.setUsername(dto.getEmail());
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        
+        Set<Role> roles = new HashSet<>();
+        Role restauranteRole = roleRepository.findByRoleName(ERole.ROLE_RESTAURANTE)
+                .orElseThrow(() -> new ResourceNotFoundException("Role RESTAURANTE não encontrado"));
+        roles.add(restauranteRole);
+        user.setRoles(roles);
+        
+        User savedUser = userRepository.save(user);
         
         Restaurante restaurante = modelMapper.map(dto, Restaurante.class);
         restaurante.setStatus(StatusRestaurante.PENDING_APPROVAL);
-        restaurante.setUser(currentUser);
+        restaurante.setUser(savedUser);
         
         if (dto.getRaioEntregaKm() != null) {
             restaurante.setRaioEntregaKm(dto.getRaioEntregaKm());
