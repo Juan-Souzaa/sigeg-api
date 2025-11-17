@@ -3,6 +3,7 @@ package com.siseg.controller;
 import com.siseg.dto.pagamento.AsaasWebhookDTO;
 import com.siseg.dto.pagamento.CartaoCreditoRequestDTO;
 import com.siseg.dto.pagamento.PagamentoResponseDTO;
+import com.siseg.dto.pagamento.ReembolsoRequestDTO;
 import com.siseg.service.AsaasWebhookService;
 import com.siseg.service.PagamentoService;
 import com.siseg.util.HttpUtils;
@@ -11,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -67,5 +69,15 @@ public class PagamentoController {
         } catch (IOException e) {
             return ResponseEntity.badRequest().body("Erro ao processar webhook");
         }
+    }
+    
+    @PostMapping("/pedidos/{pedidoId}/reembolso")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
+    @Operation(summary = "Estornar pagamento de um pedido")
+    public ResponseEntity<PagamentoResponseDTO> estornarPagamento(
+            @PathVariable Long pedidoId,
+            @RequestBody @Valid ReembolsoRequestDTO request) {
+        PagamentoResponseDTO response = pagamentoService.processarReembolso(pedidoId, request.getMotivo());
+        return ResponseEntity.ok(response);
     }
 }
