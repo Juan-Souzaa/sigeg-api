@@ -3280,6 +3280,65 @@
 						},
 						"description": "Lista histórico de configurações de taxa. Requer role ADMIN."
 					}
+				},
+				{
+					"name": "Criar Administrador",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"novo_admin\",\n  \"password\": \"senha_segura_123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/admins",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"admins"
+							]
+						},
+						"description": "Cria um novo administrador.\n\nREQUISITOS:\n- Permissão: ADMIN (apenas admins podem criar outros admins)\n- Username deve ser único\n- Password será criptografado automaticamente\n\nRESPOSTA:\n- Retorna o ID e username do admin criado\n- O novo admin terá role ROLE_ADMIN e poderá acessar todos os endpoints administrativos\n\nEXEMPLO DE USO:\n- Criar admin para equipe de suporte\n- Criar admin para diferentes departamentos\n- Criar admin temporário para tarefas específicas"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    console.log('Admin criado com sucesso!');",
+									"    console.log('ID:', response.id);",
+									"    console.log('Username:', response.username);",
+									"} else {",
+									"    console.log('Erro ao criar admin:', pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
 				}
 			]
 		},
