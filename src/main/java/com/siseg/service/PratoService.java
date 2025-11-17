@@ -8,6 +8,9 @@ import com.siseg.mapper.PedidoMapper;
 import com.siseg.model.Prato;
 import com.siseg.model.Restaurante;
 import com.siseg.model.enumerations.CategoriaMenu;
+import com.siseg.model.enumerations.StatusPedido;
+import com.siseg.model.PedidoItem;
+import com.siseg.repository.PedidoItemRepository;
 import com.siseg.repository.PratoRepository;
 import com.siseg.repository.RestauranteRepository;
 import com.siseg.util.SecurityUtils;
@@ -40,13 +43,16 @@ public class PratoService {
     
     private final PratoRepository pratoRepository;
     private final RestauranteRepository restauranteRepository;
+    private final PedidoItemRepository pedidoItemRepository;
     private final ModelMapper modelMapper;
     private final PedidoMapper pedidoMapper;
     
-    public PratoService(PratoRepository pratoRepository, RestauranteRepository restauranteRepository, 
+    public PratoService(PratoRepository pratoRepository, RestauranteRepository restauranteRepository,
+                        PedidoItemRepository pedidoItemRepository,
                         ModelMapper modelMapper, PedidoMapper pedidoMapper) {
         this.pratoRepository = pratoRepository;
         this.restauranteRepository = restauranteRepository;
+        this.pedidoItemRepository = pedidoItemRepository;
         this.modelMapper = modelMapper;
         this.pedidoMapper = pedidoMapper;
     }
@@ -172,5 +178,37 @@ public class PratoService {
                 .collect(Collectors.groupingBy(Prato::getCategoria));
         
         return pedidoMapper.toCardapioResponseDTO(restauranteId, restaurante.getNome(), pratosPorCategoria);
+    }
+    
+    @Transactional(readOnly = true)
+    public PratoResponseDTO buscarPorId(Long id) {
+        Prato prato = buscarPrato(id);
+        return modelMapper.map(prato, PratoResponseDTO.class);
+    }
+    
+    @Transactional
+    public void excluirPrato(Long id, Long restauranteId) {
+        Prato prato = buscarPrato(id);
+        
+        if (!prato.getRestaurante().getId().equals(restauranteId)) {
+            throw new IllegalArgumentException("Prato não pertence ao restaurante");
+        }
+        
+        SecurityUtils.validateRestauranteOwnership(prato.getRestaurante());
+        
+        List<StatusPedido> statusesEmAndamento = List.of(
+            StatusPedido.CREATED,
+            StatusPedido.CONFIRMED,
+            StatusPedido.PREPARING,
+            StatusPedido.OUT_FOR_DELIVERY
+        );
+        
+        List<PedidoItem> itensEmPedidos = pedidoItemRepository.findByPratoIdAndPedidoStatusIn(id, statusesEmAndamento);
+        
+        if (!itensEmPedidos.isEmpty()) {
+            throw new IllegalStateException("Não é possível excluir prato que está em pedidos em andamento");
+        }
+        
+        pratoRepository.delete(prato);
     }
 }

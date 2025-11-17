@@ -60,4 +60,22 @@ public class PratoController {
         Page<PratoResponseDTO> response = pratoService.listarPorRestaurante(restauranteId, categoria, disponivel, pageable);
         return ResponseEntity.ok(response);
     }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Buscar prato por ID")
+    public ResponseEntity<PratoResponseDTO> buscarPorId(
+            @PathVariable Long restauranteId,
+            @PathVariable Long id) {
+        PratoResponseDTO response = pratoService.buscarPorId(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Excluir prato")
+    public ResponseEntity<Void> excluirPrato(
+            @PathVariable Long restauranteId,
+            @PathVariable Long id) {
+        pratoService.excluirPrato(id, restauranteId);
+        return ResponseEntity.noContent().build();
+    }
 }
