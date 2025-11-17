@@ -86,9 +86,8 @@ public class PedidoService {
             processarCarrinhoParaPedido(pedido, dto.getCarrinhoId(), cliente.getId());
         } else {
             processarItensPedido(pedido, dto.getItens());
+            calcularValoresPedido(pedido);
         }
-        
-        calcularValoresPedido(pedido);
         
         Pedido saved = pedidoRepository.save(pedido);
         
@@ -225,13 +224,15 @@ public class PedidoService {
     
     
     private void aplicarCupomSeExistir(Pedido pedido, Carrinho carrinho, BigDecimal subtotal) {
+        BigDecimal taxaEntrega = calcularTaxaEntrega(subtotal);
+        pedido.setTaxaEntrega(taxaEntrega);
+        
         if (carrinho.getCupom() != null) {
             BigDecimal desconto = calcularDescontoCupom(carrinho.getCupom(), subtotal);
-            BigDecimal taxaEntrega = calcularTaxaEntrega(subtotal);
             pedido.setTotal(subtotal.subtract(desconto).add(taxaEntrega));
             cupomService.incrementarUsoCupom(carrinho.getCupom());
         } else {
-            pedido.setTotal(subtotal.add(calcularTaxaEntrega(subtotal)));
+            pedido.setTotal(subtotal.add(taxaEntrega));
         }
     }
     

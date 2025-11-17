@@ -11,6 +11,7 @@ import com.siseg.model.Cliente;
 import com.siseg.model.Cupom;
 import com.siseg.model.Prato;
 import com.siseg.model.User;
+import com.siseg.model.enumerations.TipoDesconto;
 import com.siseg.mapper.CarrinhoMapper;
 import com.siseg.repository.CarrinhoRepository;
 import com.siseg.repository.ClienteRepository;
@@ -235,7 +236,7 @@ public class CarrinhoService {
         Cupom cupom = carrinho.getCupom();
         BigDecimal desconto;
         
-        if (cupom.getTipoDesconto().name().equals("PERCENTUAL")) {
+        if (cupom.getTipoDesconto() == TipoDesconto.PERCENTUAL) {
             desconto = CalculadoraFinanceira.calcularTaxaPlataforma(subtotal, cupom.getValorDesconto());
         } else {
             desconto = cupom.getValorDesconto();
