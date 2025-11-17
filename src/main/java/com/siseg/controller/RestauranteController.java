@@ -1,6 +1,7 @@
 package com.siseg.controller;
 
 import com.siseg.dto.AtualizarSenhaDTO;
+import com.siseg.dto.restaurante.AtualizarRaioEntregaDTO;
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
 import com.siseg.dto.restaurante.RestauranteUpdateDTO;
@@ -95,6 +96,16 @@ public class RestauranteController {
             @PathVariable Long id,
             @Valid @RequestBody AtualizarSenhaDTO dto) {
         restauranteService.atualizarSenha(id, dto);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}/raio-entrega")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
+    @Operation(summary = "Atualizar raio de entrega do restaurante")
+    public ResponseEntity<Void> atualizarRaioEntrega(
+            @PathVariable Long id,
+            @Valid @RequestBody AtualizarRaioEntregaDTO dto) {
+        restauranteService.atualizarRaioEntrega(id, dto.getRaioEntregaKm());
         return ResponseEntity.noContent().build();
     }
 }
