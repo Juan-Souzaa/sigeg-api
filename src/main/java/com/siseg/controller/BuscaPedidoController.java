@@ -111,5 +111,20 @@ public class BuscaPedidoController {
         );
         return ResponseEntity.ok(response);
     }
+
+    @PatchMapping("/pedidos/{id}/cancelar")
+    @Operation(summary = "Cancelar pedido (Cliente)")
+    public ResponseEntity<PedidoResponseDTO> cancelarPedido(@PathVariable Long id) {
+        PedidoResponseDTO response = pedidoService.cancelarPedido(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/restaurantes/pedidos/{id}/cancelar")
+    @PreAuthorize("hasAnyRole('RESTAURANTE', 'ADMIN')")
+    @Operation(summary = "Cancelar pedido (Restaurante)")
+    public ResponseEntity<PedidoResponseDTO> cancelarPedidoRestaurante(@PathVariable Long id) {
+        PedidoResponseDTO response = pedidoService.cancelarPedido(id);
+        return ResponseEntity.ok(response);
+    }
     
 }

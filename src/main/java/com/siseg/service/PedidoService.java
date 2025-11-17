@@ -588,6 +588,29 @@ public class PedidoService {
         return pedidoRepository.findByClienteId(clienteId, pageable);
     }
     
+    @Transactional
+    public PedidoResponseDTO cancelarPedido(Long id) {
+        Pedido pedido = pedidoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado com ID: " + id));
+        
+        SecurityUtils.validatePedidoOwnership(pedido);
+        
+        if (pedido.getStatus() != StatusPedido.CREATED && pedido.getStatus() != StatusPedido.CONFIRMED) {
+            throw new IllegalStateException("Só é possível cancelar pedidos com status CREATED ou CONFIRMED");
+        }
+        
+        if (pedido.getStatus() == StatusPedido.OUT_FOR_DELIVERY || pedido.getStatus() == StatusPedido.DELIVERED) {
+            throw new IllegalStateException("Não é possível cancelar pedido que já saiu para entrega ou foi entregue");
+        }
+        
+        pedido.setStatus(StatusPedido.CANCELED);
+        Pedido saved = pedidoRepository.save(pedido);
+        
+        logger.info("Pedido " + id + " cancelado");
+        
+        return pedidoMapper.toResponseDTO(saved);
+    }
+    
     private Page<Pedido> buscarPedidosRestauranteComFiltros(Long restauranteId, StatusPedido status, Instant dataInicio, Instant dataFim, Pageable pageable) {
         boolean temStatus = status != null;
         boolean temPeriodo = dataInicio != null && dataFim != null;
