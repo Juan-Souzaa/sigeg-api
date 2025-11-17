@@ -1,18 +1,25 @@
 package com.siseg.service;
 
+import com.siseg.dto.AtualizarSenhaDTO;
 import com.siseg.dto.restaurante.RestauranteBuscaDTO;
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
+import com.siseg.dto.restaurante.RestauranteUpdateDTO;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.mapper.RestauranteMapper;
 import com.siseg.model.Cliente;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.StatusRestaurante;
+import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.ClienteRepository;
+import com.siseg.repository.PedidoRepository;
+import com.siseg.repository.PratoRepository;
 import com.siseg.repository.RestauranteRepository;
+import com.siseg.repository.UserRepository;
 import com.siseg.util.SecurityUtils;
 import org.modelmapper.ModelMapper;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -32,15 +39,25 @@ public class RestauranteService {
     private final ModelMapper modelMapper;
     private final EnderecoService enderecoService;
     private final ClienteRepository clienteRepository;
+    private final UserRepository userRepository;
+    private final PedidoRepository pedidoRepository;
+    private final PratoRepository pratoRepository;
+    private final PasswordEncoder passwordEncoder;
     private final RestauranteMapper restauranteMapper;
     
     public RestauranteService(RestauranteRepository restauranteRepository, ModelMapper modelMapper, 
                               EnderecoService enderecoService, 
-                              ClienteRepository clienteRepository, RestauranteMapper restauranteMapper) {
+                              ClienteRepository clienteRepository, UserRepository userRepository,
+                              PedidoRepository pedidoRepository, PratoRepository pratoRepository,
+                              PasswordEncoder passwordEncoder, RestauranteMapper restauranteMapper) {
         this.restauranteRepository = restauranteRepository;
         this.modelMapper = modelMapper;
         this.enderecoService = enderecoService;
         this.clienteRepository = clienteRepository;
+        this.userRepository = userRepository;
+        this.pedidoRepository = pedidoRepository;
+        this.pratoRepository = pratoRepository;
+        this.passwordEncoder = passwordEncoder;
         this.restauranteMapper = restauranteMapper;
     }
     
@@ -67,6 +84,25 @@ public class RestauranteService {
         Restaurante restaurante = restauranteRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + id));
         return restauranteMapper.toResponseDTO(restaurante);
+    }
+    
+    public RestauranteResponseDTO atualizarRestaurante(Long id, RestauranteUpdateDTO dto) {
+        Restaurante restaurante = restauranteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + id));
+        
+        SecurityUtils.validateRestauranteOwnership(restaurante);
+        
+        restaurante.setNome(dto.getNome());
+        restaurante.setEmail(dto.getEmail());
+        restaurante.setTelefone(dto.getTelefone());
+        
+        if (restaurante.getUser() != null) {
+            restaurante.getUser().setUsername(dto.getEmail());
+            userRepository.save(restaurante.getUser());
+        }
+        
+        Restaurante saved = restauranteRepository.save(restaurante);
+        return restauranteMapper.toResponseDTO(saved);
     }
     
     public RestauranteResponseDTO aprovarRestaurante(Long id) {
@@ -118,5 +154,55 @@ public class RestauranteService {
                 .toList();
         
         return new PageImpl<>(dtos, pageable, restaurantes.getTotalElements());
+    }
+    
+    public void excluirRestaurante(Long id) {
+        Restaurante restaurante = restauranteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + id));
+        
+        SecurityUtils.validateRestauranteOwnership(restaurante);
+        
+        List<StatusPedido> statusesEmAndamento = List.of(
+            StatusPedido.CREATED,
+            StatusPedido.CONFIRMED,
+            StatusPedido.PREPARING,
+            StatusPedido.OUT_FOR_DELIVERY
+        );
+        
+        boolean temPedidosEmAndamento = pedidoRepository.existsByRestauranteIdAndStatusIn(id, statusesEmAndamento);
+        
+        if (temPedidosEmAndamento) {
+            throw new IllegalStateException("Não é possível excluir restaurante com pedidos em andamento");
+        }
+        
+        long pratosAtivos = pratoRepository.findByRestauranteId(id, Pageable.unpaged())
+                .getContent().stream()
+                .filter(p -> Boolean.TRUE.equals(p.getDisponivel()))
+                .count();
+        
+        if (pratosAtivos > 0) {
+            throw new IllegalStateException("Não é possível excluir restaurante com pratos ativos");
+        }
+        
+        restaurante.setAtivo(false);
+        restauranteRepository.save(restaurante);
+    }
+    
+    public void atualizarSenha(Long id, AtualizarSenhaDTO dto) {
+        Restaurante restaurante = restauranteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + id));
+        
+        SecurityUtils.validateRestauranteOwnership(restaurante);
+        
+        if (restaurante.getUser() == null) {
+            throw new ResourceNotFoundException("Usuário não encontrado para o restaurante");
+        }
+        
+        if (!passwordEncoder.matches(dto.getSenhaAtual(), restaurante.getUser().getPassword())) {
+            throw new IllegalArgumentException("Senha atual incorreta");
+        }
+        
+        restaurante.getUser().setPassword(passwordEncoder.encode(dto.getNovaSenha()));
+        userRepository.save(restaurante.getUser());
     }
 }

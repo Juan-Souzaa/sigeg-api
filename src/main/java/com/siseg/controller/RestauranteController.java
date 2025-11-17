@@ -1,7 +1,9 @@
 package com.siseg.controller;
 
+import com.siseg.dto.AtualizarSenhaDTO;
 import com.siseg.dto.restaurante.RestauranteRequestDTO;
 import com.siseg.dto.restaurante.RestauranteResponseDTO;
+import com.siseg.dto.restaurante.RestauranteUpdateDTO;
 import com.siseg.model.enumerations.StatusRestaurante;
 import com.siseg.service.RestauranteService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -69,5 +71,30 @@ public class RestauranteController {
     public ResponseEntity<Page<RestauranteResponseDTO>> listarPorStatus(@PathVariable StatusRestaurante status, Pageable pageable) {
         Page<RestauranteResponseDTO> response = restauranteService.listarPorStatus(status, pageable);
         return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Atualizar restaurante")
+    public ResponseEntity<RestauranteResponseDTO> atualizarRestaurante(
+            @PathVariable Long id,
+            @Valid @RequestBody RestauranteUpdateDTO dto) {
+        RestauranteResponseDTO response = restauranteService.atualizarRestaurante(id, dto);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Excluir restaurante (soft delete)")
+    public ResponseEntity<Void> excluirRestaurante(@PathVariable Long id) {
+        restauranteService.excluirRestaurante(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}/senha")
+    @Operation(summary = "Atualizar senha do restaurante")
+    public ResponseEntity<Void> atualizarSenha(
+            @PathVariable Long id,
+            @Valid @RequestBody AtualizarSenhaDTO dto) {
+        restauranteService.atualizarSenha(id, dto);
+        return ResponseEntity.noContent().build();
     }
 }
