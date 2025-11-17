@@ -77,7 +77,7 @@ public class GanhosService {
         BigDecimal volumeTotal = calcularVolumeTotal(pedidos);
         BigDecimal distribuicaoRestaurantes = calcularDistribuicaoRestaurantes(pedidos);
         BigDecimal distribuicaoEntregadores = calcularDistribuicaoEntregadores(pedidos);
-        BigDecimal distribuicaoPlataforma = volumeTotal.subtract(distribuicaoRestaurantes).subtract(distribuicaoEntregadores);
+        BigDecimal distribuicaoPlataforma = calcularDistribuicaoPlataforma(pedidos);
         
         String tendencia = calcularTendencia(pedidos, periodo);
         
@@ -165,6 +165,18 @@ public class GanhosService {
     private BigDecimal calcularDistribuicaoEntregadores(List<Pedido> pedidos) {
         return pedidos.stream()
                 .map(p -> p.getValorLiquidoEntregador() != null ? p.getValorLiquidoEntregador() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal calcularDistribuicaoPlataforma(List<Pedido> pedidos) {
+        return pedidos.stream()
+                .map(p -> {
+                    BigDecimal taxaRest = p.getTaxaPlataformaRestaurante() != null ? 
+                            p.getTaxaPlataformaRestaurante() : BigDecimal.ZERO;
+                    BigDecimal taxaEnt = p.getTaxaPlataformaEntregador() != null ? 
+                            p.getTaxaPlataformaEntregador() : BigDecimal.ZERO;
+                    return taxaRest.add(taxaEnt);
+                })
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 

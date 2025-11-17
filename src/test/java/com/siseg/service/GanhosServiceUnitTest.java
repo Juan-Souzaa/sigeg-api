@@ -122,5 +122,49 @@ class GanhosServiceUnitTest {
         assertNotNull(resultado);
         verify(ganhosMapper).toRelatorioDistribuicaoDTO(any(), any(), any(), any(), anyString(), anyString());
     }
+
+    @Test
+    void deveCalcularDistribuicaoPlataformaCorretamenteComCupom() {
+        Pedido pedidoComCupom = new Pedido();
+        pedidoComCupom.setId(2L);
+        pedidoComCupom.setSubtotal(new BigDecimal("100.00"));
+        pedidoComCupom.setTaxaEntrega(new BigDecimal("10.00"));
+        pedidoComCupom.setTotal(new BigDecimal("90.00"));
+        pedidoComCupom.setTaxaPlataformaRestaurante(new BigDecimal("10.00"));
+        pedidoComCupom.setTaxaPlataformaEntregador(new BigDecimal("1.50"));
+        pedidoComCupom.setValorLiquidoRestaurante(new BigDecimal("90.00"));
+        pedidoComCupom.setValorLiquidoEntregador(new BigDecimal("8.50"));
+        pedidoComCupom.setCriadoEm(Instant.now());
+
+        when(pedidoRepository.findByStatus(StatusPedido.DELIVERED))
+                .thenReturn(List.of(pedidoComCupom));
+
+        RelatorioDistribuicaoDTO relatorio = new RelatorioDistribuicaoDTO();
+        relatorio.setVolumeTotal(new BigDecimal("90.00"));
+        relatorio.setDistribuicaoRestaurantes(new BigDecimal("90.00"));
+        relatorio.setDistribuicaoEntregadores(new BigDecimal("8.50"));
+        relatorio.setDistribuicaoPlataforma(new BigDecimal("11.50"));
+
+        when(ganhosMapper.toRelatorioDistribuicaoDTO(
+                eq(new BigDecimal("90.00")),
+                eq(new BigDecimal("90.00")),
+                eq(new BigDecimal("8.50")),
+                eq(new BigDecimal("11.50")),
+                anyString(),
+                anyString()))
+                .thenReturn(relatorio);
+
+        RelatorioDistribuicaoDTO resultado = ganhosService.gerarRelatorioDistribuicao(Periodo.MES);
+
+        assertNotNull(resultado);
+        assertEquals(new BigDecimal("11.50"), resultado.getDistribuicaoPlataforma());
+        verify(ganhosMapper).toRelatorioDistribuicaoDTO(
+                eq(new BigDecimal("90.00")),
+                eq(new BigDecimal("90.00")),
+                eq(new BigDecimal("8.50")),
+                eq(new BigDecimal("11.50")),
+                anyString(),
+                anyString());
+    }
 }
 
