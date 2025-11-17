@@ -65,7 +65,7 @@ class EnderecoControllerFunctionalTest {
         enderecoDTO.setBairro("Centro");
         enderecoDTO.setCidade("São Paulo");
         enderecoDTO.setEstado("SP");
-        enderecoDTO.setCep("01310100");
+        enderecoDTO.setCep("00000000");
         enderecoDTO.setPrincipal(false);
         return enderecoDTO;
     }
