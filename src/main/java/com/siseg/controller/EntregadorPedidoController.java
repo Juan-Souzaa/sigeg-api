@@ -21,6 +21,14 @@ public class EntregadorPedidoController {
         this.pedidoService = pedidoService;
     }
     
+    @GetMapping("/entregas")
+    @PreAuthorize("hasRole('ENTREGADOR')")
+    @Operation(summary = "Listar entregas ativas do entregador autenticado")
+    public ResponseEntity<Page<PedidoResponseDTO>> listarEntregasAtivas(Pageable pageable) {
+        Page<PedidoResponseDTO> response = pedidoService.listarEntregasAtivas(pageable);
+        return ResponseEntity.ok(response);
+    }
+    
     @GetMapping("/pedidos/disponiveis")
     @PreAuthorize("hasRole('ENTREGADOR')")
     @Operation(summary = "Listar pedidos disponíveis para entrega")

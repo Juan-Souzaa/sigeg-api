@@ -18,6 +18,7 @@ import com.siseg.util.CalculadoraFinanceira;
 import com.siseg.util.VehicleConstants;
 import com.siseg.validator.PedidoValidator;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -361,10 +362,6 @@ public class PedidoService {
     }
     
     private boolean precisaInicializarPosicao(Entregador entregador, Restaurante restaurante) {
-        if (entregador.getLatitude() != null && entregador.getLongitude() != null) {
-            return false;
-        }
-        
         if (restaurante == null) {
             return false;
         }
@@ -382,7 +379,7 @@ public class PedidoService {
                             entregador.setLatitude(endereco.getLatitude());
                             entregador.setLongitude(endereco.getLongitude());
                             entregadorRepository.save(entregador);
-                            logger.info("Posição inicial do entregador definida com coordenadas do restaurante");
+                            logger.info("Posição inicial do entregador definida com coordenadas do restaurante para iniciar entrega");
                         }
                     },
                     () -> logger.warning("Restaurante não possui endereço principal com coordenadas")
@@ -438,6 +435,35 @@ public class PedidoService {
         });
         
         return pedidos.map(pedidoMapper::toResponseDTO);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PedidoResponseDTO> listarEntregasAtivas(Pageable pageable) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
+                .orElseThrow(() -> new AccessDeniedException("Usuário não é entregador"));
+        
+        List<Pedido> pedidos = pedidoRepository.findByEntregadorId(entregador.getId());
+        
+       
+        List<Pedido> pedidosAtivos = pedidos.stream()
+                .filter(p -> p.getStatus() != StatusPedido.DELIVERED && p.getStatus() != StatusPedido.CANCELED)
+                .toList();
+        
+
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), pedidosAtivos.size());
+        List<Pedido> pedidosPaginados = start < pedidosAtivos.size() 
+                ? pedidosAtivos.subList(start, end) 
+                : List.of();
+        
+        Page<Pedido> page = new PageImpl<>(
+                pedidosPaginados, 
+                pageable, 
+                pedidosAtivos.size()
+        );
+        
+        return page.map(pedidoMapper::toResponseDTO);
     }
 
     @Transactional

@@ -2,6 +2,7 @@ package com.siseg.controller;
 
 import com.siseg.dto.entregador.EntregadorRequestDTO;
 import com.siseg.dto.entregador.EntregadorResponseDTO;
+import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.service.EntregadorService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,9 +34,15 @@ public class EntregadorController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Buscar entregador por ID")
-    public ResponseEntity<EntregadorResponseDTO> buscarPorId(@PathVariable Long id) {
-        EntregadorResponseDTO response = entregadorService.buscarPorId(id);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<EntregadorResponseDTO> buscarPorId(@PathVariable String id) {
+        
+        try {
+            Long entregadorId = Long.parseLong(id);
+            EntregadorResponseDTO response = entregadorService.buscarPorId(entregadorId);
+            return ResponseEntity.ok(response);
+        } catch (NumberFormatException e) {
+            throw new ResourceNotFoundException("ID inválido: " + id);
+        }
     }
 
     @GetMapping
