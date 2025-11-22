@@ -8,7 +8,7 @@ import lombok.Setter;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @Getter
 @Setter
-public class NominatimResponse {
+public class LocationIQResponse {
     @JsonProperty("lat")
     private String lat;
     

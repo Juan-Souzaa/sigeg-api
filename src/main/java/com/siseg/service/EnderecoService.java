@@ -239,6 +239,9 @@ public class EnderecoService {
         
         enderecoValidator.validateEnderecoPertenceAoCliente(endereco, clienteId, cliente);
         
+        
+        boolean camposGeocodificacaoAlterados = camposRelevantesParaGeocodificacaoAlterados(endereco, dto);
+        
         boolean enderecoAlterado = atualizarCamposEndereco(endereco, dto);
         
         if (Boolean.TRUE.equals(dto.getPrincipal())) {
@@ -246,8 +249,15 @@ public class EnderecoService {
             endereco.setPrincipal(true);
         }
         
+       
+        if (camposGeocodificacaoAlterados) {
+            endereco.setLatitude(null);
+            endereco.setLongitude(null);
+        }
+        
         Endereco saved = enderecoRepository.save(endereco);
         
+       
         if (enderecoAlterado && (saved.getLatitude() == null || saved.getLongitude() == null)) {
             geocodingService.geocodeAddress(saved);
             saved = enderecoRepository.save(saved);
@@ -266,6 +276,9 @@ public class EnderecoService {
         
         enderecoValidator.validateEnderecoPertenceAoRestaurante(endereco, restauranteId, restaurante);
         
+       
+        boolean camposGeocodificacaoAlterados = camposRelevantesParaGeocodificacaoAlterados(endereco, dto);
+        
         boolean enderecoAlterado = atualizarCamposEndereco(endereco, dto);
         
         if (Boolean.TRUE.equals(dto.getPrincipal())) {
@@ -273,8 +286,15 @@ public class EnderecoService {
             endereco.setPrincipal(true);
         }
         
+       
+        if (camposGeocodificacaoAlterados) {
+            endereco.setLatitude(null);
+            endereco.setLongitude(null);
+        }
+        
         Endereco saved = enderecoRepository.save(endereco);
         
+       
         if (enderecoAlterado && (saved.getLatitude() == null || saved.getLongitude() == null)) {
             geocodingService.geocodeAddress(saved);
             saved = enderecoRepository.save(saved);
@@ -377,6 +397,17 @@ public class EnderecoService {
         }
         
         return alterado;
+    }
+    
+    private boolean camposRelevantesParaGeocodificacaoAlterados(Endereco endereco, EnderecoRequestDTO dto) {
+        // Verifica se algum campo que afeta a geocodificação foi alterado
+        // Complemento não afeta geocodificação, então não é verificado aqui
+        return (dto.getLogradouro() != null && !dto.getLogradouro().equals(endereco.getLogradouro())) ||
+               (dto.getNumero() != null && !dto.getNumero().equals(endereco.getNumero())) ||
+               (dto.getBairro() != null && !dto.getBairro().equals(endereco.getBairro())) ||
+               (dto.getCidade() != null && !dto.getCidade().equals(endereco.getCidade())) ||
+               (dto.getEstado() != null && !dto.getEstado().toUpperCase().equals(endereco.getEstado())) ||
+               (dto.getCep() != null && !dto.getCep().replaceAll("[^0-9]", "").equals(endereco.getCep()));
     }
     
     @Transactional(readOnly = true)

@@ -20,7 +20,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import com.siseg.dto.EnderecoCepResponseDTO;
 import com.siseg.dto.geocoding.Coordinates;
-import com.siseg.dto.geocoding.NominatimResponse;
+import com.siseg.dto.geocoding.LocationIQResponse;
 import com.siseg.dto.geocoding.OsrmRoute;
 import com.siseg.dto.geocoding.OsrmRouteResponse;
 import com.siseg.dto.geocoding.RouteResult;
@@ -35,7 +35,7 @@ public class GeocodingService {
     
     private static final Logger logger = Logger.getLogger(GeocodingService.class.getName());
     
-    private final WebClient nominatimClient;
+    private final WebClient locationIQClient;
     private final WebClient viacepClient;
     private final WebClient osrmClient;
     private final Map<String, Coordinates> cache = new ConcurrentHashMap<>();
@@ -45,20 +45,24 @@ public class GeocodingService {
     private final int osrmTimeout;
     private final int osrmMaxRetries;
     private final long osrmRetryDelay;
+    private final String locationIQApiKey;
+    private final long locationIQRateLimitMs;
     
-    public GeocodingService(@Value("${geocoding.nominatim.baseUrl}") String nominatimBaseUrl,
+    public GeocodingService(@Value("${geocoding.locationiq.baseUrl}") String locationIQBaseUrl,
+                           @Value("${geocoding.locationiq.apiKey}") String locationIQApiKey,
                            @Value("${geocoding.viacep.baseUrl}") String viacepBaseUrl,
                            @Value("${geocoding.osrm.baseUrl}") String osrmBaseUrl,
-                           @Value("${geocoding.nominatim.userAgent}") String nominatimUserAgent,
                            @Value("${geocoding.osrm.timeout:5000}") int osrmTimeout,
                            @Value("${geocoding.osrm.retry.maxAttempts:3}") int osrmMaxRetries,
-                           @Value("${geocoding.osrm.retry.delay:1000}") long osrmRetryDelay) {
+                           @Value("${geocoding.osrm.retry.delay:1000}") long osrmRetryDelay,
+                           @Value("${geocoding.locationiq.rateLimitMs:200}") long locationIQRateLimitMs) {
         this.osrmTimeout = osrmTimeout;
         this.osrmMaxRetries = osrmMaxRetries;
         this.osrmRetryDelay = osrmRetryDelay;
-        this.nominatimClient = WebClient.builder()
-                .baseUrl(nominatimBaseUrl)
-                .defaultHeader(HttpHeaders.USER_AGENT, nominatimUserAgent)
+        this.locationIQApiKey = locationIQApiKey;
+        this.locationIQRateLimitMs = locationIQRateLimitMs;
+        this.locationIQClient = WebClient.builder()
+                .baseUrl(locationIQBaseUrl)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, "pt-BR,pt;q=0.9")
                 .build();
@@ -92,7 +96,7 @@ public class GeocodingService {
         
         try {
             String enderecoCompleto = atualizarEnderecoComCep(endereco, enderecoFormatado);
-            Optional<Coordinates> coordenadas = geocodeWithNominatim(enderecoCompleto);
+            Optional<Coordinates> coordenadas = geocodeWithLocationIQ(enderecoCompleto);
             salvarCoordenadas(endereco, enderecoFormatado, enderecoCompleto, coordenadas);
         } catch (Exception e) {
             logger.warning("Erro ao geocodificar endereço '" + enderecoFormatado + "': " + e.getMessage());
@@ -275,10 +279,10 @@ public class GeocodingService {
     }
     
     
-    private Optional<Coordinates> geocodeWithNominatim(String endereco) {
+    private Optional<Coordinates> geocodeWithLocationIQ(String endereco) {
         try {
             respeitarRateLimit();
-            NominatimResponse[] responses = buscarNoNominatim(endereco);
+            LocationIQResponse[] responses = buscarNoLocationIQ(endereco);
             
             if (temRespostasValidas(responses)) {
                 return extrairCoordenadas(responses[0], endereco);
@@ -288,33 +292,34 @@ public class GeocodingService {
             return Optional.empty();
             
         } catch (WebClientException e) {
-            logger.warning("Erro de conexão com Nominatim: " + e.getMessage());
+            logger.warning("Erro de conexão com LocationIQ: " + e.getMessage());
             return Optional.empty();
         } catch (Exception e) {
-            logger.warning("Erro ao geocodificar com Nominatim: " + e.getMessage());
+            logger.warning("Erro ao geocodificar com LocationIQ: " + e.getMessage());
             return Optional.empty();
         }
     }
     
-    private NominatimResponse[] buscarNoNominatim(String endereco) {
-        return nominatimClient.get()
+    private LocationIQResponse[] buscarNoLocationIQ(String endereco) {
+        return locationIQClient.get()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/search")
+                        .path("/search.php")
+                        .queryParam("key", locationIQApiKey)
                         .queryParam("q", endereco)
                         .queryParam("format", "json")
                         .queryParam("limit", "1")
-                        .queryParam("addressdetails", "1")
+                        .queryParam("countrycodes", "br")
                         .build())
                 .retrieve()
-                .bodyToMono(NominatimResponse[].class)
+                .bodyToMono(LocationIQResponse[].class)
                 .block();
     }
     
-    private boolean temRespostasValidas(NominatimResponse[] responses) {
+    private boolean temRespostasValidas(LocationIQResponse[] responses) {
         return responses != null && responses.length > 0;
     }
     
-    private Optional<Coordinates> extrairCoordenadas(NominatimResponse response, String endereco) {
+    private Optional<Coordinates> extrairCoordenadas(LocationIQResponse response, String endereco) {
         if (!temCoordenadasValidas(response)) {
             return Optional.empty();
         }
@@ -327,7 +332,7 @@ public class GeocodingService {
         return Optional.of(coords);
     }
     
-    private boolean temCoordenadasValidas(NominatimResponse response) {
+    private boolean temCoordenadasValidas(LocationIQResponse response) {
         return response.getLat() != null && response.getLon() != null;
     }
     
@@ -335,9 +340,9 @@ public class GeocodingService {
         long currentTime = System.currentTimeMillis();
         long timeSinceLastRequest = currentTime - lastRequestTime;
         
-        if (timeSinceLastRequest < 1000) {
+        if (timeSinceLastRequest < locationIQRateLimitMs) {
             try {
-                Thread.sleep(1000 - timeSinceLastRequest);
+                Thread.sleep(locationIQRateLimitMs - timeSinceLastRequest);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
