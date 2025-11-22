@@ -76,22 +76,20 @@ public class DeliveryMovementService {
         if (rotaExistente.isEmpty()) {
             logger.info("Calculando rota para pedido " + pedido.getId());
             
-            if (entregador.getLatitude() == null || entregador.getLongitude() == null) {
-                if (pedido.getRestaurante() != null) {
-                    var enderecoRestaurante = pedido.getRestaurante().getEnderecoPrincipal();
-                    if (enderecoRestaurante.isPresent() && 
-                        enderecoRestaurante.get().getLatitude() != null && 
-                        enderecoRestaurante.get().getLongitude() != null) {
-                        entregador.setLatitude(enderecoRestaurante.get().getLatitude());
-                        entregador.setLongitude(enderecoRestaurante.get().getLongitude());
-                        entregadorRepository.save(entregador);
-                        logger.info("Inicializada posição do entregador com coordenadas do restaurante");
-                    } else {
-                        throw new IllegalStateException("Não é possível calcular rota: restaurante sem coordenadas");
-                    }
+            if (pedido.getRestaurante() != null) {
+                var enderecoRestaurante = pedido.getRestaurante().getEnderecoPrincipal();
+                if (enderecoRestaurante.isPresent() && 
+                    enderecoRestaurante.get().getLatitude() != null && 
+                    enderecoRestaurante.get().getLongitude() != null) {
+                    entregador.setLatitude(enderecoRestaurante.get().getLatitude());
+                    entregador.setLongitude(enderecoRestaurante.get().getLongitude());
+                    entregadorRepository.save(entregador);
+                    logger.info("Posição do entregador definida com coordenadas do restaurante para iniciar entrega");
                 } else {
                     throw new IllegalStateException("Não é possível calcular rota: restaurante sem coordenadas");
                 }
+            } else {
+                throw new IllegalStateException("Não é possível calcular rota: restaurante não encontrado");
             }
             
             routeService.calcularERegistrarRota(pedido, entregador);
@@ -193,16 +191,12 @@ public class DeliveryMovementService {
     }
     
     private double calcularDistanciaPorIteracao(double velocidadeKmh) {
-        // Calcula distância baseada no intervalo real
         double distanciaBase = (velocidadeKmh / VehicleConstants.SEGUNDOS_POR_SEGUNDO) 
                                * VehicleConstants.INTERVALO_SIMULACAO_SEGUNDOS;
-        // Aplica fator de aceleração para tornar a simulação mais visível
         return distanciaBase * VehicleConstants.FATOR_ACELERACAO_SIMULACAO;
     }
     
     private BigDecimal calcularDistancia(BigDecimal lat1, BigDecimal lon1, BigDecimal lat2, BigDecimal lon2) {
-        // Usa DistanceCalculator para evitar duplicação de código
-        // Precisão de 4 casas decimais para simulação precisa
         BigDecimal distancia = DistanceCalculator.calculateDistance(lat1, lon1, lat2, lon2);
         if (distancia != null) {
             return distancia.setScale(4, java.math.RoundingMode.HALF_UP);
