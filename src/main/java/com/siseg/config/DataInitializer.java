@@ -5,8 +5,10 @@ import com.siseg.model.*;
 import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.model.enumerations.ERole;
 import com.siseg.model.enumerations.MetodoPagamento;
+import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.StatusRestaurante;
+import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.repository.*;
 import com.siseg.service.EnderecoService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,10 +48,16 @@ public class DataInitializer implements CommandLineRunner {
     private PedidoRepository pedidoRepository;
 
     @Autowired
+    private EntregadorRepository entregadorRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
     private EnderecoService enderecoService;
+
+    @Autowired
+    private EnderecoRepository enderecoRepository;
 
     @Override
     @Transactional
@@ -72,6 +80,11 @@ public class DataInitializer implements CommandLineRunner {
         // Criar restaurante, prato, carrinho e pedido para testes
         if (restauranteRepository.count() == 0) {
             createTestRestaurantAndData();
+        }
+
+        // Criar entregador de teste se não existir
+        if (entregadorRepository.count() == 0) {
+            createTestEntregador();
         }
     }
 
@@ -148,6 +161,7 @@ public class DataInitializer implements CommandLineRunner {
         enderecoDTO1.setCep("01310100");
         enderecoDTO1.setPrincipal(true);
         enderecoService.criarEndereco(enderecoDTO1, savedCliente1);
+        aguardarRateLimit();
 
         // Cliente 2
         User user2 = new User();
@@ -177,6 +191,7 @@ public class DataInitializer implements CommandLineRunner {
         enderecoDTO2.setCep("01310200");
         enderecoDTO2.setPrincipal(true);
         enderecoService.criarEndereco(enderecoDTO2, savedCliente2);
+        aguardarRateLimit();
 
         // Cliente 3
         User user3 = new User();
@@ -247,6 +262,7 @@ public class DataInitializer implements CommandLineRunner {
         enderecoRestauranteDTO.setCep("01310100");
         enderecoRestauranteDTO.setPrincipal(true);
         enderecoService.criarEndereco(enderecoRestauranteDTO, savedRestaurante);
+        aguardarRateLimit();
         
         restaurante = savedRestaurante;
 
@@ -310,5 +326,51 @@ public class DataInitializer implements CommandLineRunner {
         System.out.println("   Carrinho: ID " + carrinho.getId() + " - Cliente: " + cliente.getNome());
         System.out.println("   Pedido: ID " + pedido.getId() + " - Método: CREDIT_CARD - Total: R$ " + pedido.getTotal());
         System.out.println("   Use o pedido ID " + pedido.getId() + " para testar pagamento com cartão!");
+    }
+
+    @Transactional
+    private void createTestEntregador() {
+        // Criar usuário do entregador
+        User entregadorUser = new User();
+        entregadorUser.setUsername("entregador@teste.com");
+        entregadorUser.setPassword(passwordEncoder.encode("123456"));
+        
+        Set<Role> entregadorRoles = new HashSet<>();
+        Role entregadorRole = roleRepository.findByRoleName(ERole.ROLE_ENTREGADOR)
+                .orElseThrow(() -> new RuntimeException("Role ENTREGADOR não encontrado"));
+        entregadorRoles.add(entregadorRole);
+        entregadorUser.setRoles(entregadorRoles);
+        
+        User savedEntregadorUser = userRepository.save(entregadorUser);
+
+        // Criar entregador aprovado
+        Entregador entregador = new Entregador();
+        entregador.setUser(savedEntregadorUser);
+        entregador.setNome("Carlos Motoboy");
+        entregador.setEmail("entregador@teste.com");
+        entregador.setCpf("12345678900");
+        entregador.setTelefone("(11) 98888-8888");
+        entregador.setTipoVeiculo(TipoVeiculo.MOTO);
+        entregador.setPlacaVeiculo("ABC-1234");
+        entregador.setStatus(StatusEntregador.APPROVED);
+        // Coordenadas de exemplo (São Paulo - Centro)
+        entregador.setLatitude(new BigDecimal("-23.550520"));
+        entregador.setLongitude(new BigDecimal("-46.633308"));
+        
+        Entregador savedEntregador = entregadorRepository.save(entregador);
+
+        System.out.println("✅ Entregador de teste criado com sucesso!");
+        System.out.println("   Entregador: " + entregador.getNome() + " (ID: " + savedEntregador.getId() + ")");
+        System.out.println("   Email: " + entregador.getEmail() + " - Senha: 123456");
+        System.out.println("   Status: APPROVED - Veículo: " + entregador.getTipoVeiculo() + " - Placa: " + entregador.getPlacaVeiculo());
+    }
+    
+    private void aguardarRateLimit() {
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.err.println("⚠️ Interrupção durante espera do rate limit");
+        }
     }
 }
