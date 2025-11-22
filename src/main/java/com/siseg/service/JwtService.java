@@ -22,12 +22,19 @@ public class JwtService {
     public String generateToken(User user) {
         Instant now = Instant.now();
 
+        // Extrair roles do usuário
+        String roles = user.getRoles().stream()
+                .map(role -> role.getRoleName().name())
+                .reduce((a, b) -> a + "," + b)
+                .orElse("");
+
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer("sigeg-api")
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(expirationSeconds))
                 .subject(user.getUsername())
                 .claim("userId", user.getId())
+                .claim("roles", roles) 
                 .build();
 
         return jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
