@@ -162,12 +162,55 @@ public class PagamentoService {
     }
     
     
+    @Transactional
     public PagamentoResponseDTO buscarPagamentoPorPedido(Long pedidoId) {
         Pagamento pagamento = buscarPagamentoPorPedidoId(pedidoId);
         validatePedidoOwnership(pagamento.getPedido());
+        
+       
+        if (pagamento.getMetodo() == MetodoPagamento.PIX && 
+            pagamento.getStatus() != StatusPagamento.PAID && 
+            pagamento.getStatus() != StatusPagamento.REFUNDED &&
+            pagamento.getAsaasPaymentId() != null) {
+            sincronizarStatusComAsaas(pagamento);
+        }
+        
         PagamentoResponseDTO response = modelMapper.map(pagamento, PagamentoResponseDTO.class);
         response.setPedidoId(pagamento.getPedido().getId());
         return response;
+    }
+    
+    private void sincronizarStatusComAsaas(Pagamento pagamento) {
+        try {
+            AsaasPaymentResponseDTO asaasResponse = asaasService.buscarPagamento(pagamento.getAsaasPaymentId());
+            
+            if (asaasResponse != null && asaasResponse.getStatus() != null) {
+                String asaasStatus = asaasResponse.getStatus();
+                
+               
+                if ("CONFIRMED".equals(asaasStatus) || "RECEIVED".equals(asaasStatus)) {
+                    pagamento.setStatus(StatusPagamento.PAID);
+                    pagamento.setAtualizadoEm(java.time.Instant.now());
+                    
+                    Pedido pedido = pagamento.getPedido();
+                    if (pedido != null && pedido.getStatus() == StatusPedido.CREATED) {
+                        pedido.setStatus(StatusPedido.CONFIRMED);
+                        pedidoRepository.save(pedido);
+                    }
+                    
+                    logger.info("Pagamento PIX sincronizado e confirmado: " + pagamento.getAsaasPaymentId() + " - Pedido: " + pedido.getId());
+                } else if ("REFUSED".equals(asaasStatus) || "OVERDUE".equals(asaasStatus)) {
+                    pagamento.setStatus(StatusPagamento.REFUSED);
+                    pagamento.setAtualizadoEm(java.time.Instant.now());
+                    logger.info("Pagamento PIX recusado/vencido: " + pagamento.getAsaasPaymentId());
+                }
+                
+                pagamentoRepository.save(pagamento);
+            }
+        } catch (Exception e) {
+            
+            logger.warning("Erro ao sincronizar status com Asaas para pagamento " + pagamento.getId() + ": " + e.getMessage());
+        }
     }
     
     private Pagamento buscarPagamentoPorPedidoId(Long pedidoId) {
