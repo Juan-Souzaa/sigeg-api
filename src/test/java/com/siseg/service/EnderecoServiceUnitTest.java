@@ -200,7 +200,7 @@ class EnderecoServiceUnitTest {
         EnderecoResponseDTO result = enderecoService.atualizarEnderecoCliente(1L, dtoAtualizado, 1L);
 
         assertNotNull(result);
-        verify(enderecoRepository, times(1)).save(any(Endereco.class));
+        verify(enderecoRepository, times(2)).save(any(Endereco.class));
         verify(enderecoValidator).validateEnderecoPertenceAoCliente(endereco, 1L, cliente);
     }
 

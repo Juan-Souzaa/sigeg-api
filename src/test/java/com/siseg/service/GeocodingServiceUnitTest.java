@@ -4,27 +4,25 @@ import com.siseg.model.Endereco;
 import com.siseg.model.enumerations.TipoEndereco;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@ExtendWith(MockitoExtension.class)
+@SpringBootTest
+@ActiveProfiles("test")
+@TestPropertySource(locations = "classpath:application-test.properties")
 class GeocodingServiceUnitTest {
 
+    @Autowired
     private GeocodingService geocodingService;
 
     @BeforeEach
     void setUp() {
-        geocodingService = new GeocodingService(
-                "https://nominatim.openstreetmap.org",
-                "https://viacep.com.br",
-                "https://router.project-osrm.org",
-                "SIGEG-Test/1.0",
-                5000,
-                3,
-                1000L
-        );
+        // O GeocodingService será injetado automaticamente pelo Spring
+        // usando as configurações do application-test.properties
     }
 
     @Test
