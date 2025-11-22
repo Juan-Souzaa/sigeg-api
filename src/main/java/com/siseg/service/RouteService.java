@@ -141,9 +141,6 @@ public class RouteService {
     }
     
     private BigDecimal obterLatitudeOrigem(Pedido pedido, Entregador entregador) {
-        if (entregador.getLatitude() != null) {
-            return entregador.getLatitude();
-        }
         if (pedido.getRestaurante() != null) {
             var enderecoRestaurante = pedido.getRestaurante().getEnderecoPrincipal();
             if (enderecoRestaurante.isPresent() && enderecoRestaurante.get().getLatitude() != null) {
@@ -154,9 +151,6 @@ public class RouteService {
     }
     
     private BigDecimal obterLongitudeOrigem(Pedido pedido, Entregador entregador) {
-        if (entregador.getLongitude() != null) {
-            return entregador.getLongitude();
-        }
         if (pedido.getRestaurante() != null) {
             var enderecoRestaurante = pedido.getRestaurante().getEnderecoPrincipal();
             if (enderecoRestaurante.isPresent() && enderecoRestaurante.get().getLongitude() != null) {
