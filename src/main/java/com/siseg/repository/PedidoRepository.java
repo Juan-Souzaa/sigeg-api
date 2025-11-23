@@ -1,15 +1,16 @@
 package com.siseg.repository;
 
-import com.siseg.model.Pedido;
-import com.siseg.model.enumerations.StatusPedido;
+import java.time.Instant;
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.Instant;
-import java.util.List;
+import com.siseg.model.Pedido;
+import com.siseg.model.enumerations.StatusPedido;
 
 public interface PedidoRepository extends JpaRepository<Pedido, Long> {
     List<Pedido> findByClienteId(Long clienteId);
@@ -25,6 +26,8 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
     Page<Pedido> findByRestauranteIdAndStatusAndCriadoEmBetween(Long restauranteId, StatusPedido status, Instant dataInicio, Instant dataFim, Pageable pageable);
     List<Pedido> findByStatus(StatusPedido status);
     List<Pedido> findByEntregadorId(Long entregadorId);
+    Page<Pedido> findByEntregadorIdAndStatusNotIn(Long entregadorId, List<StatusPedido> statuses, Pageable pageable);
+    Page<Pedido> findByEntregadorIdAndStatus(Long entregadorId, StatusPedido status, Pageable pageable);
     Page<Pedido> findByStatusAndEntregadorIsNull(StatusPedido status, Pageable pageable);
     List<Pedido> findByStatusAndRestauranteIdAndCriadoEmBetween(StatusPedido status, Long restauranteId, Instant inicio, Instant fim);
     List<Pedido> findByStatusAndEntregadorIdAndCriadoEmBetween(StatusPedido status, Long entregadorId, Instant inicio, Instant fim);

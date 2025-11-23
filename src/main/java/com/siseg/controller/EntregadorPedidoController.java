@@ -29,6 +29,14 @@ public class EntregadorPedidoController {
         return ResponseEntity.ok(response);
     }
     
+    @GetMapping("/entregas/historico")
+    @PreAuthorize("hasRole('ENTREGADOR')")
+    @Operation(summary = "Listar histórico de entregas concluídas do entregador autenticado")
+    public ResponseEntity<Page<PedidoResponseDTO>> listarHistoricoEntregas(Pageable pageable) {
+        Page<PedidoResponseDTO> response = pedidoService.listarHistoricoEntregas(pageable);
+        return ResponseEntity.ok(response);
+    }
+    
     @GetMapping("/pedidos/disponiveis")
     @PreAuthorize("hasRole('ENTREGADOR')")
     @Operation(summary = "Listar pedidos disponíveis para entrega")
