@@ -112,15 +112,38 @@ public class RouteService {
     
     @Transactional
     public void avancarWaypoint(Long pedidoId) {
+        avancarWaypoints(pedidoId, 1);
+    }
+    
+    @Transactional
+    public void avancarWaypoints(Long pedidoId, int quantidade) {
         RotaEntrega rota = buscarRotaPorPedidoId(pedidoId);
         int indiceAtual = rota.getIndiceAtual();
         List<Coordinates> waypoints = deserializarWaypoints(rota);
         
         if (waypoints != null && indiceAtual < waypoints.size() - 1) {
-            rota.setIndiceAtual(indiceAtual + 1);
+            int novoIndice = Math.min(indiceAtual + quantidade, waypoints.size() - 1);
+            rota.setIndiceAtual(novoIndice);
             rotaEntregaRepository.save(rota);
-            logger.fine("Waypoint avançado para pedido " + pedidoId + ": " + (indiceAtual + 1) + "/" + waypoints.size());
+            logger.fine("Waypoints avançados para pedido " + pedidoId + ": " + novoIndice + "/" + waypoints.size());
         }
+    }
+    
+    @Transactional(readOnly = true)
+    public List<Coordinates> obterWaypointsRestantes(Long pedidoId) {
+        RotaEntrega rota = buscarRotaPorPedidoId(pedidoId);
+        List<Coordinates> waypoints = deserializarWaypoints(rota);
+        
+        if (waypoints == null || waypoints.isEmpty()) {
+            return List.of();
+        }
+        
+        int indiceAtual = rota.getIndiceAtual();
+        if (indiceAtual >= waypoints.size()) {
+            return List.of();
+        }
+        
+        return waypoints.subList(indiceAtual, waypoints.size());
     }
     
     @Transactional(readOnly = true)
