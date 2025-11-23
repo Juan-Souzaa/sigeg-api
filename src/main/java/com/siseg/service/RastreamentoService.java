@@ -2,15 +2,19 @@ package com.siseg.service;
 
 import com.siseg.dto.rastreamento.RastreamentoDTO;
 import com.siseg.exception.ResourceNotFoundException;
+import com.siseg.model.Endereco;
 import com.siseg.model.Entregador;
 import com.siseg.model.Pedido;
 import com.siseg.repository.EntregadorRepository;
 import com.siseg.repository.PedidoRepository;
+import com.siseg.service.EnderecoService;
+import com.siseg.service.RouteService;
 import com.siseg.util.TempoEstimadoCalculator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.logging.Logger;
 
 @Service
@@ -22,12 +26,17 @@ public class RastreamentoService {
     private final PedidoRepository pedidoRepository;
     private final EntregadorRepository entregadorRepository;
     private final TempoEstimadoCalculator tempoEstimadoCalculator;
+    private final EnderecoService enderecoService;
+    private final RouteService routeService;
     
     public RastreamentoService(PedidoRepository pedidoRepository, EntregadorRepository entregadorRepository,
-                               TempoEstimadoCalculator tempoEstimadoCalculator) {
+                               TempoEstimadoCalculator tempoEstimadoCalculator, EnderecoService enderecoService,
+                               RouteService routeService) {
         this.pedidoRepository = pedidoRepository;
         this.entregadorRepository = entregadorRepository;
         this.tempoEstimadoCalculator = tempoEstimadoCalculator;
+        this.enderecoService = enderecoService;
+        this.routeService = routeService;
     }
     
     @Transactional(readOnly = true)
@@ -71,11 +80,29 @@ public class RastreamentoService {
             rastreamento.setPosicaoDestinoLon(pedido.getEnderecoEntrega().getLongitude());
         }
         
+        
+        if (pedido.getRestaurante() != null) {
+            Optional<Endereco> enderecoPrincipal = enderecoService.buscarEnderecoPrincipalRestaurante(pedido.getRestaurante().getId());
+            if (enderecoPrincipal.isPresent()) {
+                Endereco endereco = enderecoPrincipal.get();
+                if (endereco.getLatitude() != null && endereco.getLongitude() != null) {
+                    rastreamento.setPosicaoRestauranteLat(endereco.getLatitude());
+                    rastreamento.setPosicaoRestauranteLon(endereco.getLongitude());
+                }
+            }
+        }
+        
         rastreamento.setPosicaoAtualLat(entregador.getLatitude());
         rastreamento.setPosicaoAtualLon(entregador.getLongitude());
         rastreamento.setDistanciaRestanteKm(BigDecimal.ZERO);
         rastreamento.setTempoEstimadoMinutos(0);
         rastreamento.setProximoAoDestino(true);
+        
+        var waypointsRestantes = routeService.obterWaypointsRestantes(pedido.getId());
+        if (!waypointsRestantes.isEmpty()) {
+            rastreamento.setWaypoints(waypointsRestantes);
+        }
+        
         return rastreamento;
     }
     

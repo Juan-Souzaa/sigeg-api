@@ -1,6 +1,7 @@
 package com.siseg.service;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 
@@ -97,63 +98,73 @@ public class DeliveryMovementService {
     }
     
     private void moverParaProximoWaypoint(Entregador entregador, Pedido pedido) {
-        Optional<Coordinates> proximoWaypoint = routeService.obterProximoWaypoint(pedido.getId());
+        List<Coordinates> waypointsRestantes = routeService.obterWaypointsRestantes(pedido.getId());
         
-        if (proximoWaypoint.isEmpty()) {
+        if (waypointsRestantes.isEmpty()) {
             posicionarNoDestino(entregador, pedido);
             return;
         }
         
-        Coordinates waypoint = proximoWaypoint.get();
         double velocidadeKmh = calcularVelocidade(entregador);
         double distanciaPorIteracaoKm = calcularDistanciaPorIteracao(velocidadeKmh);
         
-        BigDecimal distanciaAteWaypoint = calcularDistancia(
-            entregador.getLatitude(), entregador.getLongitude(),
-            waypoint.getLatitude(), waypoint.getLongitude()
-        );
+        BigDecimal posicaoAtualLat = entregador.getLatitude();
+        BigDecimal posicaoAtualLon = entregador.getLongitude();
+        BigDecimal distanciaRestante = BigDecimal.valueOf(distanciaPorIteracaoKm);
         
-        if (distanciaAteWaypoint != null && distanciaAteWaypoint.doubleValue() <= distanciaPorIteracaoKm) {
-            entregador.setLatitude(waypoint.getLatitude());
-            entregador.setLongitude(waypoint.getLongitude());
-            entregadorRepository.save(entregador);
-            routeService.avancarWaypoint(pedido.getId());
+        int waypointsAvancados = 0;
+        
+        for (int i = 0; i < waypointsRestantes.size() && distanciaRestante.compareTo(BigDecimal.ZERO) > 0; i++) {
+            Coordinates waypoint = waypointsRestantes.get(i);
+            BigDecimal distanciaAteWaypoint = calcularDistancia(
+                posicaoAtualLat, posicaoAtualLon,
+                waypoint.getLatitude(), waypoint.getLongitude()
+            );
+            
+            if (distanciaAteWaypoint == null || distanciaAteWaypoint.compareTo(BigDecimal.ZERO) <= 0) {
+                posicaoAtualLat = waypoint.getLatitude();
+                posicaoAtualLon = waypoint.getLongitude();
+                waypointsAvancados++;
+                distanciaRestante = distanciaRestante.subtract(distanciaAteWaypoint != null ? distanciaAteWaypoint : BigDecimal.ZERO);
+            } else if (distanciaAteWaypoint.compareTo(distanciaRestante) <= 0) {
+                posicaoAtualLat = waypoint.getLatitude();
+                posicaoAtualLon = waypoint.getLongitude();
+                waypointsAvancados++;
+                distanciaRestante = distanciaRestante.subtract(distanciaAteWaypoint);
+            } else {
+                double percentualProgresso = distanciaRestante.doubleValue() / distanciaAteWaypoint.doubleValue();
+                posicaoAtualLat = posicaoAtualLat.add(
+                    waypoint.getLatitude().subtract(posicaoAtualLat)
+                        .multiply(BigDecimal.valueOf(percentualProgresso))
+                );
+                posicaoAtualLon = posicaoAtualLon.add(
+                    waypoint.getLongitude().subtract(posicaoAtualLon)
+                        .multiply(BigDecimal.valueOf(percentualProgresso))
+                );
+                distanciaRestante = BigDecimal.ZERO;
+                break;
+            }
+        }
+        
+        entregador.setLatitude(posicaoAtualLat);
+        entregador.setLongitude(posicaoAtualLon);
+        entregadorRepository.save(entregador);
+        
+        // Avançar waypoints se necessário
+        if (waypointsAvancados > 0) {
+            routeService.avancarWaypoints(pedido.getId(), waypointsAvancados);
             logger.info(String.format(
-                "Entregador chegou ao waypoint %d do pedido %d",
-                routeService.obterRota(pedido.getId()).get().getIndiceAtual(),
-                pedido.getId()
+                "Entregador avançou %d waypoint(s) do pedido %d (Velocidade: %.1f km/h, Distância percorrida: %.4f km)",
+                waypointsAvancados, pedido.getId(), velocidadeKmh, distanciaPorIteracaoKm
             ));
         } else {
-            moverEmDirecaoAoWaypoint(entregador, pedido, waypoint, distanciaAteWaypoint, distanciaPorIteracaoKm, velocidadeKmh);
+            logger.info(String.format(
+                "Simulação de movimento - Pedido %d: Entregador movido parcialmente (Velocidade: %.1f km/h, Distância percorrida: %.4f km)",
+                pedido.getId(), velocidadeKmh, distanciaPorIteracaoKm
+            ));
         }
     }
     
-    private void moverEmDirecaoAoWaypoint(Entregador entregador, Pedido pedido, Coordinates waypoint,
-                                         BigDecimal distanciaTotal, double distanciaPorIteracaoKm, double velocidadeKmh) {
-        if (distanciaTotal == null || distanciaTotal.compareTo(BigDecimal.ZERO) <= 0) {
-            return;
-        }
-        
-        double percentualProgresso = distanciaPorIteracaoKm / distanciaTotal.doubleValue();
-        
-        BigDecimal novaLat = entregador.getLatitude().add(
-            waypoint.getLatitude().subtract(entregador.getLatitude())
-                .multiply(BigDecimal.valueOf(percentualProgresso))
-        );
-        BigDecimal novaLon = entregador.getLongitude().add(
-            waypoint.getLongitude().subtract(entregador.getLongitude())
-                .multiply(BigDecimal.valueOf(percentualProgresso))
-        );
-        
-        entregador.setLatitude(novaLat);
-        entregador.setLongitude(novaLon);
-        entregadorRepository.save(entregador);
-        
-        logger.info(String.format(
-            "Simulação de movimento - Pedido %d: Entregador movido em direção ao waypoint (Velocidade: %.1f km/h, Distância até waypoint: %.4f km, Progresso nesta iteração: %.1f%%)",
-            pedido.getId(), velocidadeKmh, distanciaTotal.doubleValue(), percentualProgresso * 100
-        ));
-    }
     
     private boolean verificarChegadaAoDestino(Pedido pedido, Entregador entregador) {
         if (routeService.isRotaCompleta(pedido.getId()) && pedido.getEnderecoEntrega() != null) {
