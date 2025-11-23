@@ -8,6 +8,7 @@ import com.siseg.model.enumerations.MetodoPagamento;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.StatusRestaurante;
+import com.siseg.model.enumerations.TipoTaxa;
 import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.repository.*;
 import com.siseg.service.EnderecoService;
@@ -59,6 +60,9 @@ public class DataInitializer implements CommandLineRunner {
     @Autowired
     private EnderecoRepository enderecoRepository;
 
+    @Autowired
+    private ConfiguracaoTaxaRepository configuracaoTaxaRepository;
+
     @Override
     @Transactional
     public void run(String... args) throws Exception {
@@ -86,6 +90,9 @@ public class DataInitializer implements CommandLineRunner {
         if (entregadorRepository.count() == 0) {
             createTestEntregador();
         }
+
+        // Criar taxas iniciais se não existirem
+        createInitialTaxas();
     }
 
     private void createRoles() {
@@ -371,6 +378,41 @@ public class DataInitializer implements CommandLineRunner {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             System.err.println("⚠️ Interrupção durante espera do rate limit");
+        }
+    }
+
+    @Transactional
+    private void createInitialTaxas() {
+        
+        boolean taxaRestauranteExiste = configuracaoTaxaRepository
+                .findByTipoTaxaAndAtivoTrue(TipoTaxa.TAXA_RESTAURANTE)
+                .isPresent();
+        boolean taxaEntregadorExiste = configuracaoTaxaRepository
+                .findByTipoTaxaAndAtivoTrue(TipoTaxa.TAXA_ENTREGADOR)
+                .isPresent();
+
+       
+        if (!taxaRestauranteExiste) {
+            ConfiguracaoTaxa taxaRestaurante = new ConfiguracaoTaxa();
+            taxaRestaurante.setTipoTaxa(TipoTaxa.TAXA_RESTAURANTE);
+            taxaRestaurante.setPercentual(new BigDecimal("10.00"));
+            taxaRestaurante.setAtivo(true);
+            configuracaoTaxaRepository.save(taxaRestaurante);
+            System.out.println("✅ Taxa de restaurante criada: 10.00%");
+        }
+
+     
+        if (!taxaEntregadorExiste) {
+            ConfiguracaoTaxa taxaEntregador = new ConfiguracaoTaxa();
+            taxaEntregador.setTipoTaxa(TipoTaxa.TAXA_ENTREGADOR);
+            taxaEntregador.setPercentual(new BigDecimal("15.00"));
+            taxaEntregador.setAtivo(true);
+            configuracaoTaxaRepository.save(taxaEntregador);
+            System.out.println("✅ Taxa de entregador criada: 15.00%");
+        }
+
+        if (taxaRestauranteExiste && taxaEntregadorExiste) {
+            System.out.println("✅ Taxas já existem no sistema");
         }
     }
 }
