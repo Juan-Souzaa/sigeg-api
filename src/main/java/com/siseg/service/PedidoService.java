@@ -18,7 +18,6 @@ import com.siseg.util.CalculadoraFinanceira;
 import com.siseg.util.VehicleConstants;
 import com.siseg.validator.PedidoValidator;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -443,27 +442,28 @@ public class PedidoService {
         Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
                 .orElseThrow(() -> new AccessDeniedException("Usuário não é entregador"));
         
-        List<Pedido> pedidos = pedidoRepository.findByEntregadorId(entregador.getId());
-        
-       
-        List<Pedido> pedidosAtivos = pedidos.stream()
-                .filter(p -> p.getStatus() != StatusPedido.DELIVERED && p.getStatus() != StatusPedido.CANCELED)
-                .toList();
-        
-
-        int start = (int) pageable.getOffset();
-        int end = Math.min((start + pageable.getPageSize()), pedidosAtivos.size());
-        List<Pedido> pedidosPaginados = start < pedidosAtivos.size() 
-                ? pedidosAtivos.subList(start, end) 
-                : List.of();
-        
-        Page<Pedido> page = new PageImpl<>(
-                pedidosPaginados, 
-                pageable, 
-                pedidosAtivos.size()
+        Page<Pedido> pedidos = pedidoRepository.findByEntregadorIdAndStatusNotIn(
+                entregador.getId(),
+                List.of(StatusPedido.DELIVERED, StatusPedido.CANCELED),
+                pageable
         );
         
-        return page.map(pedidoMapper::toResponseDTO);
+        return pedidos.map(pedidoMapper::toResponseDTO);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PedidoResponseDTO> listarHistoricoEntregas(Pageable pageable) {
+        User currentUser = SecurityUtils.getCurrentUser();
+        Entregador entregador = entregadorRepository.findByUserId(currentUser.getId())
+                .orElseThrow(() -> new AccessDeniedException("Usuário não é entregador"));
+        
+        Page<Pedido> pedidos = pedidoRepository.findByEntregadorIdAndStatus(
+                entregador.getId(),
+                StatusPedido.DELIVERED,
+                pageable
+        );
+        
+        return pedidos.map(pedidoMapper::toResponseDTO);
     }
 
     @Transactional
