@@ -136,6 +136,109 @@ class CupomServiceUnitTest {
     }
 
     @Test
+    void deveListarTodosOsCuponsComSucesso() {
+        Pageable pageable = Pageable.ofSize(10);
+        Page<Cupom> cuponsPage = new PageImpl<>(List.of(cupom));
+        when(cupomRepository.findAll(pageable)).thenReturn(cuponsPage);
+        when(cupomMapper.toResponseDTO(cupom)).thenReturn(responseDTO);
+
+        Page<CupomResponseDTO> resultado = cupomService.listarTodos(pageable);
+
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getContent().size());
+        verify(cupomRepository).findAll(pageable);
+        verify(cupomMapper).toResponseDTO(cupom);
+    }   
+
+    @Test
+    void deveAtivarCupomComSucesso() {
+        cupom.setAtivo(false);
+        when(cupomRepository.findById(1L)).thenReturn(Optional.of(cupom));
+        when(cupomRepository.save(cupom)).thenReturn(cupom);
+        when(cupomMapper.toResponseDTO(cupom)).thenReturn(responseDTO);
+
+        CupomResponseDTO resultado = cupomService.ativarCupom(1L);
+
+        assertNotNull(resultado);
+        assertEquals(1L, resultado.getId());
+        assertTrue(cupom.getAtivo());
+        verify(cupomRepository).save(cupom);
+    }
+
+    @Test
+    void deveAtualizarCupomComSucesso() {
+        CupomRequestDTO dtoAtualizado = new CupomRequestDTO();
+        dtoAtualizado.setCodigo("DESCONTO20");
+        dtoAtualizado.setTipoDesconto(TipoDesconto.PERCENTUAL);
+        dtoAtualizado.setValorDesconto(new BigDecimal("20.00"));
+        dtoAtualizado.setValorMinimo(new BigDecimal("100.00"));
+        dtoAtualizado.setDataInicio(LocalDate.now());
+        dtoAtualizado.setDataFim(LocalDate.now().plusDays(60));
+        dtoAtualizado.setUsosMaximos(200);
+
+        CupomResponseDTO responseDTOAtualizado = new CupomResponseDTO();
+        responseDTOAtualizado.setId(1L);
+        responseDTOAtualizado.setCodigo("DESCONTO20");
+        responseDTOAtualizado.setValorDesconto(new BigDecimal("20.00"));
+
+        when(cupomRepository.findById(1L)).thenReturn(Optional.of(cupom));
+        doNothing().when(cupomValidator).validateCodigoUnico("DESCONTO20");
+        when(cupomRepository.save(cupom)).thenReturn(cupom);
+        when(cupomMapper.toResponseDTO(cupom)).thenReturn(responseDTOAtualizado);
+
+        CupomResponseDTO resultado = cupomService.atualizarCupom(1L, dtoAtualizado);
+
+        assertNotNull(resultado);
+        assertEquals("DESCONTO20", cupom.getCodigo());
+        assertEquals(new BigDecimal("20.00"), cupom.getValorDesconto());
+        assertEquals(new BigDecimal("100.00"), cupom.getValorMinimo());
+        assertEquals(200, cupom.getUsosMaximos());
+        verify(cupomRepository).save(cupom);
+        verify(cupomValidator).validateCodigoUnico("DESCONTO20");
+    }
+
+    @Test
+    void deveAtualizarCupomSemValidarCodigoQuandoCodigoNaoMuda() {
+        CupomRequestDTO dtoAtualizado = new CupomRequestDTO();
+        dtoAtualizado.setCodigo("DESCONTO10");
+        dtoAtualizado.setTipoDesconto(TipoDesconto.PERCENTUAL);
+        dtoAtualizado.setValorDesconto(new BigDecimal("15.00"));
+        dtoAtualizado.setValorMinimo(new BigDecimal("50.00"));
+        dtoAtualizado.setDataInicio(LocalDate.now());
+        dtoAtualizado.setDataFim(LocalDate.now().plusDays(30));
+        dtoAtualizado.setUsosMaximos(150);
+
+        when(cupomRepository.findById(1L)).thenReturn(Optional.of(cupom));
+        when(cupomRepository.save(cupom)).thenReturn(cupom);
+        when(cupomMapper.toResponseDTO(cupom)).thenReturn(responseDTO);
+
+        CupomResponseDTO resultado = cupomService.atualizarCupom(1L, dtoAtualizado);
+
+        assertNotNull(resultado);
+        assertEquals(new BigDecimal("15.00"), cupom.getValorDesconto());
+        assertEquals(150, cupom.getUsosMaximos());
+        verify(cupomRepository).save(cupom);
+        verify(cupomValidator, never()).validateCodigoUnico(anyString());
+    }
+
+    @Test
+    void deveLancarExcecaoAoAtualizarCupomInexistente() {
+        CupomRequestDTO dtoAtualizado = new CupomRequestDTO();
+        dtoAtualizado.setCodigo("DESCONTO20");
+        dtoAtualizado.setTipoDesconto(TipoDesconto.PERCENTUAL);
+        dtoAtualizado.setValorDesconto(new BigDecimal("20.00"));
+        dtoAtualizado.setValorMinimo(new BigDecimal("100.00"));
+        dtoAtualizado.setDataInicio(LocalDate.now());
+        dtoAtualizado.setDataFim(LocalDate.now().plusDays(60));
+        dtoAtualizado.setUsosMaximos(200);
+
+        when(cupomRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> cupomService.atualizarCupom(999L, dtoAtualizado));
+    }
+
+    @Test
     void deveDesativarCupomComSucesso() {
         when(cupomRepository.findById(1L)).thenReturn(Optional.of(cupom));
         when(cupomRepository.save(cupom)).thenReturn(cupom);
