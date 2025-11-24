@@ -4,6 +4,7 @@ import com.siseg.dto.geocoding.ResultadoCalculo;
 import com.siseg.dto.pedido.PedidoItemRequestDTO;
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
+import com.siseg.dto.rastreamento.RastreamentoDTO;
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.PedidoAlreadyProcessedException;
 import com.siseg.exception.PratoNotAvailableException;
@@ -18,6 +19,10 @@ import com.siseg.model.enumerations.TipoEndereco;
 import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.mapper.PedidoMapper;
 import com.siseg.repository.*;
+import com.siseg.service.pedido.PedidoEnderecoService;
+import com.siseg.service.pedido.PedidoEntregadorService;
+import com.siseg.service.pedido.PedidoFinanceiroService;
+import com.siseg.service.pedido.PedidoNotificacaoService;
 import com.siseg.util.SecurityUtils;
 import com.siseg.util.TempoEstimadoCalculator;
 import com.siseg.validator.PedidoValidator;
@@ -43,7 +48,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
-import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class PedidoServiceUnitTest {
@@ -89,6 +93,18 @@ class PedidoServiceUnitTest {
 
     @Mock
     private EnderecoService enderecoService;
+
+    @Mock
+    private PedidoEnderecoService pedidoEnderecoService;
+
+    @Mock
+    private PedidoFinanceiroService pedidoFinanceiroService;
+
+    @Mock
+    private PedidoNotificacaoService pedidoNotificacaoService;
+
+    @Mock
+    private PedidoEntregadorService pedidoEntregadorService;
 
     @InjectMocks
     private PedidoService pedidoService;
@@ -200,7 +216,6 @@ class PedidoServiceUnitTest {
         pedidoRequestDTO = new PedidoRequestDTO();
         pedidoRequestDTO.setRestauranteId(1L);
         pedidoRequestDTO.setMetodoPagamento(MetodoPagamento.PIX);
-        // Não definir enderecoId - deve usar endereço principal do cliente
         
         var itemDTO = new PedidoItemRequestDTO();
         itemDTO.setPratoId(1L);
@@ -228,6 +243,8 @@ class PedidoServiceUnitTest {
         cupom.setAtivo(true);
     }
 
+    // ============ TESTES DE CRIAÇÃO DE PEDIDO ============
+
     @Test
     void deveCriarPedidoComItensDiretos() {
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
@@ -235,9 +252,9 @@ class PedidoServiceUnitTest {
 
             when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
             when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
-            when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
-            when(pedidoValidator.validatePratoDisponivel(any(Prato.class))).thenReturn(prato);
-            when(enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())).thenReturn(Optional.of(enderecoCliente));
+            doNothing().when(pedidoEnderecoService).processarEnderecoEntrega(any(), any(), any());
+            doNothing().when(pedidoFinanceiroService).processarItensPedido(any(), any());
+            doNothing().when(pedidoFinanceiroService).calcularValoresPedido(any());
             when(pedidoRepository.save(any(Pedido.class))).thenAnswer(invocation -> {
                 Pedido p = invocation.getArgument(0);
                 p.setId(1L);
@@ -249,7 +266,9 @@ class PedidoServiceUnitTest {
 
             assertNotNull(result);
             verify(pedidoRepository, times(1)).save(any(Pedido.class));
-            verify(pedidoValidator, times(1)).validatePratoDisponivel(any(Prato.class));
+            verify(pedidoEnderecoService).processarEnderecoEntrega(any(), eq(cliente), eq(pedidoRequestDTO));
+            verify(pedidoFinanceiroService).processarItensPedido(any(), any());
+            verify(pedidoFinanceiroService, never()).processarCarrinhoParaPedido(any(), anyLong(), anyLong());
         }
     }
 
@@ -258,93 +277,23 @@ class PedidoServiceUnitTest {
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
 
-            CarrinhoItem carrinhoItem = new CarrinhoItem();
-            carrinhoItem.setPrato(prato);
-            carrinhoItem.setQuantidade(2);
-            carrinhoItem.setPrecoUnitario(prato.getPreco());
-            carrinhoItem.setSubtotal(prato.getPreco().multiply(BigDecimal.valueOf(2)));
-            carrinho.getItens().add(carrinhoItem);
-
             pedidoRequestDTO.setCarrinhoId(1L);
             pedidoRequestDTO.setItens(null);
 
             when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
             when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
-            when(enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())).thenReturn(Optional.of(enderecoCliente));
-            when(carrinhoService.obterCarrinhoParaPedido(cliente.getId())).thenReturn(carrinho);
-            when(pedidoValidator.validatePratoDisponivel(any(Prato.class))).thenReturn(prato);
-            when(pedidoRepository.save(any(Pedido.class))).thenAnswer(invocation -> {
-                Pedido p = invocation.getArgument(0);
-                p.setId(1L);
-                return p;
-            });
+            doNothing().when(pedidoEnderecoService).processarEnderecoEntrega(any(), any(), any());
+            doNothing().when(pedidoFinanceiroService).processarCarrinhoParaPedido(any(), anyLong(), anyLong());
+            when(pedidoRepository.save(any(Pedido.class))).thenAnswer(invocation -> invocation.getArgument(0));
             when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-            doNothing().when(carrinhoService).limparCarrinho();
+            doNothing().when(pedidoFinanceiroService).limparCarrinho();
 
             PedidoResponseDTO result = pedidoService.criarPedido(null, pedidoRequestDTO);
 
             assertNotNull(result);
-            verify(carrinhoService, times(1)).obterCarrinhoParaPedido(cliente.getId());
-            verify(carrinhoService, times(1)).limparCarrinho();
+            verify(pedidoFinanceiroService).processarCarrinhoParaPedido(any(), eq(1L), eq(cliente.getId()));
+            verify(pedidoFinanceiroService).limparCarrinho();
             verify(pedidoRepository, times(1)).save(any(Pedido.class));
-        }
-    }
-
-    @Test
-    void deveCriarPedidoComCupomAplicadoNoCarrinho() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-
-            CarrinhoItem carrinhoItem = new CarrinhoItem();
-            carrinhoItem.setPrato(prato);
-            carrinhoItem.setQuantidade(2);
-            carrinhoItem.setPrecoUnitario(prato.getPreco());
-            carrinhoItem.setSubtotal(prato.getPreco().multiply(BigDecimal.valueOf(2)));
-            carrinho.getItens().add(carrinhoItem);
-            carrinho.setCupom(cupom);
-            carrinho.setSubtotal(new BigDecimal("51.00"));
-
-            pedidoRequestDTO.setCarrinhoId(1L);
-            pedidoRequestDTO.setItens(null);
-
-            when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
-            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
-            when(enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())).thenReturn(Optional.of(enderecoCliente));
-            when(carrinhoService.obterCarrinhoParaPedido(cliente.getId())).thenReturn(carrinho);
-            when(pedidoValidator.validatePratoDisponivel(any(Prato.class))).thenReturn(prato);
-            when(pedidoRepository.save(any(Pedido.class))).thenAnswer(invocation -> {
-                Pedido p = invocation.getArgument(0);
-                p.setId(1L);
-                return p;
-            });
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-            doNothing().when(cupomService).incrementarUsoCupom(any(Cupom.class));
-            doNothing().when(carrinhoService).limparCarrinho();
-
-            PedidoResponseDTO result = pedidoService.criarPedido(null, pedidoRequestDTO);
-
-            assertNotNull(result);
-            verify(cupomService, times(1)).incrementarUsoCupom(cupom);
-            verify(carrinhoService, times(1)).limparCarrinho();
-        }
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoPratoIndisponivel() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-
-            prato.setDisponivel(false);
-
-            when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
-            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
-            when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
-            when(enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())).thenReturn(Optional.of(enderecoCliente));
-            when(pedidoValidator.validatePratoDisponivel(any(Prato.class)))
-                    .thenThrow(new PratoNotAvailableException("Prato não disponível: " + prato.getNome()));
-
-            assertThrows(PratoNotAvailableException.class, 
-                    () -> pedidoService.criarPedido(null, pedidoRequestDTO));
         }
     }
 
@@ -352,7 +301,6 @@ class PedidoServiceUnitTest {
     void deveLancarExcecaoQuandoClienteSemPermissao() {
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(false);
 
             Cliente outroCliente = new Cliente();
             outroCliente.setId(2L);
@@ -362,664 +310,392 @@ class PedidoServiceUnitTest {
             doThrow(new AccessDeniedException("Você não tem permissão para criar pedidos para este cliente"))
                     .when(pedidoValidator).validatePermissaoCliente(any(Cliente.class), any(User.class));
 
-            pedidoRequestDTO.setRestauranteId(1L);
-
             assertThrows(AccessDeniedException.class, 
                     () -> pedidoService.criarPedido(2L, pedidoRequestDTO));
         }
     }
 
+    // ============ TESTES DE BUSCA/CONSULTA ============
+
     @Test
-    void deveAceitarPedidoComSucesso() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+    void deveBuscarPedidoComRastreamentoQuandoSaiuParaEntrega() {
+        pedido.setStatus(StatusPedido.OUT_FOR_DELIVERY);
 
-            pedido.setStatus(StatusPedido.PREPARING);
-            pedido.setEnderecoEntrega(enderecoEntrega);
+        when(pedidoRepository.findById(pedido.getId())).thenReturn(Optional.of(pedido));
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
+        when(rastreamentoService.obterRastreamento(pedido.getId())).thenReturn(new RastreamentoDTO());
 
-            ResultadoCalculo resultado = new ResultadoCalculo(
-                    new BigDecimal("2.0"), 20, false);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(() -> SecurityUtils.validatePedidoOwnership(pedido)).thenAnswer(inv -> null);
 
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(pedidoValidator.validateEntregadorAprovado(any(User.class))).thenReturn(entregador);
-            doNothing().when(pedidoValidator).validatePedidoAceitavel(any(Pedido.class));
-            when(tempoEstimadoCalculator.calculateDistanceAndTime(
-                    any(BigDecimal.class), any(BigDecimal.class),
-                    any(BigDecimal.class), any(BigDecimal.class),
-                    any(TipoVeiculo.class))).thenReturn(resultado);
-            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-            lenient().doNothing().when(notificationService).notifyRestaurantNewOrder(anyLong(), any(), any(BigDecimal.class));
-            lenient().doNothing().when(notificationService).notifyOrderStatusChange(anyLong(), any(), any(), anyString());
+            PedidoResponseDTO response = pedidoService.buscarPorId(pedido.getId());
 
-            PedidoResponseDTO result = pedidoService.aceitarPedido(1L);
-
-            assertNotNull(result);
-            assertEquals(entregador, pedido.getEntregador());
-            verify(pedidoRepository, times(1)).save(pedido);
-            verify(tempoEstimadoCalculator, times(1)).calculateDistanceAndTime(
-                    any(BigDecimal.class), any(BigDecimal.class),
-                    any(BigDecimal.class), any(BigDecimal.class),
-                    any(TipoVeiculo.class));
+            assertNotNull(response.getRastreamento());
+            verify(rastreamentoService).obterRastreamento(pedido.getId());
         }
     }
 
     @Test
-    void deveLancarExcecaoQuandoEntregadorNaoAprovado() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+    void naoDeveBuscarRastreamentoQuandoPedidoNaoSaiu() {
+        pedido.setStatus(StatusPedido.CREATED);
 
-            lenient().when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            doThrow(new AccessDeniedException("Entregador não está aprovado"))
-                    .when(pedidoValidator).validateEntregadorAprovado(any(User.class));
+        when(pedidoRepository.findById(pedido.getId())).thenReturn(Optional.of(pedido));
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
 
-            assertThrows(AccessDeniedException.class, 
-                    () -> pedidoService.aceitarPedido(1L));
-        }
-    }
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(() -> SecurityUtils.validatePedidoOwnership(pedido)).thenAnswer(inv -> null);
 
-    @Test
-    void deveLancarExcecaoQuandoPedidoJaAceito() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+            pedidoService.buscarPorId(pedido.getId());
 
-            pedido.setStatus(StatusPedido.PREPARING);
-            pedido.setEntregador(entregador);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(pedidoValidator.validateEntregadorAprovado(any(User.class))).thenReturn(entregador);
-            doThrow(new PedidoAlreadyProcessedException("Pedido já foi aceito por outro entregador"))
-                    .when(pedidoValidator).validatePedidoAceitavel(any(Pedido.class));
-
-            assertThrows(PedidoAlreadyProcessedException.class, 
-                    () -> pedidoService.aceitarPedido(1L));
-        }
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoPedidoEmStatusInvalidoParaAceitar() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-
-            pedido.setStatus(StatusPedido.CREATED);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(pedidoValidator.validateEntregadorAprovado(any(User.class))).thenReturn(entregador);
-            doThrow(new PedidoAlreadyProcessedException("Pedido deve estar PREPARING para ser aceito"))
-                    .when(pedidoValidator).validatePedidoAceitavel(any(Pedido.class));
-
-            assertThrows(PedidoAlreadyProcessedException.class, 
-                    () -> pedidoService.aceitarPedido(1L));
-        }
-    }
-
-    @Test
-    void deveConfirmarPedidoComSucesso() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
-
-            pedido.setStatus(StatusPedido.CREATED);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-            lenient().doNothing().when(notificationService).notifyOrderStatusChange(anyLong(), any(), any(), anyString());
-            lenient().doNothing().when(notificationService).notifyRestaurantNewOrder(anyLong(), any(), any(BigDecimal.class));
-
-            PedidoResponseDTO result = pedidoService.confirmarPedido(1L);
-
-            assertNotNull(result);
-            assertEquals(StatusPedido.CONFIRMED, pedido.getStatus());
-            verify(pedidoRepository, times(1)).save(pedido);
-        }
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoPedidoJaProcessado() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
-
-            pedido.setStatus(StatusPedido.CONFIRMED);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            doThrow(new PedidoAlreadyProcessedException("Pedido já foi processado"))
-                    .when(pedidoValidator).validateStatusParaConfirmacao(any(Pedido.class));
-
-            assertThrows(PedidoAlreadyProcessedException.class, 
-                    () -> pedidoService.confirmarPedido(1L));
-        }
-    }
-
-    @Test
-    void deveMarcarComoPreparandoComSucesso() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
-
-            pedido.setStatus(StatusPedido.CONFIRMED);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-            lenient().doNothing().when(notificationService).notifyOrderStatusChange(anyLong(), any(), any(), anyString());
-
-            PedidoResponseDTO result = pedidoService.marcarComoPreparando(1L);
-
-            assertNotNull(result);
-            assertEquals(StatusPedido.PREPARING, pedido.getStatus());
-            verify(pedidoRepository, times(1)).save(pedido);
-        }
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoStatusInvalidoParaPreparando() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
-
-            pedido.setStatus(StatusPedido.CREATED);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            doThrow(new PedidoAlreadyProcessedException("Pedido deve estar CONFIRMED para ser marcado como PREPARING"))
-                    .when(pedidoValidator).validateStatusPreparo(any(Pedido.class));
-
-            assertThrows(PedidoAlreadyProcessedException.class, 
-                    () -> pedidoService.marcarComoPreparando(1L));
-        }
-    }
-
-    @Test
-    void deveMarcarSaiuEntregaComSucesso() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(false);
-
-            pedido.setStatus(StatusPedido.PREPARING);
-            pedido.setEntregador(entregador);
-            entregador.setLatitude(null);
-            entregador.setLongitude(null);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(entregadorRepository.save(any(Entregador.class))).thenReturn(entregador);
-            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-            lenient().doNothing().when(notificationService).notifyOrderStatusChange(anyLong(), any(), any(), anyString());
-
-            PedidoResponseDTO result = pedidoService.marcarSaiuEntrega(1L);
-
-            assertNotNull(result);
-            assertEquals(StatusPedido.OUT_FOR_DELIVERY, pedido.getStatus());
-            verify(pedidoRepository, times(1)).save(pedido);
-            verify(entregadorRepository, times(1)).save(entregador);
-        }
-    }
-
-    @Test
-    void deveInicializarPosicaoEntregadorQuandoNaoTemCoordenadas() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(false);
-
-            pedido.setStatus(StatusPedido.PREPARING);
-            pedido.setEntregador(entregador);
-            entregador.setLatitude(null);
-            entregador.setLongitude(null);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(entregadorRepository.save(any(Entregador.class))).thenReturn(entregador);
-            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-            lenient().doNothing().when(notificationService).notifyOrderStatusChange(anyLong(), any(), any(), anyString());
-
-            pedidoService.marcarSaiuEntrega(1L);
-
-            // Verificar se a posição inicial foi definida (usando coordenadas do restaurante)
-            verify(entregadorRepository, times(1)).save(entregador);
-        }
-    }
-
-    @Test
-    void deveMarcarComoEntregueComSucessoECalcularTaxas() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(false);
-
-            pedido.setStatus(StatusPedido.OUT_FOR_DELIVERY);
-            pedido.setEntregador(entregador);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-            doNothing().when(taxaCalculoService).calcularEAtualizarValoresFinanceiros(any(Pedido.class));
-            lenient().doNothing().when(notificationService).notifyOrderStatusChange(anyLong(), any(), any(), anyString());
-            lenient().doNothing().when(notificationService).notifyRestaurantNewOrder(anyLong(), any(), any(BigDecimal.class));
-
-            PedidoResponseDTO result = pedidoService.marcarComoEntregue(1L);
-
-            assertNotNull(result);
-            assertEquals(StatusPedido.DELIVERED, pedido.getStatus());
-            verify(taxaCalculoService, times(1)).calcularEAtualizarValoresFinanceiros(pedido);
-            verify(pedidoRepository, times(1)).save(pedido);
-        }
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoAcessoNegadoParaMarcarEntregue() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(false);
-
-            pedido.setStatus(StatusPedido.OUT_FOR_DELIVERY);
-            pedido.setEntregador(null);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            doThrow(new AccessDeniedException("Apenas o entregador associado pode marcar como entregue"))
-                    .when(pedidoValidator).validateEntregadorDoPedido(any(Pedido.class), anyString());
-
-            assertThrows(AccessDeniedException.class, 
-                    () -> pedidoService.marcarComoEntregue(1L));
-        }
-    }
-
-    @Test
-    void deveBuscarPedidoPorIdComSucesso() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
-
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-
-            PedidoResponseDTO result = pedidoService.buscarPorId(1L);
-
-            assertNotNull(result);
-            verify(pedidoRepository, times(1)).findById(1L);
+            verify(rastreamentoService, never()).obterRastreamento(anyLong());
         }
     }
 
     @Test
     void deveLancarExcecaoQuandoPedidoNaoEncontrado() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+        when(pedidoRepository.findById(1L)).thenReturn(Optional.empty());
 
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.empty());
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(() -> SecurityUtils.validatePedidoOwnership(any())).thenAnswer(inv -> null);
 
             assertThrows(ResourceNotFoundException.class, 
                     () -> pedidoService.buscarPorId(1L));
         }
     }
 
+    // ============ TESTES DE CONFIRMAÇÃO ============
+
     @Test
-    void deveListarPedidosDisponiveisComSucesso() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+    void deveConfirmarPedido() {
+        when(pedidoRepository.findById(pedido.getId())).thenReturn(Optional.of(pedido));
+        when(pedidoRepository.save(pedido)).thenReturn(pedido);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
 
-            Pageable pageable = PageRequest.of(0, 10);
-            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(() -> SecurityUtils.validatePedidoOwnership(pedido)).thenAnswer(inv -> null);
 
-            when(entregadorRepository.findByUserId(user.getId())).thenReturn(Optional.of(entregador));
-            when(pedidoRepository.findByStatusAndEntregadorIsNull(StatusPedido.PREPARING, pageable))
-                    .thenReturn(pedidosPage);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-            lenient().doNothing().when(notificationService).notifyNewOrderAvailable(
-                    anyLong(), any(), any(), any(), any(BigDecimal.class));
+            PedidoResponseDTO response = pedidoService.confirmarPedido(pedido.getId());
 
-            Page<PedidoResponseDTO> result = pedidoService.listarPedidosDisponiveis(pageable);
+            assertNotNull(response);
+            assertEquals(StatusPedido.CONFIRMED, pedido.getStatus());
+            verify(pedidoValidator).validateStatusParaConfirmacao(pedido);
+            verify(pedidoNotificacaoService).enviarNotificacoesConfirmacaoPedido(pedido);
+        }
+    }
 
-            assertNotNull(result);
-            assertEquals(1, result.getTotalElements());
-            verify(pedidoRepository, times(1)).findByStatusAndEntregadorIsNull(StatusPedido.PREPARING, pageable);
+    // ============ TESTES DE PREPARO ============
+
+    @Test
+    void deveMarcarPedidoComoPreparando() {
+        when(pedidoRepository.findById(pedido.getId())).thenReturn(Optional.of(pedido));
+        when(pedidoRepository.save(pedido)).thenReturn(pedido);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(() -> SecurityUtils.validateRestauranteOwnership(restaurante)).thenAnswer(inv -> null);
+
+            PedidoResponseDTO response = pedidoService.marcarComoPreparando(pedido.getId());
+
+            assertNotNull(response);
+            assertEquals(StatusPedido.PREPARING, pedido.getStatus());
+            verify(pedidoValidator).validateStatusPreparo(pedido);
+            verify(pedidoNotificacaoService).notificarClienteStatusPedido(pedido, "PREPARING");
+        }
+    }
+
+    // ============ TESTES DE ENTREGA (DELEGAÇÃO) ============
+
+    @Test
+    void deveDelegarMarcacaoSaiuParaEntrega() {
+        PedidoResponseDTO esperado = new PedidoResponseDTO();
+        when(pedidoEntregadorService.marcarSaiuEntrega(1L)).thenReturn(esperado);
+
+        PedidoResponseDTO response = pedidoService.marcarSaiuEntrega(1L);
+
+        assertEquals(esperado, response);
+        verify(pedidoEntregadorService).marcarSaiuEntrega(1L);
+    }
+
+    @Test
+    void deveDelegarMarcacaoComoEntregue() {
+        PedidoResponseDTO esperado = new PedidoResponseDTO();
+        when(pedidoEntregadorService.marcarComoEntregue(1L)).thenReturn(esperado);
+
+        PedidoResponseDTO response = pedidoService.marcarComoEntregue(1L);
+
+        assertEquals(esperado, response);
+        verify(pedidoEntregadorService).marcarComoEntregue(1L);
+    }
+
+    @Test
+    void deveDelegarAceitarPedido() {
+        PedidoResponseDTO esperado = new PedidoResponseDTO();
+        when(pedidoEntregadorService.aceitarPedido(1L)).thenReturn(esperado);
+
+        PedidoResponseDTO response = pedidoService.aceitarPedido(1L);
+
+        assertEquals(esperado, response);
+        verify(pedidoEntregadorService).aceitarPedido(1L);
+    }
+
+    @Test
+    void deveDelegarRecusarPedido() {
+        doNothing().when(pedidoEntregadorService).recusarPedido(1L);
+
+        pedidoService.recusarPedido(1L);
+
+        verify(pedidoEntregadorService).recusarPedido(1L);
+    }
+
+    // ============ TESTES DE CANCELAMENTO ============
+
+    @Test
+    void deveCancelarPedidoComReembolso() {
+        pedido.setStatus(StatusPedido.CONFIRMED);
+
+        when(pedidoRepository.findById(pedido.getId())).thenReturn(Optional.of(pedido));
+        when(pedidoRepository.save(pedido)).thenReturn(pedido);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(() -> SecurityUtils.validatePedidoOwnership(pedido)).thenAnswer(inv -> null);
+
+            PedidoResponseDTO response = pedidoService.cancelarPedido(pedido.getId());
+
+            assertNotNull(response);
+            assertEquals(StatusPedido.CANCELED, pedido.getStatus());
+            verify(pedidoFinanceiroService).processarReembolsoSeNecessario(pedido);
         }
     }
 
     @Test
-    void deveCalcularTaxaEntregaQuandoSubtotalMenorQueMinimo() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+    void deveRejeitarCancelamentoQuandoStatusNaoPermite() {
+        pedido.setStatus(StatusPedido.PREPARING);
+        when(pedidoRepository.findById(pedido.getId())).thenReturn(Optional.of(pedido));
 
-            pedido.setSubtotal(new BigDecimal("30.00"));
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(() -> SecurityUtils.validatePedidoOwnership(pedido)).thenAnswer(inv -> null);
 
-            when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
-            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
-            when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
-            when(pedidoValidator.validatePratoDisponivel(any(Prato.class))).thenReturn(prato);
-            when(enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())).thenReturn(Optional.of(enderecoCliente));
-            when(pedidoRepository.save(any(Pedido.class))).thenAnswer(invocation -> {
-                Pedido p = invocation.getArgument(0);
-                p.setId(1L);
-                return p;
-            });
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-
-            pedidoService.criarPedido(null, pedidoRequestDTO);
-
-            verify(pedidoRepository, times(1)).save(any(Pedido.class));
+            assertThrows(IllegalStateException.class,
+                () -> pedidoService.cancelarPedido(pedido.getId()));
+            verify(pedidoFinanceiroService, never()).processarReembolsoSeNecessario(any());
         }
     }
 
-    @Test
-    void deveCalcularTaxaEntregaZeroQuandoSubtotalMaiorOuIgualMinimo() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-
-            prato.setPreco(new BigDecimal("30.00"));
-            var itemDTO = new PedidoItemRequestDTO();
-            itemDTO.setPratoId(1L);
-            itemDTO.setQuantidade(2);
-            pedidoRequestDTO.setItens(List.of(itemDTO));
-
-            when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
-            when(restauranteRepository.findById(1L)).thenReturn(Optional.of(restaurante));
-            when(pratoRepository.findById(1L)).thenReturn(Optional.of(prato));
-            when(pedidoValidator.validatePratoDisponivel(any(Prato.class))).thenReturn(prato);
-            when(enderecoService.buscarEnderecoPrincipalCliente(cliente.getId())).thenReturn(Optional.of(enderecoCliente));
-            when(pedidoRepository.save(any(Pedido.class))).thenAnswer(invocation -> {
-                Pedido p = invocation.getArgument(0);
-                p.setId(1L);
-                return p;
-            });
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-
-            pedidoService.criarPedido(null, pedidoRequestDTO);
-
-            verify(pedidoRepository, times(1)).save(argThat(p -> 
-                p.getTaxaEntrega().compareTo(BigDecimal.ZERO) == 0));
-        }
-    }
+    // ============ TESTES DE LISTAGEM ============
 
     @Test
-    void deveListarMeusPedidosSemFiltros() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+    void deveListarPedidosDoClienteLogado() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Pedido> page = new PageImpl<>(List.of(pedido));
 
-            Pageable pageable = PageRequest.of(0, 10);
-            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+        when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
+        when(pedidoRepository.findByClienteId(cliente.getId(), pageable)).thenReturn(page);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
 
-            when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
-            when(pedidoRepository.findByClienteId(cliente.getId(), pageable)).thenReturn(pedidosPage);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getCurrentUser).thenReturn(user);
 
             Page<PedidoResponseDTO> result = pedidoService.listarMeusPedidos(null, null, null, null, pageable);
 
-            assertNotNull(result);
             assertEquals(1, result.getTotalElements());
-            verify(pedidoRepository, times(1)).findByClienteId(cliente.getId(), pageable);
+            verify(pedidoRepository).findByClienteId(cliente.getId(), pageable);
         }
     }
 
     @Test
-    void deveListarMeusPedidosComFiltroStatus() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+    void deveListarPedidosComFiltroStatus() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Pedido> page = new PageImpl<>(List.of(pedido));
 
-            Pageable pageable = PageRequest.of(0, 10);
-            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+        when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
+        when(pedidoRepository.findByClienteIdAndStatus(cliente.getId(), StatusPedido.DELIVERED, pageable))
+                .thenReturn(page);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
 
-            when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
-            when(pedidoRepository.findByClienteIdAndStatus(cliente.getId(), StatusPedido.DELIVERED, pageable))
-                    .thenReturn(pedidosPage);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getCurrentUser).thenReturn(user);
 
             Page<PedidoResponseDTO> result = pedidoService.listarMeusPedidos(
                     StatusPedido.DELIVERED, null, null, null, pageable);
 
-            assertNotNull(result);
             assertEquals(1, result.getTotalElements());
-            verify(pedidoRepository, times(1))
-                    .findByClienteIdAndStatus(cliente.getId(), StatusPedido.DELIVERED, pageable);
+            verify(pedidoRepository).findByClienteIdAndStatus(cliente.getId(), StatusPedido.DELIVERED, pageable);
         }
     }
 
     @Test
-    void deveListarMeusPedidosComFiltroRestaurante() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+    void deveListarPedidosComFiltroPeriodo() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Pedido> page = new PageImpl<>(List.of(pedido));
+        Instant dataInicio = Instant.now().minusSeconds(86400);
+        Instant dataFim = Instant.now();
 
-            Pageable pageable = PageRequest.of(0, 10);
-            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+        when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
+        when(pedidoRepository.findByClienteIdAndCriadoEmBetween(cliente.getId(), dataInicio, dataFim, pageable))
+                .thenReturn(page);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
 
-            when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
-            when(pedidoRepository.findByClienteIdAndRestauranteId(cliente.getId(), 1L, pageable))
-                    .thenReturn(pedidosPage);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getCurrentUser).thenReturn(user);
+
+            Page<PedidoResponseDTO> result = pedidoService.listarMeusPedidos(
+                    null, dataInicio, dataFim, null, pageable);
+
+            assertEquals(1, result.getTotalElements());
+            verify(pedidoRepository).findByClienteIdAndCriadoEmBetween(cliente.getId(), dataInicio, dataFim, pageable);
+        }
+    }
+
+    @Test
+    void deveListarPedidosComFiltroRestaurante() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Pedido> page = new PageImpl<>(List.of(pedido));
+
+        when(clienteRepository.findByUserId(user.getId())).thenReturn(Optional.of(cliente));
+        when(pedidoRepository.findByClienteIdAndRestauranteId(cliente.getId(), 1L, pageable))
+                .thenReturn(page);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getCurrentUser).thenReturn(user);
 
             Page<PedidoResponseDTO> result = pedidoService.listarMeusPedidos(
                     null, null, null, 1L, pageable);
 
-            assertNotNull(result);
             assertEquals(1, result.getTotalElements());
-            verify(pedidoRepository, times(1))
-                    .findByClienteIdAndRestauranteId(cliente.getId(), 1L, pageable);
+            verify(pedidoRepository).findByClienteIdAndRestauranteId(cliente.getId(), 1L, pageable);
         }
     }
 
     @Test
     void deveListarPedidosRestauranteSemFiltros() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Pedido> page = new PageImpl<>(List.of(pedido));
 
-            Pageable pageable = PageRequest.of(0, 10);
-            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+        when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
+        when(pedidoRepository.findByRestauranteId(restaurante.getId(), pageable)).thenReturn(page);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
 
-            when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
-            when(pedidoRepository.findByRestauranteId(restaurante.getId(), pageable)).thenReturn(pedidosPage);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getCurrentUser).thenReturn(user);
 
             Page<PedidoResponseDTO> result = pedidoService.listarPedidosRestaurante(null, null, null, pageable);
 
-            assertNotNull(result);
             assertEquals(1, result.getTotalElements());
-            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
-            verify(pedidoRepository, times(1)).findByRestauranteId(restaurante.getId(), pageable);
+            verify(pedidoRepository).findByRestauranteId(restaurante.getId(), pageable);
         }
     }
 
     @Test
     void deveListarPedidosRestauranteComFiltroStatus() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Pedido> page = new PageImpl<>(List.of(pedido));
 
-            Pageable pageable = PageRequest.of(0, 10);
-            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+        when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
+        when(pedidoRepository.findByRestauranteIdAndStatus(restaurante.getId(), StatusPedido.CREATED, pageable))
+                .thenReturn(page);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
 
-            when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
-            when(pedidoRepository.findByRestauranteIdAndStatus(restaurante.getId(), StatusPedido.CREATED, pageable))
-                    .thenReturn(pedidosPage);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getCurrentUser).thenReturn(user);
 
             Page<PedidoResponseDTO> result = pedidoService.listarPedidosRestaurante(
                     StatusPedido.CREATED, null, null, pageable);
 
-            assertNotNull(result);
             assertEquals(1, result.getTotalElements());
-            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
-            verify(pedidoRepository, times(1))
-                    .findByRestauranteIdAndStatus(restaurante.getId(), StatusPedido.CREATED, pageable);
+            verify(pedidoRepository).findByRestauranteIdAndStatus(restaurante.getId(), StatusPedido.CREATED, pageable);
         }
     }
 
     @Test
     void deveListarPedidosRestauranteComFiltroPeriodo() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Pedido> page = new PageImpl<>(List.of(pedido));
+        Instant dataInicio = Instant.now().minusSeconds(86400);
+        Instant dataFim = Instant.now();
 
-            Pageable pageable = PageRequest.of(0, 10);
-            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
-            Instant dataInicio = Instant.now().minusSeconds(86400);
-            Instant dataFim = Instant.now();
+        when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
+        when(pedidoRepository.findByRestauranteIdAndCriadoEmBetween(
+                restaurante.getId(), dataInicio, dataFim, pageable))
+                .thenReturn(page);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
 
-            when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
-            when(pedidoRepository.findByRestauranteIdAndCriadoEmBetween(
-                    restaurante.getId(), dataInicio, dataFim, pageable))
-                    .thenReturn(pedidosPage);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getCurrentUser).thenReturn(user);
 
             Page<PedidoResponseDTO> result = pedidoService.listarPedidosRestaurante(
                     null, dataInicio, dataFim, pageable);
 
-            assertNotNull(result);
             assertEquals(1, result.getTotalElements());
-            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
-            verify(pedidoRepository, times(1))
-                    .findByRestauranteIdAndCriadoEmBetween(restaurante.getId(), dataInicio, dataFim, pageable);
+            verify(pedidoRepository).findByRestauranteIdAndCriadoEmBetween(
+                    restaurante.getId(), dataInicio, dataFim, pageable);
         }
     }
 
     @Test
     void deveListarPedidosRestauranteComFiltroStatusEPeriodo() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Pedido> page = new PageImpl<>(List.of(pedido));
+        Instant dataInicio = Instant.now().minusSeconds(86400);
+        Instant dataFim = Instant.now();
 
-            Pageable pageable = PageRequest.of(0, 10);
-            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
-            Instant dataInicio = Instant.now().minusSeconds(86400);
-            Instant dataFim = Instant.now();
+        when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
+        when(pedidoRepository.findByRestauranteIdAndStatusAndCriadoEmBetween(
+                restaurante.getId(), StatusPedido.CREATED, dataInicio, dataFim, pageable))
+                .thenReturn(page);
+        when(pedidoMapper.toResponseDTO(pedido)).thenReturn(pedidoResponseDTO);
 
-            when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restaurante);
-            when(pedidoRepository.findByRestauranteIdAndStatusAndCriadoEmBetween(
-                    restaurante.getId(), StatusPedido.CREATED, dataInicio, dataFim, pageable))
-                    .thenReturn(pedidosPage);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getCurrentUser).thenReturn(user);
 
             Page<PedidoResponseDTO> result = pedidoService.listarPedidosRestaurante(
                     StatusPedido.CREATED, dataInicio, dataFim, pageable);
 
-            assertNotNull(result);
             assertEquals(1, result.getTotalElements());
-            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
-            verify(pedidoRepository, times(1))
-                    .findByRestauranteIdAndStatusAndCriadoEmBetween(
-                            restaurante.getId(), StatusPedido.CREATED, dataInicio, dataFim, pageable);
+            verify(pedidoRepository).findByRestauranteIdAndStatusAndCriadoEmBetween(
+                    restaurante.getId(), StatusPedido.CREATED, dataInicio, dataFim, pageable);
         }
     }
 
+    // ============ TESTES DE PEDIDOS DISPONÍVEIS (ENTREGADOR) ============
+
     @Test
-    void deveLancarExcecaoQuandoRestauranteNaoEncontrado() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+    void deveDelegarListarPedidosDisponiveis() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<PedidoResponseDTO> page = new PageImpl<>(List.of(pedidoResponseDTO));
 
-            Pageable pageable = PageRequest.of(0, 10);
+        when(pedidoEntregadorService.listarPedidosDisponiveis(pageable)).thenReturn(page);
 
-            when(pedidoValidator.validateRestauranteAprovado(user))
-                    .thenThrow(new ResourceNotFoundException("Restaurante não encontrado para o usuário autenticado"));
+        Page<PedidoResponseDTO> result = pedidoService.listarPedidosDisponiveis(pageable);
 
-            assertThrows(ResourceNotFoundException.class,
-                    () -> pedidoService.listarPedidosRestaurante(null, null, null, pageable));
-            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
-        }
+        assertEquals(1, result.getTotalElements());
+        verify(pedidoEntregadorService).listarPedidosDisponiveis(pageable);
     }
 
     @Test
-    void deveLancarExcecaoQuandoRestauranteNaoAprovado() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+    void deveDelegarListarEntregasAtivas() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<PedidoResponseDTO> page = new PageImpl<>(List.of(pedidoResponseDTO));
 
-            Pageable pageable = PageRequest.of(0, 10);
+        when(pedidoEntregadorService.listarEntregasAtivas(pageable)).thenReturn(page);
 
-            when(pedidoValidator.validateRestauranteAprovado(user))
-                    .thenThrow(new AccessDeniedException("Restaurante não está aprovado"));
+        Page<PedidoResponseDTO> result = pedidoService.listarEntregasAtivas(pageable);
 
-            assertThrows(AccessDeniedException.class,
-                    () -> pedidoService.listarPedidosRestaurante(null, null, null, pageable));
-            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
-        }
+        assertEquals(1, result.getTotalElements());
+        verify(pedidoEntregadorService).listarEntregasAtivas(pageable);
     }
 
     @Test
-    void devePermitirListarPedidosQuandoAdminMesmoRestauranteNaoAprovado() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
+    void deveDelegarListarHistoricoEntregas() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<PedidoResponseDTO> page = new PageImpl<>(List.of(pedidoResponseDTO));
 
-            Restaurante restauranteNaoAprovado = new Restaurante();
-            restauranteNaoAprovado.setId(2L);
-            restauranteNaoAprovado.setStatus(com.siseg.model.enumerations.StatusRestaurante.PENDING_APPROVAL);
-            restauranteNaoAprovado.setUser(user);
+        when(pedidoEntregadorService.listarHistoricoEntregas(pageable)).thenReturn(page);
 
-            Pageable pageable = PageRequest.of(0, 10);
-            Page<Pedido> pedidosPage = new PageImpl<>(List.of(pedido), pageable, 1);
+        Page<PedidoResponseDTO> result = pedidoService.listarHistoricoEntregas(pageable);
 
-            when(pedidoValidator.validateRestauranteAprovado(user)).thenReturn(restauranteNaoAprovado);
-            when(pedidoRepository.findByRestauranteId(restauranteNaoAprovado.getId(), pageable))
-                    .thenReturn(pedidosPage);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-
-            Page<PedidoResponseDTO> result = pedidoService.listarPedidosRestaurante(null, null, null, pageable);
-
-            assertNotNull(result);
-            assertEquals(1, result.getTotalElements());
-            verify(pedidoValidator, times(1)).validateRestauranteAprovado(user);
-            verify(pedidoRepository, times(1))
-                    .findByRestauranteId(restauranteNaoAprovado.getId(), pageable);
-        }
-    }
-
-    @Test
-    void deveCancelarPedidoComStatusCreated() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
-
-            pedido.setStatus(StatusPedido.CREATED);
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-
-            PedidoResponseDTO result = pedidoService.cancelarPedido(1L);
-
-            assertNotNull(result);
-            assertEquals(StatusPedido.CANCELED, pedido.getStatus());
-            verify(pedidoRepository, times(1)).save(pedido);
-        }
-    }
-
-    @Test
-    void deveCancelarPedidoComStatusConfirmed() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
-
-            pedido.setStatus(StatusPedido.CONFIRMED);
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-            when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
-            when(pedidoMapper.toResponseDTO(any(Pedido.class))).thenReturn(pedidoResponseDTO);
-
-            PedidoResponseDTO result = pedidoService.cancelarPedido(1L);
-
-            assertNotNull(result);
-            assertEquals(StatusPedido.CANCELED, pedido.getStatus());
-            verify(pedidoRepository, times(1)).save(pedido);
-        }
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoPedidoNaoPodeSerCancelado() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
-
-            pedido.setStatus(StatusPedido.PREPARING);
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-
-            assertThrows(IllegalStateException.class, 
-                    () -> pedidoService.cancelarPedido(1L));
-        }
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoPedidoJaSaiuParaEntrega() {
-        try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
-            mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(user);
-            mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
-
-            pedido.setStatus(StatusPedido.OUT_FOR_DELIVERY);
-            when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
-
-            assertThrows(IllegalStateException.class, 
-                    () -> pedidoService.cancelarPedido(1L));
-        }
+        assertEquals(1, result.getTotalElements());
+        verify(pedidoEntregadorService).listarHistoricoEntregas(pageable);
     }
 }
-
