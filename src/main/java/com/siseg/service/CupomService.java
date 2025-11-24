@@ -37,6 +37,29 @@ public class CupomService {
         return cupomMapper.toResponseDTO(saved);
     }
 
+    public CupomResponseDTO atualizarCupom(Long id, CupomRequestDTO dto) {
+        Cupom cupom = buscarCupomPorId(id);
+        
+        
+        if (!cupom.getCodigo().equals(dto.getCodigo())) {
+            cupomValidator.validateCodigoUnico(dto.getCodigo());
+        }
+        
+        validarDatasCupom(dto.getDataInicio(), dto.getDataFim());
+       
+        cupom.setCodigo(dto.getCodigo());
+        cupom.setTipoDesconto(dto.getTipoDesconto());
+        cupom.setValorDesconto(dto.getValorDesconto());
+        cupom.setValorMinimo(dto.getValorMinimo());
+        cupom.setDataInicio(dto.getDataInicio());
+        cupom.setDataFim(dto.getDataFim());
+        cupom.setUsosMaximos(dto.getUsosMaximos());
+       
+        
+        Cupom saved = cupomRepository.save(cupom);
+        return cupomMapper.toResponseDTO(saved);
+    }
+
     @Transactional(readOnly = true)
     public Cupom buscarPorCodigo(String codigo) {
         LocalDate hoje = LocalDate.now();
@@ -68,6 +91,19 @@ public class CupomService {
         cupom.setAtivo(false);
         Cupom saved = cupomRepository.save(cupom);
         return cupomMapper.toResponseDTO(saved);
+    }
+
+    public CupomResponseDTO ativarCupom(Long id) {
+        Cupom cupom = buscarCupomPorId(id);
+        cupom.setAtivo(true);
+        Cupom saved = cupomRepository.save(cupom);
+        return cupomMapper.toResponseDTO(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CupomResponseDTO> listarTodos(Pageable pageable) {
+        Page<Cupom> cupons = cupomRepository.findAll(pageable);
+        return cupons.map(cupomMapper::toResponseDTO);
     }
 
     public void incrementarUsoCupom(Cupom cupom) {

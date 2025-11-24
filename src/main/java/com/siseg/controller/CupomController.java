@@ -31,6 +31,14 @@ public class CupomController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Atualizar cupom (apenas admin)")
+    public ResponseEntity<CupomResponseDTO> atualizarCupom(@PathVariable Long id, @Valid @RequestBody CupomRequestDTO dto) {
+        CupomResponseDTO response = cupomService.atualizarCupom(id, dto);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{codigo}")
     @Operation(summary = "Buscar cupom por código")
     public ResponseEntity<CupomResponseDTO> buscarPorCodigo(@PathVariable String codigo) {
@@ -51,6 +59,22 @@ public class CupomController {
     @Operation(summary = "Desativar cupom (apenas admin)")
     public ResponseEntity<CupomResponseDTO> desativarCupom(@PathVariable Long id) {
         CupomResponseDTO response = cupomService.desativarCupom(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/ativar")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Ativar cupom (apenas admin)")
+    public ResponseEntity<CupomResponseDTO> ativarCupom(@PathVariable Long id) {
+        CupomResponseDTO response = cupomService.ativarCupom(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/todos")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Listar todos os cupons incluindo inativos (apenas admin)")
+    public ResponseEntity<Page<CupomResponseDTO>> listarTodos(Pageable pageable) {
+        Page<CupomResponseDTO> response = cupomService.listarTodos(pageable);
         return ResponseEntity.ok(response);
     }
 
