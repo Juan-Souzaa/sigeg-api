@@ -4,11 +4,15 @@ import com.siseg.dto.ganhos.GanhosEntregadorDTO;
 import com.siseg.dto.ganhos.GanhosPorEntregaDTO;
 import com.siseg.dto.ganhos.GanhosRestauranteDTO;
 import com.siseg.dto.ganhos.RelatorioDistribuicaoDTO;
+import com.siseg.dto.ganhos.RelatorioCompletoDTO;
 import com.siseg.mapper.GanhosMapper;
 import com.siseg.model.Pedido;
 import com.siseg.model.enumerations.Periodo;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.PedidoRepository;
+import com.siseg.repository.ClienteRepository;
+import com.siseg.repository.RestauranteRepository;
+import com.siseg.repository.EntregadorRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,10 +28,18 @@ public class GanhosService {
 
     private final PedidoRepository pedidoRepository;
     private final GanhosMapper ganhosMapper;
+    private final ClienteRepository clienteRepository;
+    private final RestauranteRepository restauranteRepository;
+    private final EntregadorRepository entregadorRepository;
 
-    public GanhosService(PedidoRepository pedidoRepository, GanhosMapper ganhosMapper) {
+    public GanhosService(PedidoRepository pedidoRepository, GanhosMapper ganhosMapper,
+                        ClienteRepository clienteRepository, RestauranteRepository restauranteRepository,
+                        EntregadorRepository entregadorRepository) {
         this.pedidoRepository = pedidoRepository;
         this.ganhosMapper = ganhosMapper;
+        this.clienteRepository = clienteRepository;
+        this.restauranteRepository = restauranteRepository;
+        this.entregadorRepository = entregadorRepository;
     }
 
     @Transactional(readOnly = true)
@@ -84,6 +96,68 @@ public class GanhosService {
         return ganhosMapper.toRelatorioDistribuicaoDTO(
                 volumeTotal, distribuicaoRestaurantes, distribuicaoEntregadores,
                 distribuicaoPlataforma, periodo.name(), tendencia
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public RelatorioCompletoDTO gerarRelatorioCompleto(Periodo periodo) {
+        var periodoDatas = obterPeriodoDatas(periodo);
+        List<Pedido> pedidos = buscarPedidosEntregues(periodoDatas.inicio, periodoDatas.fim);
+        
+        
+        BigDecimal totalVendas = calcularVolumeTotal(pedidos);
+        Long totalPedidos = (long) pedidos.size();
+        
+       
+        BigDecimal ticketMedio = totalPedidos > 0 
+            ? totalVendas.divide(BigDecimal.valueOf(totalPedidos), 2, java.math.RoundingMode.HALF_UP)
+            : BigDecimal.ZERO;
+        
+        
+        BigDecimal somaTaxaEntrega = pedidos.stream()
+            .map(p -> p.getTaxaEntrega() != null ? p.getTaxaEntrega() : BigDecimal.ZERO)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal taxaEntregaMedia = totalPedidos > 0
+            ? somaTaxaEntrega.divide(BigDecimal.valueOf(totalPedidos), 2, java.math.RoundingMode.HALF_UP)
+            : BigDecimal.ZERO;
+        
+        
+        BigDecimal distribuicaoRestaurantes = calcularDistribuicaoRestaurantes(pedidos);
+        BigDecimal distribuicaoEntregadores = calcularDistribuicaoEntregadores(pedidos);
+        BigDecimal taxaPlataforma = calcularDistribuicaoPlataforma(pedidos);
+        
+        
+        Long totalClientes = clienteRepository.count();
+        Long qtdRestaurantes = restauranteRepository.count();
+        Long qtdEntregadores = entregadorRepository.count();
+        
+     
+        BigDecimal pedidosPorCliente = totalClientes > 0
+            ? BigDecimal.valueOf(totalPedidos).divide(BigDecimal.valueOf(totalClientes), 2, java.math.RoundingMode.HALF_UP)
+            : BigDecimal.ZERO;
+        
+        BigDecimal taxaConversao = totalClientes > 0
+            ? BigDecimal.valueOf(totalPedidos).multiply(BigDecimal.valueOf(100))
+                .divide(BigDecimal.valueOf(totalClientes), 2, java.math.RoundingMode.HALF_UP)
+            : BigDecimal.ZERO;
+        
+        String tendencia = calcularTendencia(pedidos, periodo);
+        
+        return new RelatorioCompletoDTO(
+            totalVendas,
+            totalPedidos,
+            ticketMedio,
+            taxaEntregaMedia,
+            distribuicaoRestaurantes,
+            distribuicaoEntregadores,
+            taxaPlataforma,
+            totalClientes,
+            qtdRestaurantes,
+            qtdEntregadores,
+            pedidosPorCliente,
+            taxaConversao,
+            periodo.name(),
+            tendencia
         );
     }
 

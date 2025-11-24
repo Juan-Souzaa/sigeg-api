@@ -5,6 +5,7 @@ import com.siseg.dto.admin.AdminResponseDTO;
 import com.siseg.dto.configuracao.ConfiguracaoTaxaRequestDTO;
 import com.siseg.dto.configuracao.ConfiguracaoTaxaResponseDTO;
 import com.siseg.dto.ganhos.RelatorioDistribuicaoDTO;
+import com.siseg.dto.ganhos.RelatorioCompletoDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
 import com.siseg.model.enumerations.Periodo;
 import com.siseg.model.enumerations.StatusPedido;
@@ -73,6 +74,14 @@ public class AdminController {
     public ResponseEntity<RelatorioDistribuicaoDTO> relatorioDistribuicao(
             @RequestParam(defaultValue = "MES") Periodo periodo) {
         RelatorioDistribuicaoDTO response = ganhosService.gerarRelatorioDistribuicao(periodo);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/relatorios/completo")
+    @Operation(summary = "Relatório completo com todas as estatísticas")
+    public ResponseEntity<RelatorioCompletoDTO> relatorioCompleto(
+            @RequestParam(defaultValue = "MES") Periodo periodo) {
+        RelatorioCompletoDTO response = ganhosService.gerarRelatorioCompleto(periodo);
         return ResponseEntity.ok(response);
     }
 
