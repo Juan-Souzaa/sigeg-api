@@ -125,8 +125,7 @@ class DeliveryMovementServiceUnitTest {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
         when(routeService.obterRota(1L)).thenReturn(Optional.of(rota));
-        lenient().when(routeService.deserializarWaypoints(rota)).thenReturn(waypoints);
-        when(routeService.obterProximoWaypoint(1L)).thenReturn(Optional.of(waypoints.get(1)));
+        when(routeService.obterWaypointsRestantes(1L)).thenReturn(waypoints);
         when(routeService.isRotaCompleta(1L)).thenReturn(false);
         doNothing().when(pedidoValidator).validateStatusEntrega(any());
         doNothing().when(pedidoValidator).validateEntregadorAssociado(any());
@@ -154,8 +153,7 @@ class DeliveryMovementServiceUnitTest {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
         when(routeService.obterRota(1L)).thenReturn(Optional.of(rota));
-        lenient().when(routeService.deserializarWaypoints(rota)).thenReturn(waypoints);
-        when(routeService.obterProximoWaypoint(1L)).thenReturn(Optional.of(waypoints.get(1)));
+        when(routeService.obterWaypointsRestantes(1L)).thenReturn(waypoints);
         when(routeService.isRotaCompleta(1L)).thenReturn(false);
         doNothing().when(pedidoValidator).validateStatusEntrega(any());
         doNothing().when(pedidoValidator).validateEntregadorAssociado(any());
@@ -174,7 +172,6 @@ class DeliveryMovementServiceUnitTest {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
         when(routeService.obterRota(1L)).thenReturn(Optional.of(rota));
-        lenient().when(routeService.deserializarWaypoints(rota)).thenReturn(waypoints);
         when(routeService.isRotaCompleta(1L)).thenReturn(false);
         doNothing().when(pedidoValidator).validateStatusEntrega(any());
         doNothing().when(pedidoValidator).validateEntregadorAssociado(any());
@@ -182,8 +179,8 @@ class DeliveryMovementServiceUnitTest {
         
         // Simular múltiplas iterações de movimento
         for (int i = 0; i < waypoints.size() - 1; i++) {
-            rota.setIndiceAtual(i);
-            when(routeService.obterProximoWaypoint(1L)).thenReturn(Optional.of(waypoints.get(i + 1)));
+            List<Coordinates> waypointsRestantes = waypoints.subList(i, waypoints.size());
+            when(routeService.obterWaypointsRestantes(1L)).thenReturn(waypointsRestantes);
             
             // Atualizar posição do entregador para próximo do waypoint atual
             entregador.setLatitude(waypoints.get(i).getLatitude());
@@ -194,7 +191,7 @@ class DeliveryMovementServiceUnitTest {
         }
         
         // Assert
-        verify(routeService, atLeast(waypoints.size() - 1)).obterProximoWaypoint(1L);
+        verify(routeService, atLeast(waypoints.size() - 1)).obterWaypointsRestantes(1L);
         verify(entregadorRepository, atLeast(waypoints.size() - 1)).save(any(Entregador.class));
     }
     
@@ -208,7 +205,6 @@ class DeliveryMovementServiceUnitTest {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
         when(routeService.obterRota(1L)).thenReturn(Optional.of(rota));
-        lenient().when(routeService.deserializarWaypoints(rota)).thenReturn(waypoints);
         when(routeService.isRotaCompleta(1L)).thenReturn(true);
         doNothing().when(pedidoValidator).validateStatusEntrega(any());
         doNothing().when(pedidoValidator).validateEntregadorAssociado(any());
@@ -271,7 +267,6 @@ class DeliveryMovementServiceUnitTest {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
         when(routeService.obterRota(1L)).thenReturn(Optional.of(rota));
-        lenient().when(routeService.deserializarWaypoints(rota)).thenReturn(waypoints);
         when(routeService.isRotaCompleta(1L)).thenReturn(false);
         doNothing().when(pedidoValidator).validateStatusEntrega(any());
         doNothing().when(pedidoValidator).validateEntregadorAssociado(any());
@@ -287,7 +282,8 @@ class DeliveryMovementServiceUnitTest {
                 break;
             }
             
-            when(routeService.obterProximoWaypoint(1L)).thenReturn(Optional.of(waypoints.get(indiceAtual + 1)));
+            List<Coordinates> waypointsRestantes = waypoints.subList(indiceAtual, waypoints.size());
+            when(routeService.obterWaypointsRestantes(1L)).thenReturn(waypointsRestantes);
             
             // Act
             deliveryMovementService.simularMovimento(1L);
@@ -300,7 +296,7 @@ class DeliveryMovementServiceUnitTest {
         
         // Assert
         verify(entregadorRepository, atLeast(10)).save(any(Entregador.class));
-        verify(routeService, atLeast(10)).obterProximoWaypoint(1L);
+        verify(routeService, atLeast(10)).obterWaypointsRestantes(1L);
         
         // Verificar que entregador se moveu
         assertNotNull(entregador.getLatitude());
@@ -316,8 +312,7 @@ class DeliveryMovementServiceUnitTest {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
         when(routeService.obterRota(1L)).thenReturn(Optional.of(rota));
-        lenient().when(routeService.deserializarWaypoints(rota)).thenReturn(waypoints);
-        when(routeService.obterProximoWaypoint(1L)).thenReturn(Optional.of(waypoints.get(1)));
+        when(routeService.obterWaypointsRestantes(1L)).thenReturn(waypoints);
         when(routeService.isRotaCompleta(1L)).thenReturn(false);
         doNothing().when(pedidoValidator).validateStatusEntrega(any());
         doNothing().when(pedidoValidator).validateEntregadorAssociado(any());

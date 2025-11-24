@@ -38,6 +38,12 @@ class RastreamentoServiceUnitTest {
     @Mock
     private TempoEstimadoCalculator tempoEstimadoCalculator;
     
+    @Mock
+    private EnderecoService enderecoService;
+    
+    @Mock
+    private RouteService routeService;
+    
     @InjectMocks
     private RastreamentoService rastreamentoService;
     
@@ -100,6 +106,8 @@ class RastreamentoServiceUnitTest {
     void deveObterRastreamentoComSucesso() {
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
+        when(enderecoService.buscarEnderecoPrincipalRestaurante(1L)).thenReturn(Optional.of(enderecoRestaurante));
+        when(routeService.obterWaypointsRestantes(1L)).thenReturn(java.util.Collections.emptyList());
         
         ResultadoCalculo resultado = new ResultadoCalculo(
             new BigDecimal("1.5"), 15, false
@@ -137,6 +145,8 @@ class RastreamentoServiceUnitTest {
         entregador.setLongitude(null);
         when(pedidoRepository.findById(1L)).thenReturn(Optional.of(pedido));
         when(entregadorRepository.findById(1L)).thenReturn(Optional.of(entregador));
+        when(enderecoService.buscarEnderecoPrincipalRestaurante(1L)).thenReturn(Optional.of(enderecoRestaurante));
+        when(routeService.obterWaypointsRestantes(1L)).thenReturn(java.util.Collections.emptyList());
         
         RastreamentoDTO rastreamento = rastreamentoService.obterRastreamento(1L);
         
