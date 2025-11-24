@@ -134,13 +134,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.unprocessableEntity().body(err);
     }
 
-    @ExceptionHandler({com.siseg.exception.AccessDeniedException.class, AccessDeniedException.class})
+    @ExceptionHandler({ AccessDeniedException.class})
     public ResponseEntity<ErrorResponse> handleAccessDenied(Exception ex, HttpServletRequest req) {
+        String message = ex.getMessage();
+        if (message == null || message.trim().isEmpty()) {
+            message = "Acesso negado. Você não tem permissão para realizar esta operação.";
+        }
         ErrorResponse err = new ErrorResponse(
                 Instant.now(),
                 HttpStatus.FORBIDDEN.value(),
                 "Forbidden",
-                "Acesso negado. Você não tem permissão para realizar esta operação.",
+                message,
                 req.getRequestURI(),
                 null
         );
