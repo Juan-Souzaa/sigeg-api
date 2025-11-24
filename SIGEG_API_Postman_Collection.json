@@ -2553,6 +2553,75 @@
 					}
 				},
 				{
+					"name": "Listar Entregas Ativas (Entregador)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{entregador_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/entregas?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"entregas"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista entregas ativas do entregador autenticado (pedidos em andamento, exceto DELIVERED e CANCELED).\n\nRequer role ENTREGADOR.\nRetorna apenas pedidos atribuídos ao entregador autenticado com status diferente de DELIVERED e CANCELED."
+					}
+				},
+				{
+					"name": "Listar Histórico de Entregas (Entregador)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{entregador_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/entregadores/entregas/historico?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"entregadores",
+								"entregas",
+								"historico"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista histórico de entregas concluídas do entregador autenticado (pedidos com status DELIVERED).\n\nRequer role ENTREGADOR.\nRetorna apenas pedidos entregues pelo entregador autenticado."
+					}
+				},
+				{
 					"name": "Listar Pedidos Disponíveis para Entrega (Entregador)",
 					"request": {
 						"method": "GET",
@@ -3242,6 +3311,38 @@
 					}
 				},
 				{
+					"name": "Relatório Completo",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/relatorios/completo?periodo=MES",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"relatorios",
+								"completo"
+							],
+							"query": [
+								{
+									"key": "periodo",
+									"value": "MES",
+									"description": "HOJE, SEMANA, MES"
+								}
+							]
+						},
+						"description": "Relatório completo com todas as estatísticas administrativas.\n\nInclui:\n- Total de vendas\n- Distribuição de valores (restaurantes, entregadores, plataforma)\n- Estatísticas de pedidos\n- Métricas de performance\n- E outras informações consolidadas\n\nRequer role ADMIN.\n\nParâmetros:\n- periodo: HOJE, SEMANA ou MES (padrão: MES)"
+					}
+				},
+				{
 					"name": "Criar Configuração de Taxa",
 					"request": {
 						"method": "POST",
@@ -3723,6 +3824,68 @@
 					}
 				},
 				{
+					"name": "Atualizar Cupom (Admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"codigo\": \"DESCONTO20\",\n  \"tipoDesconto\": \"PERCENTUAL\",\n  \"valorDesconto\": 20.00,\n  \"valorMinimo\": 100.00,\n  \"dataInicio\": \"2025-01-01\",\n  \"dataFim\": \"2025-12-31\",\n  \"usosMaximos\": 200\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/cupons/{{cupom_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cupons",
+								"{{cupom_id}}"
+							]
+						},
+						"description": "Atualiza um cupom existente. Requer role ADMIN.\n\nIMPORTANTE:\n- Se o código do cupom for alterado, será validado se o novo código é único\n- Todas as datas são validadas (data início < data fim, data fim >= hoje)\n- Todos os campos podem ser atualizados"
+					}
+				},
+				{
+					"name": "Ativar Cupom (Admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/cupons/{{cupom_id}}/ativar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cupons",
+								"{{cupom_id}}",
+								"ativar"
+							]
+						},
+						"description": "Ativa um cupom que estava desativado. Requer role ADMIN."
+					}
+				},
+				{
 					"name": "Desativar Cupom (Admin)",
 					"request": {
 						"method": "PATCH",
@@ -3745,6 +3908,40 @@
 							]
 						},
 						"description": "Desativa um cupom. Requer role ADMIN."
+					}
+				},
+				{
+					"name": "Listar Todos os Cupons (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/cupons/todos?page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cupons",
+								"todos"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Lista todos os cupons, incluindo os inativos. Requer role ADMIN.\n\nDiferente de GET /api/cupons que lista apenas cupons ativos, este endpoint retorna todos os cupons independente do status."
 					}
 				}
 			]
