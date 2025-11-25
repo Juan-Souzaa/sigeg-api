@@ -67,6 +67,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/entregadores").permitAll()
                 .requestMatchers("/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/pagamentos/webhook").permitAll()
+                .requestMatchers("/files/**").permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(conf -> conf.jwt(jwt -> jwt.jwtAuthenticationConverter(customJwtAuthenticationConverter)));
