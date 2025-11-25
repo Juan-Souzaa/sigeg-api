@@ -15,7 +15,7 @@ public class VehicleConstants {
     public static final double FATOR_VELOCIDADE_MINIMA = 0.7;
     public static final double FATOR_VELOCIDADE_MAXIMA = 1.3;
     
-    public static final double SEGUNDOS_POR_SEGUNDO = 3600.0;
+    public static final double SEGUNDOS_POR_HORA = 3600.0;
     public static final double INTERVALO_SIMULACAO_SEGUNDOS = 10.0;
     public static final double FATOR_ACELERACAO_SIMULACAO = 1.0;
     

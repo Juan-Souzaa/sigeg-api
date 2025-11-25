@@ -202,7 +202,7 @@ public class DeliveryMovementService {
     }
     
     private double calcularDistanciaPorIteracao(double velocidadeKmh) {
-        double distanciaBase = (velocidadeKmh / VehicleConstants.SEGUNDOS_POR_SEGUNDO) 
+        double distanciaBase = (velocidadeKmh / VehicleConstants.SEGUNDOS_POR_HORA) 
                                * VehicleConstants.INTERVALO_SIMULACAO_SEGUNDOS;
         return distanciaBase * VehicleConstants.FATOR_ACELERACAO_SIMULACAO;
     }
