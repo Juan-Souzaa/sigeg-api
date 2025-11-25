@@ -1,8 +1,24 @@
 # Copie este arquivo para application-local.properties e configure suas credenciais reais
-# O arquivo application-local.properties não será commitado no Git
+
+
+
+
+# Banco de Dados (opcional)
+spring.datasource.url=jdbc:mysql://localhost:3306/siseg
+spring.datasource.username=root
+spring.datasource.password=COLQUE_SUA_SENHA
 
 # Asaas - Configure suas chaves reais aqui
 asaas.baseUrl=https://api-sandbox.asaas.com/v3
 asaas.apiKey=COLE_SUA_CHAVE_API_AQUI
 asaas.webhookSecret=COLE_SEU_SEGREDO_WEBHOOK_AQUI
+
+# JWT - Ajuste se quiser tempos/chaves diferentes em local
+jwt.expiration.seconds=3600
+
+# LocationIQ - API key real
+geocoding.locationiq.apiKey=COLE_SUA_LOCATIONIQ_KEY_AQUI
+
+
+geocoding.osrm.baseUrl=https://router.project-osrm.org
 

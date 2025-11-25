@@ -4,9 +4,9 @@ spring.datasource.username=root
 spring.datasource.password=
 
 # JPA/Hibernate
-spring.jpa.show-sql=true
+spring.jpa.show-sql=false
 spring.jpa.properties.hibernate.format_sql=true
-spring.jpa.hibernate.ddl-auto=create-drop
+spring.jpa.hibernate.ddl-auto=update
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQL8Dialect
 
 spring.flyway.enabled=false
@@ -22,13 +22,35 @@ springdoc.swagger-ui.path=/swagger-ui.html
 # Upload local
 app.storage.upload-dir=uploads
 
+# Multipart file upload configuration
+spring.servlet.multipart.enabled=true
+spring.servlet.multipart.max-file-size=10MB
+spring.servlet.multipart.max-request-size=10MB
+spring.servlet.multipart.file-size-threshold=2KB
+
 # Segurança/JWT (RSA)
 jwt.public.key=classpath:app.pub
 jwt.private.key=classpath:app.key
+jwt.expiration.seconds=${JWT_EXPIRATION_SECONDS:3600}
 
 # Asaas
 # Configure via variáveis de ambiente ou application-local.properties
 asaas.baseUrl=${ASAAS_BASE_URL:https://api-sandbox.asaas.com/v3}
-asaas.apiKey=${ASAAS_API_KEY:}
+asaas.apiKey=${ASAAS_API_KEY:change-me}
 asaas.webhookSecret=${ASAAS_WEBHOOK_SECRET:}
 
+# Geocoding Services
+# LocationIQ - 5000 requisições gratuitas por dia
+# Obter API key em: https://locationiq.com
+geocoding.locationiq.baseUrl=${LOCATIONIQ_BASE_URL:https://us1.locationiq.com/v1}
+geocoding.locationiq.apiKey=${LOCATIONIQ_API_KEY:pk.change-me}
+geocoding.locationiq.rateLimitMs=${LOCATIONIQ_RATE_LIMIT_MS:2000}
+# ViaCEP - Busca de CEP
+geocoding.viacep.baseUrl=${VIACEP_BASE_URL:https://viacep.com.br}
+# OSRM - Cálculo de rotas
+geocoding.osrm.baseUrl=${OSRM_BASE_URL:https://router.project-osrm.org}
+
+# OSRM Configuration
+geocoding.osrm.timeout=5000
+geocoding.osrm.retry.maxAttempts=3
+geocoding.osrm.retry.delay=1000
