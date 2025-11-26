@@ -47,8 +47,10 @@ public class GanhosMapper {
     }
 
     public GanhosPorEntregaDTO toGanhosPorEntregaDTO(Pedido pedido) {
-        GanhosPorEntregaDTO dto = modelMapper.map(pedido, GanhosPorEntregaDTO.class);
+       
+        GanhosPorEntregaDTO dto = new GanhosPorEntregaDTO();
         dto.setPedidoId(pedido.getId());
+        dto.setTaxaEntrega(pedido.getTaxaEntrega());
         dto.setTaxaPlataforma(pedido.getTaxaPlataformaEntregador());
         dto.setValorLiquido(pedido.getValorLiquidoEntregador());
         dto.setDataEntrega(pedido.getCriadoEm());
