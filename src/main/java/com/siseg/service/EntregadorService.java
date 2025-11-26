@@ -2,12 +2,14 @@ package com.siseg.service;
 
 import com.siseg.dto.entregador.EntregadorRequestDTO;
 import com.siseg.dto.entregador.EntregadorResponseDTO;
+import com.siseg.dto.entregador.EntregadorUpdateDTO;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Entregador;
 import com.siseg.model.Role;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.ERole;
 import com.siseg.model.enumerations.StatusEntregador;
+import com.siseg.model.enumerations.DisponibilidadeEntregador;
 import com.siseg.repository.EntregadorRepository;
 import com.siseg.repository.RoleRepository;
 import com.siseg.repository.UserRepository;
@@ -87,6 +89,7 @@ public class EntregadorService {
         Entregador entregador = modelMapper.map(dto, Entregador.class);
         entregador.setUser(user);
         entregador.setStatus(StatusEntregador.PENDING_APPROVAL);
+        entregador.setDisponibilidade(DisponibilidadeEntregador.UNAVAILABLE);
         entregador.setCriadoEm(Instant.now());
         return entregadorRepository.save(entregador);
     }
@@ -135,6 +138,8 @@ public class EntregadorService {
                 .orElseThrow(() -> new ResourceNotFoundException("Entregador não encontrado com ID: " + id));
         
         entregador.setStatus(StatusEntregador.APPROVED);
+        
+        entregador.setDisponibilidade(DisponibilidadeEntregador.UNAVAILABLE);
         entregador.setAtualizadoEm(Instant.now());
         Entregador saved = entregadorRepository.save(entregador);
         
@@ -153,6 +158,53 @@ public class EntregadorService {
         
         logger.info(String.format("NOTIFICAÇÃO SIMULADA: Email enviado para %s - Entregador rejeitado", saved.getEmail()));
         
+        return entregadorMapper.toResponseDTO(saved, saved.getUser().getId());
+    }
+
+    public EntregadorResponseDTO atualizarEntregador(Long id, EntregadorUpdateDTO dto) {
+        Entregador entregador = entregadorRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Entregador não encontrado com ID: " + id));
+        
+        validateEntregadorOwnership(entregador);
+        
+        atualizarCampos(entregador, dto);
+        entregador.setAtualizadoEm(Instant.now());
+        
+        Entregador saved = entregadorRepository.save(entregador);
+        return entregadorMapper.toResponseDTO(saved, saved.getUser().getId());
+    }
+
+    private void atualizarCampos(Entregador entregador, EntregadorUpdateDTO dto) {
+        if (dto.getNome() != null) entregador.setNome(dto.getNome());
+        if (dto.getTelefone() != null) entregador.setTelefone(dto.getTelefone());
+        if (dto.getTipoVeiculo() != null) entregador.setTipoVeiculo(dto.getTipoVeiculo());
+        if (dto.getPlacaVeiculo() != null) entregador.setPlacaVeiculo(dto.getPlacaVeiculo());
+        if (dto.getLatitude() != null) entregador.setLatitude(dto.getLatitude());
+        if (dto.getLongitude() != null) entregador.setLongitude(dto.getLongitude());
+        
+        atualizarEmailSeNecessario(entregador, dto.getEmail());
+    }
+
+    private void atualizarEmailSeNecessario(Entregador entregador, String novoEmail) {
+        if (novoEmail != null && !novoEmail.equals(entregador.getEmail())) {
+            entregadorValidator.validateEmailUnico(novoEmail);
+            entregador.setEmail(novoEmail);
+            entregador.getUser().setUsername(novoEmail);
+            userRepository.save(entregador.getUser());
+        }
+    }
+
+    public EntregadorResponseDTO atualizarDisponibilidade(Long id, DisponibilidadeEntregador disponibilidade) {
+        Entregador entregador = entregadorRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Entregador não encontrado com ID: " + id));
+        
+        validateEntregadorOwnership(entregador);
+        entregadorValidator.validateEntregadorAprovado(entregador);
+        
+        entregador.setDisponibilidade(disponibilidade);
+        entregador.setAtualizadoEm(Instant.now());
+        
+        Entregador saved = entregadorRepository.save(entregador);
         return entregadorMapper.toResponseDTO(saved, saved.getUser().getId());
     }
 

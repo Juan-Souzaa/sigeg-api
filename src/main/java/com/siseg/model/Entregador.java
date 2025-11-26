@@ -2,6 +2,7 @@ package com.siseg.model;
 
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.TipoVeiculo;
+import com.siseg.model.enumerations.DisponibilidadeEntregador;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -49,6 +50,10 @@ public class Entregador {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private StatusEntregador status = StatusEntregador.PENDING_APPROVAL;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private DisponibilidadeEntregador disponibilidade = DisponibilidadeEntregador.UNAVAILABLE;
 
     @Column(precision = 10, scale = 8) // Latitude com precisão para geolocalização
     private BigDecimal latitude;

@@ -2,8 +2,10 @@ package com.siseg.controller;
 
 import com.siseg.dto.entregador.EntregadorRequestDTO;
 import com.siseg.dto.entregador.EntregadorResponseDTO;
+import com.siseg.dto.entregador.EntregadorUpdateDTO;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.enumerations.StatusEntregador;
+import com.siseg.model.enumerations.DisponibilidadeEntregador;
 import com.siseg.service.EntregadorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -75,6 +77,26 @@ public class EntregadorController {
     @Operation(summary = "Rejeitar entregador (Admin)")
     public ResponseEntity<EntregadorResponseDTO> rejeitarEntregador(@PathVariable Long id) {
         EntregadorResponseDTO response = entregadorService.rejeitarEntregador(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ENTREGADOR')")
+    @Operation(summary = "Atualizar dados do entregador")
+    public ResponseEntity<EntregadorResponseDTO> atualizarEntregador(
+            @PathVariable Long id,
+            @Valid @RequestBody EntregadorUpdateDTO dto) {
+        EntregadorResponseDTO response = entregadorService.atualizarEntregador(id, dto);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/disponibilidade")
+    @PreAuthorize("hasRole('ENTREGADOR')")
+    @Operation(summary = "Atualizar disponibilidade do entregador")
+    public ResponseEntity<EntregadorResponseDTO> atualizarDisponibilidade(
+            @PathVariable Long id,
+            @RequestParam DisponibilidadeEntregador disponibilidade) {
+        EntregadorResponseDTO response = entregadorService.atualizarDisponibilidade(id, disponibilidade);
         return ResponseEntity.ok(response);
     }
 }
