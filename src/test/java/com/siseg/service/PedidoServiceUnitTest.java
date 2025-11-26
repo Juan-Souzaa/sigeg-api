@@ -12,6 +12,7 @@ import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.*;
 import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.model.enumerations.MetodoPagamento;
+import com.siseg.model.enumerations.DisponibilidadeEntregador;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.TipoDesconto;
@@ -200,6 +201,7 @@ class PedidoServiceUnitTest {
         entregador.setNome("Entregador Teste");
         entregador.setTipoVeiculo(TipoVeiculo.MOTO);
         entregador.setStatus(StatusEntregador.APPROVED);
+        entregador.setDisponibilidade(DisponibilidadeEntregador.AVAILABLE);
         entregador.setUser(user);
 
         pedido = new Pedido();

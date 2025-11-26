@@ -5,6 +5,7 @@ import com.siseg.model.*;
 import com.siseg.model.enumerations.CategoriaMenu;
 import com.siseg.model.enumerations.ERole;
 import com.siseg.model.enumerations.MetodoPagamento;
+import com.siseg.model.enumerations.DisponibilidadeEntregador;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.StatusRestaurante;
@@ -360,7 +361,7 @@ public class DataInitializer implements CommandLineRunner {
         entregador.setTipoVeiculo(TipoVeiculo.MOTO);
         entregador.setPlacaVeiculo("ABC-1234");
         entregador.setStatus(StatusEntregador.APPROVED);
-        // Coordenadas de exemplo (São Paulo - Centro)
+        entregador.setDisponibilidade(DisponibilidadeEntregador.UNAVAILABLE);
         entregador.setLatitude(new BigDecimal("-23.550520"));
         entregador.setLongitude(new BigDecimal("-46.633308"));
         

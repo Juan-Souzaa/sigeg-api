@@ -8,6 +8,7 @@ import com.siseg.model.Entregador;
 import com.siseg.model.Role;
 import com.siseg.model.User;
 import com.siseg.model.enumerations.ERole;
+import com.siseg.model.enumerations.DisponibilidadeEntregador;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.TipoVeiculo;
 import com.siseg.mapper.EntregadorMapper;
@@ -106,6 +107,7 @@ class EntregadorServiceUnitTest {
         entregador.setEmail("entregador@teste.com");
         entregador.setCpf("12345678901");
         entregador.setStatus(StatusEntregador.PENDING_APPROVAL);
+        entregador.setDisponibilidade(DisponibilidadeEntregador.UNAVAILABLE);
         entregador.setTipoVeiculo(TipoVeiculo.MOTO);
         entregador.setUser(user);
     }
@@ -265,21 +267,20 @@ class EntregadorServiceUnitTest {
 
     @Test
     void deveAprovarEntregadorComSucesso() {
-        // Given
         Long id = 1L;
         entregador.setStatus(StatusEntregador.APPROVED);
         when(entregadorRepository.findById(id)).thenReturn(Optional.of(entregador));
         when(entregadorRepository.save(any(Entregador.class))).thenReturn(entregador);
         when(entregadorMapper.toResponseDTO(any(Entregador.class), anyLong())).thenReturn(entregadorResponseDTO);
 
-        // When
         EntregadorResponseDTO result = entregadorService.aprovarEntregador(id);
 
-        // Then
         assertNotNull(result);
         assertEquals(id, result.getId());
         verify(entregadorRepository, times(1)).findById(id);
-        verify(entregadorRepository, times(1)).save(argThat(e -> e.getStatus() == StatusEntregador.APPROVED));
+        verify(entregadorRepository, times(1)).save(argThat(e -> 
+            e.getStatus() == StatusEntregador.APPROVED && 
+            e.getDisponibilidade() == DisponibilidadeEntregador.UNAVAILABLE));
     }
 
     @Test

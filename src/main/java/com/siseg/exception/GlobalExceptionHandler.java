@@ -134,7 +134,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.unprocessableEntity().body(err);
     }
 
-    @ExceptionHandler({ AccessDeniedException.class})
+    @ExceptionHandler({ AccessDeniedException.class, com.siseg.exception.AccessDeniedException.class})
     public ResponseEntity<ErrorResponse> handleAccessDenied(Exception ex, HttpServletRequest req) {
         String message = ex.getMessage();
         if (message == null || message.trim().isEmpty()) {

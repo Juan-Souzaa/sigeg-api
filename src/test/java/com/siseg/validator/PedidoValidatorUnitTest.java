@@ -9,6 +9,7 @@ import com.siseg.model.Pedido;
 import com.siseg.model.Prato;
 import com.siseg.model.Restaurante;
 import com.siseg.model.User;
+import com.siseg.model.enumerations.DisponibilidadeEntregador;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.EntregadorRepository;
@@ -51,6 +52,7 @@ class PedidoValidatorUnitTest {
         entregador.setId(1L);
         entregador.setNome("Entregador Teste");
         entregador.setStatus(StatusEntregador.APPROVED);
+        entregador.setDisponibilidade(DisponibilidadeEntregador.AVAILABLE);
         entregador.setUser(user);
 
         cliente = new Cliente();

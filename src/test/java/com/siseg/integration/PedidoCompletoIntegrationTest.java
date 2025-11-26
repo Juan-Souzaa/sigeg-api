@@ -300,6 +300,7 @@ class PedidoCompletoIntegrationTest {
         e.setPlacaVeiculo("ABC1234");
         e.setTipoVeiculo(TipoVeiculo.MOTO);
         e.setStatus(StatusEntregador.APPROVED);
+        e.setDisponibilidade(DisponibilidadeEntregador.AVAILABLE);
         e.setUser(savedUser);
         
         return entregadorRepository.save(e);

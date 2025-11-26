@@ -86,12 +86,16 @@ CREATE TABLE IF NOT EXISTS entregadores (
     tipo_veiculo VARCHAR(50) NOT NULL,
     placa_veiculo VARCHAR(10) NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'PENDING_APPROVAL',
+    disponibilidade VARCHAR(50) NOT NULL DEFAULT 'UNAVAILABLE',
     latitude DECIMAL(10, 8),
     longitude DECIMAL(11, 8),
     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+-- Índice para disponibilidade de entregadores
+CREATE INDEX IF NOT EXISTS idx_entregadores_disponibilidade ON entregadores(disponibilidade);
 
 -- Tabela de enderecos
 CREATE TABLE IF NOT EXISTS enderecos (

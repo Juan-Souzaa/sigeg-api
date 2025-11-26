@@ -4,6 +4,7 @@ import com.siseg.dto.pedido.PedidoResponseDTO;
 import com.siseg.exception.AccessDeniedException;
 import com.siseg.exception.PedidoAlreadyProcessedException;
 import com.siseg.model.*;
+import com.siseg.model.enumerations.DisponibilidadeEntregador;
 import com.siseg.model.enumerations.StatusEntregador;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.enumerations.TipoEndereco;
@@ -79,6 +80,7 @@ class PedidoEntregadorServiceTest {
         entregador.setNome("Entregador Teste");
         entregador.setTipoVeiculo(TipoVeiculo.MOTO);
         entregador.setStatus(StatusEntregador.APPROVED);
+        entregador.setDisponibilidade(DisponibilidadeEntregador.AVAILABLE);
         entregador.setUser(user);
         entregador.setLatitude(new BigDecimal("-23.5505"));
         entregador.setLongitude(new BigDecimal("-46.6333"));
