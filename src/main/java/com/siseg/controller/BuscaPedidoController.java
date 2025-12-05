@@ -2,6 +2,7 @@ package com.siseg.controller;
 
 
 import com.siseg.dto.cardapio.CardapioResponseDTO;
+import com.siseg.dto.pagamento.NotificarPedidoDTO;
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
 import com.siseg.dto.restaurante.RestauranteBuscaDTO;
@@ -125,6 +126,13 @@ public class BuscaPedidoController {
     public ResponseEntity<PedidoResponseDTO> cancelarPedidoRestaurante(@PathVariable Long id) {
         PedidoResponseDTO response = pedidoService.cancelarPedido(id);
         return ResponseEntity.ok(response);
+    }
+    
+    @PostMapping("/pedidos/pagamento-confirmado")
+    @Operation(summary = "Endpoint interno para notificação de pagamento confirmado (Microsserviço)")
+    public ResponseEntity<Void> notificarPagamentoConfirmado(@RequestBody NotificarPedidoDTO notificacao) {
+        pedidoService.atualizarStatusPorPagamentoConfirmado(notificacao.getPedidoId());
+        return ResponseEntity.ok().build();
     }
     
 }
