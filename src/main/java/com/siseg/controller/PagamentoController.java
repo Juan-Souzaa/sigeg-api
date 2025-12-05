@@ -1,10 +1,8 @@
 package com.siseg.controller;
 
-import com.siseg.dto.pagamento.AsaasWebhookDTO;
 import com.siseg.dto.pagamento.CartaoCreditoRequestDTO;
 import com.siseg.dto.pagamento.PagamentoResponseDTO;
 import com.siseg.dto.pagamento.ReembolsoRequestDTO;
-import com.siseg.service.AsaasWebhookService;
 import com.siseg.service.PagamentoService;
 import com.siseg.util.HttpUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,20 +13,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-
 @RestController
 @RequestMapping("/api/pagamentos")
 @Tag(name = "Pagamentos", description = "Operações de pagamento")
 public class PagamentoController {
     
     private final PagamentoService pagamentoService;
-    private final AsaasWebhookService asaasWebhookService;
     
-    public PagamentoController(PagamentoService pagamentoService, AsaasWebhookService asaasWebhookService) {
+    public PagamentoController(PagamentoService pagamentoService) {
         this.pagamentoService = pagamentoService;
-        this.asaasWebhookService = asaasWebhookService;
     }
     
     @PostMapping("/pedidos/{pedidoId}")
@@ -47,28 +40,6 @@ public class PagamentoController {
     public ResponseEntity<PagamentoResponseDTO> buscarPagamentoPorPedido(@PathVariable Long pedidoId) {
         PagamentoResponseDTO response = pagamentoService.buscarPagamentoPorPedido(pedidoId);
         return ResponseEntity.ok(response);
-    }
-    
-    @PostMapping("/webhook")
-    @Operation(summary = "Webhook do Asaas para confirmação de pagamento")
-    public ResponseEntity<String> webhookAsaas(
-            @RequestBody AsaasWebhookDTO webhook,
-            @RequestHeader("X-Signature") String signature,
-            HttpServletRequest request) {
-        
-        try {
-            String payload = new String(request.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            
-            if (!asaasWebhookService.validarAssinatura(signature, payload)) {
-                return ResponseEntity.badRequest().body("Assinatura inválida");
-            }
-            
-            asaasWebhookService.processarWebhook(webhook);
-            return ResponseEntity.ok("Webhook processado com sucesso");
-            
-        } catch (IOException e) {
-            return ResponseEntity.badRequest().body("Erro ao processar webhook");
-        }
     }
     
     @PostMapping("/pedidos/{pedidoId}/reembolso")
