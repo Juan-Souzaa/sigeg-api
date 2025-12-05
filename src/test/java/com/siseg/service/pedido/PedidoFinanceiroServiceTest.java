@@ -1,15 +1,16 @@
 package com.siseg.service.pedido;
 
+import com.siseg.dto.pagamento.PagamentoResponseDTO;
 import com.siseg.dto.pedido.PedidoItemRequestDTO;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.*;
 import com.siseg.model.enumerations.StatusPagamento;
 import com.siseg.model.enumerations.TipoDesconto;
-import com.siseg.repository.PagamentoRepository;
 import com.siseg.repository.PratoRepository;
 import com.siseg.service.CarrinhoService;
 import com.siseg.service.CupomService;
 import com.siseg.service.PagamentoService;
+import com.siseg.service.PagamentoServiceClient;
 import com.siseg.service.TaxaCalculoService;
 import com.siseg.validator.PedidoValidator;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,7 +48,7 @@ class PedidoFinanceiroServiceTest {
     private PagamentoService pagamentoService;
 
     @Mock
-    private PagamentoRepository pagamentoRepository;
+    private PagamentoServiceClient pagamentoServiceClient;
 
     @Mock
     private TaxaCalculoService taxaCalculoService;
@@ -132,10 +133,11 @@ class PedidoFinanceiroServiceTest {
 
     @Test
     void deveProcessarReembolsoQuandoPagamentoElegivel() {
-        Pagamento pagamento = new Pagamento();
-        pagamento.setStatus(StatusPagamento.PAID);
+        PagamentoResponseDTO pagamentoResponse = new PagamentoResponseDTO();
+        pagamentoResponse.setStatus(StatusPagamento.PAID);
 
-        when(pagamentoRepository.findByPedidoId(pedido.getId())).thenReturn(Optional.of(pagamento));
+        when(pagamentoServiceClient.buscarPagamentoPorPedido(pedido.getId())).thenReturn(pagamentoResponse);
+        doReturn(new PagamentoResponseDTO()).when(pagamentoService).processarReembolso(eq(pedido.getId()), anyString());
 
         pedidoFinanceiroService.processarReembolsoSeNecessario(pedido);
 
@@ -144,10 +146,10 @@ class PedidoFinanceiroServiceTest {
 
     @Test
     void naoDeveProcessarReembolsoQuandoPagamentoNaoElegivel() {
-        Pagamento pagamento = new Pagamento();
-        pagamento.setStatus(StatusPagamento.PENDING);
+        PagamentoResponseDTO pagamentoResponse = new PagamentoResponseDTO();
+        pagamentoResponse.setStatus(StatusPagamento.PENDING);
 
-        when(pagamentoRepository.findByPedidoId(pedido.getId())).thenReturn(Optional.of(pagamento));
+        when(pagamentoServiceClient.buscarPagamentoPorPedido(pedido.getId())).thenReturn(pagamentoResponse);
 
         pedidoFinanceiroService.processarReembolsoSeNecessario(pedido);
 
@@ -156,7 +158,8 @@ class PedidoFinanceiroServiceTest {
 
     @Test
     void naoDeveProcessarReembolsoQuandoNaoHaPagamento() {
-        when(pagamentoRepository.findByPedidoId(pedido.getId())).thenReturn(Optional.empty());
+        when(pagamentoServiceClient.buscarPagamentoPorPedido(pedido.getId()))
+                .thenThrow(new ResourceNotFoundException("Pagamento não encontrado"));
 
         pedidoFinanceiroService.processarReembolsoSeNecessario(pedido);
 
