@@ -316,7 +316,8 @@ public class PedidoService {
     @Transactional
     public void atualizarStatusPorPagamentoConfirmado(Long pedidoId) {
         Pedido pedido = buscarPedidoValido(pedidoId);
-        
+
+        logger.info("notificacao por webhook recebida para o pedido " + pedidoId);
         
         if (pedido.getStatus() == StatusPedido.CREATED) {
             pedido.setStatus(StatusPedido.CONFIRMED);
