@@ -39,11 +39,33 @@ public class PagamentoServiceAdapter {
         clienteInfo.setEmail(cliente.getEmail());
         clienteInfo.setTelefone(cliente.getTelefone());
         clienteInfo.setCpfCnpj(obterCpfCnpjDoCliente(cliente));
+        clienteInfo.setCep(obterCepDoCliente(cliente));
+        clienteInfo.setAddressNumber(obterNumeroEnderecoDoCliente(cliente));
+        clienteInfo.setAddressComplement(obterComplementoEnderecoDoCliente(cliente));
         return clienteInfo;
     }
     
     private String obterCpfCnpjDoCliente(Cliente cliente) {
+        
         return "24971563792";
+    }
+    
+    private String obterCepDoCliente(Cliente cliente) {
+        return cliente.getEnderecoPrincipal()
+                .map(endereco -> endereco.getCep())
+                .orElse(null);
+    }
+    
+    private String obterNumeroEnderecoDoCliente(Cliente cliente) {
+        return cliente.getEnderecoPrincipal()
+                .map(endereco -> endereco.getNumero())
+                .orElse(null);
+    }
+    
+    private String obterComplementoEnderecoDoCliente(Cliente cliente) {
+        return cliente.getEnderecoPrincipal()
+                .map(endereco -> endereco.getComplemento())
+                .orElse(null);
     }
     
 }
