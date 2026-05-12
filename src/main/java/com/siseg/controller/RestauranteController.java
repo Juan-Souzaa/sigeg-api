@@ -36,6 +36,14 @@ public class RestauranteController {
         return ResponseEntity.ok(response);
     }
     
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('RESTAURANTE')")
+    @Operation(summary = "Buscar restaurante do usuário autenticado")
+    public ResponseEntity<RestauranteResponseDTO> buscarMeuRestaurante() {
+        RestauranteResponseDTO response = restauranteService.buscarMeuRestaurante();
+        return ResponseEntity.ok(response);
+    }
+    
     @GetMapping("/{id}")
     @Operation(summary = "Buscar restaurante por ID")
     public ResponseEntity<RestauranteResponseDTO> buscarPorId(@PathVariable Long id) {

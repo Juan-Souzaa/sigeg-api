@@ -312,4 +312,19 @@ public class PedidoService {
     private void validatePedidoOwnership(Pedido pedido) {
         SecurityUtils.validatePedidoOwnership(pedido);
     }
+    
+    @Transactional
+    public void atualizarStatusPorPagamentoConfirmado(Long pedidoId) {
+        Pedido pedido = buscarPedidoValido(pedidoId);
+
+        logger.info("notificacao por webhook recebida para o pedido " + pedidoId);
+        
+        if (pedido.getStatus() == StatusPedido.CREATED) {
+            pedido.setStatus(StatusPedido.CONFIRMED);
+            pedidoRepository.save(pedido);
+            
+            pedidoNotificacaoService.enviarNotificacoesConfirmacaoPedido(pedido);
+            logger.info("Pedido " + pedidoId + " confirmado automaticamente após pagamento confirmado");
+        }
+    }
 }

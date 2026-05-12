@@ -364,6 +364,11 @@ public class GeocodingService {
             logger.warning("Coordenadas inválidas para cálculo de rota");
             return Optional.empty();
         }
+       
+        if (origemLat.compareTo(destinoLat) == 0 && origemLon.compareTo(destinoLon) == 0) {
+            logger.fine("Origem e destino iguais, retornando distância zero sem chamar OSRM");
+            return Optional.of(new RouteResult(BigDecimal.ZERO, 0, null));
+        }
         
         Exception lastException = null;
         

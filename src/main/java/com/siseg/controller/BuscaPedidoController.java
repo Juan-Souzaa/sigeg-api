@@ -2,16 +2,20 @@ package com.siseg.controller;
 
 
 import com.siseg.dto.cardapio.CardapioResponseDTO;
+import com.siseg.dto.pagamento.NotificarPedidoDTO;
 import com.siseg.dto.pedido.PedidoRequestDTO;
 import com.siseg.dto.pedido.PedidoResponseDTO;
 import com.siseg.dto.restaurante.RestauranteBuscaDTO;
 import com.siseg.model.enumerations.StatusPedido;
+import com.siseg.exception.AccessDeniedException;
 import com.siseg.service.PedidoService;
 import com.siseg.service.RestauranteService;
 import com.siseg.service.PratoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,12 +33,16 @@ public class BuscaPedidoController {
     private final PedidoService pedidoService;
     private final RestauranteService restauranteService;
     private final PratoService pratoService;
+    private final String paymentServiceKey;
     
     public BuscaPedidoController(PedidoService pedidoService,
-                                 RestauranteService restauranteService, PratoService pratoService) {
+                                 RestauranteService restauranteService, 
+                                 PratoService pratoService,
+                                 @Value("${payment.service.key}") String paymentServiceKey) {
         this.pedidoService = pedidoService;
         this.restauranteService = restauranteService;
         this.pratoService = pratoService;
+        this.paymentServiceKey = paymentServiceKey;
     }
     
     @GetMapping("/restaurantes/busca")
@@ -125,6 +133,21 @@ public class BuscaPedidoController {
     public ResponseEntity<PedidoResponseDTO> cancelarPedidoRestaurante(@PathVariable Long id) {
         PedidoResponseDTO response = pedidoService.cancelarPedido(id);
         return ResponseEntity.ok(response);
+    }
+    
+    @PostMapping("/pedidos/pagamento-confirmado")
+    @Operation(summary = "Endpoint interno para notificação de pagamento confirmado (Microsserviço)")
+    public ResponseEntity<Void> notificarPagamentoConfirmado(
+            @RequestBody NotificarPedidoDTO notificacao,
+            HttpServletRequest request) {
+        
+        String serviceKey = request.getHeader("X-Service-Key");
+        if (serviceKey == null || !paymentServiceKey.equals(serviceKey)) {
+            throw new AccessDeniedException("Acesso negado: chave de serviço inválida");
+        }
+        
+        pedidoService.atualizarStatusPorPagamentoConfirmado(notificacao.getPedidoId());
+        return ResponseEntity.ok().build();
     }
     
 }

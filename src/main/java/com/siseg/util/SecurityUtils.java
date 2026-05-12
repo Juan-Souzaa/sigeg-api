@@ -176,5 +176,20 @@ public class SecurityUtils {
             throw new AccessDeniedException("Você não tem permissão para acessar este cliente");
         }
     }
+    
+   
+    public static void validateInternalServiceRequest(String internalServiceKey, String requestHeaderKey) {
+        if (internalServiceKey == null || internalServiceKey.trim().isEmpty()) {
+            throw new AccessDeniedException("Chave de serviço interno não configurada");
+        }
+        
+        if (requestHeaderKey == null || requestHeaderKey.trim().isEmpty()) {
+            throw new AccessDeniedException("Chave de serviço interno não fornecida na requisição");
+        }
+        
+        if (!internalServiceKey.equals(requestHeaderKey)) {
+            throw new AccessDeniedException("Chave de serviço interno inválida");
+        }
+    }
 }
 

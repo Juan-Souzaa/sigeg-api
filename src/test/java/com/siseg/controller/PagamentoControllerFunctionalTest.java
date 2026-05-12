@@ -1,11 +1,5 @@
 package com.siseg.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.siseg.dto.pagamento.AsaasCustomerResponseDTO;
-import com.siseg.dto.pagamento.AsaasPaymentResponseDTO;
-import com.siseg.dto.pagamento.AsaasQrCodeResponseDTO;
-import com.siseg.dto.pagamento.AsaasRefundResponseDTO;
-import com.siseg.dto.pagamento.AsaasWebhookDTO;
 import com.siseg.model.Cliente;
 import com.siseg.model.Pedido;
 import com.siseg.model.User;
@@ -13,17 +7,15 @@ import com.siseg.model.enumerations.ERole;
 import com.siseg.model.enumerations.MetodoPagamento;
 import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.model.Restaurante;
-import com.siseg.model.Pagamento;
 import com.siseg.model.enumerations.StatusPagamento;
+import com.siseg.dto.pagamento.PagamentoResponseDTO;
 import com.siseg.dto.EnderecoRequestDTO;
 import com.siseg.repository.ClienteRepository;
-import com.siseg.repository.PagamentoRepository;
 import com.siseg.repository.PedidoRepository;
 import com.siseg.repository.RestauranteRepository;
-import com.siseg.service.AsaasService;
-import com.siseg.service.AsaasWebhookService;
 import com.siseg.service.EnderecoService;
 import com.siseg.service.PagamentoService;
+import com.siseg.service.PagamentoServiceClient;
 import com.siseg.util.SecurityUtils;
 import com.siseg.util.TestJwtUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,10 +24,10 @@ import org.mockito.MockedStatic;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -59,17 +51,11 @@ class PagamentoControllerFunctionalTest {
     @Autowired
     private EnderecoService enderecoService;
 
-    @Autowired
-    private ObjectMapper objectMapper;
-
     @SpyBean
     private PagamentoService pagamentoService;
-    
-    @SpyBean
-    private AsaasWebhookService asaasWebhookService;
-    
-    @SpyBean
-    private AsaasService asaasService;
+
+    @MockBean
+    private PagamentoServiceClient pagamentoServiceClient;
 
     @Autowired
     private ClienteRepository clienteRepository;
@@ -80,22 +66,14 @@ class PagamentoControllerFunctionalTest {
     @Autowired
     private RestauranteRepository restauranteRepository;
 
-    @Autowired
-    private PagamentoRepository pagamentoRepository;
-
-
     private String clienteToken;
     private String restauranteToken;
     private Cliente cliente;
     private Restaurante restaurante;
     private Pedido pedido;
-    private AsaasCustomerResponseDTO asaasCustomerResponse;
-    private AsaasPaymentResponseDTO asaasPaymentResponse;
-    private AsaasQrCodeResponseDTO asaasQrCodeResponse;
 
     @BeforeEach
     void setUp() throws Exception {
-        pagamentoRepository.deleteAll();
         clienteToken = testJwtUtil.generateTokenForUser("cliente", ERole.ROLE_CLIENTE);
 
         User user = testJwtUtil.getOrCreateUser("cliente", ERole.ROLE_CLIENTE);
@@ -165,33 +143,20 @@ class PagamentoControllerFunctionalTest {
         pedido.setTotal(new BigDecimal("100.00"));
         pedido.setEnderecoEntrega(enderecoEntrega);
         pedido = pedidoRepository.save(pedido);
-
-        asaasCustomerResponse = new AsaasCustomerResponseDTO();
-        asaasCustomerResponse.setId("cus_123456");
-        asaasCustomerResponse.setEmail("cliente@teste.com");
-
-        asaasPaymentResponse = new AsaasPaymentResponseDTO();
-        asaasPaymentResponse.setId("pay_123456");
-        asaasPaymentResponse.setStatus("PENDING");
-        asaasPaymentResponse.setValue("100.00");
-
-        asaasQrCodeResponse = new AsaasQrCodeResponseDTO();
-        asaasQrCodeResponse.setEncodedImage("iVBORw0KGgoAAAANS");
-        asaasQrCodeResponse.setPayload("00020126...");
-
-        mockAsaasService();
-    }
-
-    private void mockAsaasService() {
-        lenient().doReturn("cus_123456").when(asaasService).buscarOuCriarCliente(any(Cliente.class));
-        lenient().doReturn(asaasPaymentResponse).when(asaasService).criarPagamentoPix(any(Pagamento.class), anyString());
-        lenient().doReturn(asaasQrCodeResponse).when(asaasService).buscarQrCodePix(anyString());
     }
 
     @Test
     void deveCriarPagamentoParaPedido() throws Exception {
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(cliente.getUser());
+
+            PagamentoResponseDTO response = new PagamentoResponseDTO();
+            response.setId(1L);
+            response.setPedidoId(pedido.getId());
+            response.setStatus(StatusPagamento.PENDING);
+            response.setValor(new BigDecimal("100.00"));
+
+            doReturn(response).when(pagamentoServiceClient).criarPagamento(any(Pedido.class), isNull(), anyString());
 
             mockMvc.perform(post("/api/pagamentos/pedidos/" + pedido.getId())
                             .header("Authorization", "Bearer " + clienteToken))
@@ -206,7 +171,13 @@ class PagamentoControllerFunctionalTest {
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(cliente.getUser());
 
-            pagamentoService.criarPagamento(pedido.getId(), null, null);
+            PagamentoResponseDTO response = new PagamentoResponseDTO();
+            response.setId(1L);
+            response.setPedidoId(pedido.getId());
+            response.setStatus(StatusPagamento.PENDING);
+            response.setValor(new BigDecimal("100.00"));
+
+            doReturn(response).when(pagamentoServiceClient).buscarPagamentoPorPedido(pedido.getId());
 
             mockMvc.perform(get("/api/pagamentos/pedidos/" + pedido.getId())
                             .header("Authorization", "Bearer " + clienteToken)
@@ -217,68 +188,25 @@ class PagamentoControllerFunctionalTest {
     }
 
     @Test
-    void deveProcessarWebhookValido() throws Exception {
-        Pagamento pagamento = new Pagamento();
-        pagamento.setPedido(pedido);
-        pagamento.setMetodo(MetodoPagamento.PIX);
-        pagamento.setStatus(StatusPagamento.PENDING);
-        pagamento.setValor(new BigDecimal("100.00"));
-        pagamento.setAsaasPaymentId("pay_123456");
-        pagamento.setAsaasCustomerId("cus_123456");
-        pagamento = pagamentoRepository.save(pagamento);
-
-        AsaasWebhookDTO webhook = new AsaasWebhookDTO();
-        webhook.setEvent("PAYMENT_RECEIVED");
-        AsaasWebhookDTO.PaymentData paymentData = new AsaasWebhookDTO.PaymentData();
-        paymentData.setId("pay_123456");
-        webhook.setPayment(paymentData);
-
-        ReflectionTestUtils.setField(asaasWebhookService, "webhookSecret", "test-secret");
-        doReturn(true).when(asaasWebhookService).validarAssinatura(anyString(), anyString());
-
-        mockMvc.perform(post("/api/pagamentos/webhook")
-                        .header("X-Signature", "valid-signature")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(webhook)))
-                .andExpect(status().isOk())
-                .andExpect(content().string("Webhook processado com sucesso"));
-    }
-
-    @Test
-    void deveRejeitarWebhookComAssinaturaInvalida() throws Exception {
-        AsaasWebhookDTO webhook = new AsaasWebhookDTO();
-        webhook.setEvent("PAYMENT_RECEIVED");
-
-        ReflectionTestUtils.setField(asaasWebhookService, "webhookSecret", "test-secret");
-        doReturn(false).when(asaasWebhookService).validarAssinatura(anyString(), anyString());
-
-        mockMvc.perform(post("/api/pagamentos/webhook")
-                        .header("X-Signature", "invalid-signature")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(webhook)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string("Assinatura inválida"));
-    }
-
-    @Test
     void deveEstornarPagamentoComSucesso() throws Exception {
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(cliente.getUser());
 
-            Pagamento pagamento = new Pagamento();
-            pagamento.setPedido(pedido);
-            pagamento.setMetodo(MetodoPagamento.PIX);
-            pagamento.setStatus(StatusPagamento.PAID);
-            pagamento.setValor(new BigDecimal("100.00"));
-            pagamento.setAsaasPaymentId("pay_123456");
-            pagamento = pagamentoRepository.save(pagamento);
+            PagamentoResponseDTO pagamentoResponse = new PagamentoResponseDTO();
+            pagamentoResponse.setId(1L);
+            pagamentoResponse.setPedidoId(pedido.getId());
+            pagamentoResponse.setStatus(StatusPagamento.PAID);
+            pagamentoResponse.setValor(new BigDecimal("100.00"));
+            
+            PagamentoResponseDTO reembolsoResponse = new PagamentoResponseDTO();
+            reembolsoResponse.setId(1L);
+            reembolsoResponse.setPedidoId(pedido.getId());
+            reembolsoResponse.setStatus(StatusPagamento.REFUNDED);
+            reembolsoResponse.setValor(new BigDecimal("100.00"));
+            reembolsoResponse.setValorReembolsado(new BigDecimal("100.00"));
 
-            AsaasRefundResponseDTO refundResponse = new AsaasRefundResponseDTO();
-            refundResponse.setId("refund_123456");
-            refundResponse.setValue("100.00");
-            refundResponse.setStatus("REFUNDED");
-
-            doReturn(refundResponse).when(asaasService).estornarPagamento(anyString(), anyString());
+            doReturn(pagamentoResponse).when(pagamentoServiceClient).buscarPagamentoPorPedido(pedido.getId());
+            doReturn(reembolsoResponse).when(pagamentoServiceClient).processarReembolso(eq(pedido.getId()), anyString());
 
             String requestBody = "{\"motivo\":\"Teste de reembolso\"}";
 
@@ -296,13 +224,13 @@ class PagamentoControllerFunctionalTest {
         try (MockedStatic<SecurityUtils> mockedSecurityUtils = mockStatic(SecurityUtils.class)) {
             mockedSecurityUtils.when(SecurityUtils::getCurrentUser).thenReturn(cliente.getUser());
 
-            Pagamento pagamento = new Pagamento();
-            pagamento.setPedido(pedido);
-            pagamento.setMetodo(MetodoPagamento.PIX);
-            pagamento.setStatus(StatusPagamento.REFUNDED);
-            pagamento.setValor(new BigDecimal("100.00"));
-            pagamento.setAsaasPaymentId("pay_123456");
-            pagamento = pagamentoRepository.save(pagamento);
+            PagamentoResponseDTO pagamentoResponse = new PagamentoResponseDTO();
+            pagamentoResponse.setId(1L);
+            pagamentoResponse.setPedidoId(pedido.getId());
+            pagamentoResponse.setStatus(StatusPagamento.REFUNDED);
+            pagamentoResponse.setValor(new BigDecimal("100.00"));
+
+            doReturn(pagamentoResponse).when(pagamentoServiceClient).buscarPagamentoPorPedido(pedido.getId());
 
             String requestBody = "{\"motivo\":\"Teste de reembolso\"}";
 

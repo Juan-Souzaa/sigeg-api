@@ -1,21 +1,21 @@
 package com.siseg.service.pedido;
 
 import com.siseg.dto.pedido.PedidoItemRequestDTO;
+import com.siseg.dto.pagamento.PagamentoResponseDTO;
 import com.siseg.exception.ResourceNotFoundException;
 import com.siseg.model.Carrinho;
 import com.siseg.model.CarrinhoItem;
 import com.siseg.model.Cupom;
-import com.siseg.model.Pagamento;
 import com.siseg.model.Pedido;
 import com.siseg.model.PedidoItem;
 import com.siseg.model.Prato;
 import com.siseg.model.enumerations.StatusPagamento;
 import com.siseg.model.enumerations.TipoDesconto;
-import com.siseg.repository.PagamentoRepository;
 import com.siseg.repository.PratoRepository;
 import com.siseg.service.CarrinhoService;
 import com.siseg.service.CupomService;
 import com.siseg.service.PagamentoService;
+import com.siseg.service.PagamentoServiceClient;
 import com.siseg.service.TaxaCalculoService;
 import com.siseg.util.CalculadoraFinanceira;
 import com.siseg.validator.PedidoValidator;
@@ -37,7 +37,7 @@ public class PedidoFinanceiroService {
     private final CarrinhoService carrinhoService;
     private final CupomService cupomService;
     private final PagamentoService pagamentoService;
-    private final PagamentoRepository pagamentoRepository;
+    private final PagamentoServiceClient pagamentoServiceClient;
     private final TaxaCalculoService taxaCalculoService;
 
     public PedidoFinanceiroService(PratoRepository pratoRepository,
@@ -45,14 +45,14 @@ public class PedidoFinanceiroService {
                                    CarrinhoService carrinhoService,
                                    CupomService cupomService,
                                    PagamentoService pagamentoService,
-                                   PagamentoRepository pagamentoRepository,
+                                   PagamentoServiceClient pagamentoServiceClient,
                                    TaxaCalculoService taxaCalculoService) {
         this.pratoRepository = pratoRepository;
         this.pedidoValidator = pedidoValidator;
         this.carrinhoService = carrinhoService;
         this.cupomService = cupomService;
         this.pagamentoService = pagamentoService;
-        this.pagamentoRepository = pagamentoRepository;
+        this.pagamentoServiceClient = pagamentoServiceClient;
         this.taxaCalculoService = taxaCalculoService;
     }
 
@@ -82,13 +82,14 @@ public class PedidoFinanceiroService {
 
     public void processarReembolsoSeNecessario(Pedido pedido) {
         try {
-            pagamentoRepository.findByPedidoId(pedido.getId()).ifPresent(pagamento -> {
-                if (deveReembolsar(pagamento)) {
-                    String motivo = "Reembolso automático por cancelamento de pedido #" + pedido.getId();
-                    pagamentoService.processarReembolso(pedido.getId(), motivo);
-                    logger.info("Reembolso automático processado para pedido " + pedido.getId());
-                }
-            });
+            PagamentoResponseDTO pagamento = pagamentoServiceClient.buscarPagamentoPorPedido(pedido.getId());
+            if (deveReembolsar(pagamento)) {
+                String motivo = "Reembolso automático por cancelamento de pedido #" + pedido.getId();
+                pagamentoService.processarReembolso(pedido.getId(), motivo);
+                logger.info("Reembolso automático processado para pedido " + pedido.getId());
+            }
+        } catch (com.siseg.exception.ResourceNotFoundException e) {
+            logger.fine("Pagamento não encontrado para pedido " + pedido.getId() + " - não será feito reembolso");
         } catch (Exception e) {
             logger.warning("Erro ao processar reembolso automático para pedido " + pedido.getId() + ": " + e.getMessage());
         }
@@ -185,7 +186,7 @@ public class PedidoFinanceiroService {
         return TAXA_ENTREGA_PADRAO;
     }
 
-    private boolean deveReembolsar(Pagamento pagamento) {
+    private boolean deveReembolsar(PagamentoResponseDTO pagamento) {
         return pagamento.getStatus() == StatusPagamento.PAID ||
                pagamento.getStatus() == StatusPagamento.AUTHORIZED;
     }
