@@ -130,6 +130,14 @@ public class RestauranteService {
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + id));
         return restauranteMapper.toResponseDTO(restaurante);
     }
+
+  
+    public RestauranteResponseDTO buscarMeuRestaurante() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        Restaurante restaurante = restauranteRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado para o usuário autenticado"));
+        return restauranteMapper.toResponseDTO(restaurante);
+    }
     
     public RestauranteResponseDTO atualizarRestaurante(Long id, RestauranteUpdateDTO dto) {
         Restaurante restaurante = restauranteRepository.findById(id)

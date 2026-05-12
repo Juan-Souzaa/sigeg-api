@@ -27,6 +27,11 @@ public class TempoEstimadoCalculator {
             return new ResultadoCalculo(null, VehicleConstants.TEMPO_PADRAO_ENTREGA_MINUTOS, false);
         }
         
+        if (origemLat.compareTo(destinoLat) == 0 && origemLon.compareTo(destinoLon) == 0) {
+            logger.fine("Origem e destino iguais, retornando distância zero sem chamar OSRM");
+            return new ResultadoCalculo(DISTANCIA_MINIMA_KM, VehicleConstants.TEMPO_MINIMO_ENTREGA_MINUTOS, false);
+        }
+        
         var resultadoOSRM = calcularViaOSRM(origemLat, origemLon, destinoLat, destinoLon, tipoVeiculo);
         if (resultadoOSRM != null) {
             return resultadoOSRM;
