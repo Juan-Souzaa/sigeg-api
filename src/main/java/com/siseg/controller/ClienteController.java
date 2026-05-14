@@ -31,6 +31,13 @@ public class ClienteController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/me")
+    @Operation(summary = "Perfil do cliente autenticado (endereço principal)")
+    public ResponseEntity<ClienteResponseDTO> meuPerfil() {
+        ClienteResponseDTO response = clienteService.buscarPerfilAutenticado();
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Buscar cliente por ID")
     public ResponseEntity<ClienteResponseDTO> buscarPorId(@PathVariable Long id) {

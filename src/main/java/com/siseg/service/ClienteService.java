@@ -82,6 +82,14 @@ public class ClienteService {
         return toResponseDTO(clienteComEnderecos);
     }
 
+    @Transactional(readOnly = true)
+    public ClienteResponseDTO buscarPerfilAutenticado() {
+        User user = SecurityUtils.getCurrentUser();
+        Cliente cliente = clienteRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Perfil de cliente não encontrado para este usuário"));
+        return toResponseDTO(cliente);
+    }
+
     public ClienteResponseDTO buscarPorId(Long id) {
         Cliente cliente = clienteRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente não encontrado com ID: " + id));
