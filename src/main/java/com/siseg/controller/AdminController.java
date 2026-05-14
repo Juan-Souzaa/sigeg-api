@@ -101,6 +101,12 @@ public class AdminController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/admins")
+    @Operation(summary = "Listar administradores")
+    public ResponseEntity<List<AdminResponseDTO>> listarAdmins() {
+        return ResponseEntity.ok(adminService.listarAdmins());
+    }
+
     @PostMapping("/admins")
     @Operation(summary = "Criar novo administrador")
     public ResponseEntity<AdminResponseDTO> criarAdmin(@Valid @RequestBody AdminRequestDTO dto) {

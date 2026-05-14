@@ -13,7 +13,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -28,6 +30,19 @@ public class AdminService {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminResponseDTO> listarAdmins() {
+        return userRepository.findAllByRoleName(ERole.ROLE_ADMIN).stream()
+                .sorted(Comparator.comparing(User::getId))
+                .map(user -> {
+                    AdminResponseDTO dto = new AdminResponseDTO();
+                    dto.setId(user.getId());
+                    dto.setUsername(user.getUsername());
+                    return dto;
+                })
+                .toList();
     }
 
     public AdminResponseDTO criarAdmin(AdminRequestDTO dto) {
