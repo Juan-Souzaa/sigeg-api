@@ -28,7 +28,7 @@ public class PagamentoController {
     @Operation(summary = "Criar pagamento para pedido")
     public ResponseEntity<PagamentoResponseDTO> criarPagamento(
             @PathVariable Long pedidoId,
-            @RequestBody(required = false) @Valid CartaoCreditoRequestDTO cartaoDTO,
+            @RequestBody(required = false) CartaoCreditoRequestDTO cartaoDTO,
             HttpServletRequest request) {
         String remoteIp = HttpUtils.getClientIpAddress(request);
         PagamentoResponseDTO response = pagamentoService.criarPagamento(pedidoId, cartaoDTO, remoteIp);

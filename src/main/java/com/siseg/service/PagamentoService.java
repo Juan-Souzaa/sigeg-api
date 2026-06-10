@@ -10,9 +10,12 @@ import com.siseg.model.enumerations.StatusPedido;
 import com.siseg.repository.PedidoRepository;
 import com.siseg.util.SecurityUtils;
 import com.siseg.validator.PedidoValidator;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Set;
 import java.util.logging.Logger;
 
 @Service
@@ -23,13 +26,16 @@ public class PagamentoService {
     private final PedidoRepository pedidoRepository;
     private final PedidoValidator pedidoValidator;
     private final PagamentoServiceClient pagamentoServiceClient;
+    private final Validator validator;
     
     public PagamentoService(PedidoRepository pedidoRepository,
                            PedidoValidator pedidoValidator,
-                           PagamentoServiceClient pagamentoServiceClient) {
+                           PagamentoServiceClient pagamentoServiceClient,
+                           Validator validator) {
         this.pedidoRepository = pedidoRepository;
         this.pedidoValidator = pedidoValidator;
         this.pagamentoServiceClient = pagamentoServiceClient;
+        this.validator = validator;
     }
     
     @Transactional
@@ -38,7 +44,10 @@ public class PagamentoService {
         validatePedidoOwnership(pedido);
         pedidoValidator.validateStatusParaConfirmacao(pedido);
         
-        PagamentoResponseDTO response = pagamentoServiceClient.criarPagamento(pedido, cartaoDTO, remoteIp);
+        CartaoCreditoRequestDTO cartao = normalizarCartao(cartaoDTO);
+        validarCartaoSeCredito(pedido, cartao);
+        
+        PagamentoResponseDTO response = pagamentoServiceClient.criarPagamento(pedido, cartao, remoteIp);
         
         if (pedido.getMetodoPagamento() == MetodoPagamento.CASH) {
             pedido.setStatus(StatusPedido.CONFIRMED);
@@ -58,6 +67,30 @@ public class PagamentoService {
     
     private void validatePedidoOwnership(Pedido pedido) {
         SecurityUtils.validatePedidoOwnership(pedido);
+    }
+    
+    private CartaoCreditoRequestDTO normalizarCartao(CartaoCreditoRequestDTO cartaoDTO) {
+        if (cartaoDTO == null) {
+            return null;
+        }
+        if (cartaoDTO.getNumero() == null || cartaoDTO.getNumero().isBlank()) {
+            return null;
+        }
+        return cartaoDTO;
+    }
+    
+    private void validarCartaoSeCredito(Pedido pedido, CartaoCreditoRequestDTO cartao) {
+        if (pedido.getMetodoPagamento() != MetodoPagamento.CREDIT_CARD) {
+            return;
+        }
+        if (cartao == null) {
+            throw new IllegalArgumentException("Dados do cartão são obrigatórios para pagamento com cartão de crédito");
+        }
+        Set<ConstraintViolation<CartaoCreditoRequestDTO>> violations = validator.validate(cartao);
+        if (!violations.isEmpty()) {
+            ConstraintViolation<CartaoCreditoRequestDTO> first = violations.iterator().next();
+            throw new IllegalArgumentException(first.getMessage());
+        }
     }
     
     @Transactional
