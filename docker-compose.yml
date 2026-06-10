@@ -7,6 +7,7 @@ services:
     entrypoint:
       - /bin/sh
       - -c
+    command:
       - |
         set -eu
         if [ ! -f /secrets/app.key ]; then
@@ -17,6 +18,39 @@ services:
           chmod 644 /secrets/app.pub
         fi
 
+  pagamento:
+    build:
+      context: ../sigeg-pagamento-service
+      dockerfile: Dockerfile
+    container_name: sigeg-pagamento
+    restart: unless-stopped
+    depends_on:
+      jwt-init:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: ${PAYMENT_SPRING_DATASOURCE_URL:-jdbc:mysql://host.docker.internal:3306/siseg_pagamento?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-root}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-3600}
+      PEDIDO_SERVICE_URL: ${PEDIDO_SERVICE_URL:-http://api:8080}
+      PEDIDO_SERVICE_KEY: ${PEDIDO_SERVICE_KEY:-dev-payment-key}
+      ASAAS_BASE_URL: ${ASAAS_BASE_URL:-https://api-sandbox.asaas.com/v3}
+      ASAAS_API_KEY: ${ASAAS_API_KEY:-change-me}
+      ASAAS_WEBHOOK_SECRET: ${ASAAS_WEBHOOK_SECRET:-}
+    ports:
+      - "${PAGAMENTO_PORT:-8081}:8081"
+    volumes:
+      - jwt_secrets:/app/secrets:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8081'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
   api:
     build:
       context: .
@@ -26,6 +60,8 @@ services:
     depends_on:
       jwt-init:
         condition: service_completed_successfully
+      pagamento:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -34,7 +70,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-root}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-}
       JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-3600}
-      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL:-http://host.docker.internal:8081}
+      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL:-http://pagamento:8081}
       PAYMENT_SERVICE_KEY: ${PAYMENT_SERVICE_KEY:-dev-payment-key}
       ASAAS_BASE_URL: ${ASAAS_BASE_URL:-https://api-sandbox.asaas.com/v3}
       ASAAS_API_KEY: ${ASAAS_API_KEY:-change-me}

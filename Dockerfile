@@ -19,11 +19,13 @@ RUN groupadd --system appuser && useradd --system --gid appuser --home-dir /app 
 WORKDIR /app
 
 COPY --from=build /workspace/target/sigeg-api-*.jar /app/app.jar
+COPY docker-entrypoint.sh /docker-entrypoint.sh
 
-RUN chown -R appuser:appuser /app
-
-USER appuser
+RUN mkdir -p /app/uploads/menus \
+    && sed -i 's/\r$//' /docker-entrypoint.sh \
+    && chmod +x /docker-entrypoint.sh \
+    && chown -R appuser:appuser /app
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-Djava.security.egd=file:/dev/./urandom", "-jar", "/app/app.jar"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
