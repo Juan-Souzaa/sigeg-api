@@ -4,6 +4,7 @@ import com.siseg.exception.AccessDeniedException;
 import com.siseg.model.*;
 import com.siseg.model.User;
 import com.siseg.model.UserAuthenticated;
+import com.siseg.model.enumerations.StatusPedido;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -106,6 +107,12 @@ public class SecurityUtils {
         if (pedido.getEntregador() != null && pedido.getEntregador().getUser() != null &&
             pedido.getEntregador().getUser().getId().equals(currentUser.getId())) {
             return;
+        }
+
+        if (hasRole("ENTREGADOR")) {
+            if (pedido.getStatus() == StatusPedido.PREPARING && pedido.getEntregador() == null) {
+                return;
+            }
         }
         
         throw new AccessDeniedException("Você não tem permissão para acessar este pedido");

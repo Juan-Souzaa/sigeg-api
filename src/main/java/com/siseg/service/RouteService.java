@@ -130,20 +130,30 @@ public class RouteService {
     }
     
     @Transactional(readOnly = true)
-    public List<Coordinates> obterWaypointsRestantes(Long pedidoId) {
-        RotaEntrega rota = buscarRotaPorPedidoId(pedidoId);
+    public List<Coordinates> obterWaypointsRestantesSeExistir(Long pedidoId) {
+        return rotaEntregaRepository.findByPedidoId(pedidoId)
+                .map(this::extrairWaypointsRestantes)
+                .orElse(List.of());
+    }
+
+    private List<Coordinates> extrairWaypointsRestantes(RotaEntrega rota) {
         List<Coordinates> waypoints = deserializarWaypoints(rota);
-        
         if (waypoints == null || waypoints.isEmpty()) {
             return List.of();
         }
-        
+
         int indiceAtual = rota.getIndiceAtual();
         if (indiceAtual >= waypoints.size()) {
             return List.of();
         }
-        
+
         return waypoints.subList(indiceAtual, waypoints.size());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Coordinates> obterWaypointsRestantes(Long pedidoId) {
+        RotaEntrega rota = buscarRotaPorPedidoId(pedidoId);
+        return extrairWaypointsRestantes(rota);
     }
     
     @Transactional(readOnly = true)

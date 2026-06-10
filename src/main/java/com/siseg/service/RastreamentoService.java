@@ -98,7 +98,7 @@ public class RastreamentoService {
         rastreamento.setTempoEstimadoMinutos(0);
         rastreamento.setProximoAoDestino(true);
         
-        var waypointsRestantes = routeService.obterWaypointsRestantes(pedido.getId());
+        var waypointsRestantes = routeService.obterWaypointsRestantesSeExistir(pedido.getId());
         if (!waypointsRestantes.isEmpty()) {
             rastreamento.setWaypoints(waypointsRestantes);
         }
