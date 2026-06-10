@@ -161,12 +161,12 @@ public class DataInitializer implements CommandLineRunner {
         
         // Criar endereço para cliente1
         EnderecoRequestDTO enderecoDTO1 = new EnderecoRequestDTO();
-        enderecoDTO1.setLogradouro("Rua das Flores");
-        enderecoDTO1.setNumero("123");
+        enderecoDTO1.setLogradouro("Rua Anton Phillips");
+        enderecoDTO1.setNumero("200");
         enderecoDTO1.setBairro("Centro");
-        enderecoDTO1.setCidade("São Paulo");
+        enderecoDTO1.setCidade("Guarulhos");
         enderecoDTO1.setEstado("SP");
-        enderecoDTO1.setCep("01310100");
+        enderecoDTO1.setCep("07013000");
         enderecoDTO1.setPrincipal(true);
         enderecoService.criarEndereco(enderecoDTO1, savedCliente1);
         aguardarRateLimit();
@@ -191,12 +191,12 @@ public class DataInitializer implements CommandLineRunner {
         
         // Criar endereço para cliente2
         EnderecoRequestDTO enderecoDTO2 = new EnderecoRequestDTO();
-        enderecoDTO2.setLogradouro("Av. Paulista");
-        enderecoDTO2.setNumero("456");
-        enderecoDTO2.setBairro("Bela Vista");
-        enderecoDTO2.setCidade("São Paulo");
+        enderecoDTO2.setLogradouro("Av. Tiradentes");
+        enderecoDTO2.setNumero("300");
+        enderecoDTO2.setBairro("Picanço");
+        enderecoDTO2.setCidade("Guarulhos");
         enderecoDTO2.setEstado("SP");
-        enderecoDTO2.setCep("01310200");
+        enderecoDTO2.setCep("07220000");
         enderecoDTO2.setPrincipal(true);
         enderecoService.criarEndereco(enderecoDTO2, savedCliente2);
         aguardarRateLimit();
@@ -221,12 +221,12 @@ public class DataInitializer implements CommandLineRunner {
         
         // Criar endereço para cliente3
         EnderecoRequestDTO enderecoDTO3 = new EnderecoRequestDTO();
-        enderecoDTO3.setLogradouro("Rua Augusta");
-        enderecoDTO3.setNumero("789");
-        enderecoDTO3.setBairro("Consolação");
-        enderecoDTO3.setCidade("São Paulo");
+        enderecoDTO3.setLogradouro("Rua IV Centenário");
+        enderecoDTO3.setNumero("450");
+        enderecoDTO3.setBairro("Vila Galvão");
+        enderecoDTO3.setCidade("Guarulhos");
         enderecoDTO3.setEstado("SP");
-        enderecoDTO3.setCep("01305100");
+        enderecoDTO3.setCep("07040000");
         enderecoDTO3.setPrincipal(true);
         enderecoService.criarEndereco(enderecoDTO3, savedCliente3);
 
@@ -257,17 +257,20 @@ public class DataInitializer implements CommandLineRunner {
         restaurante.setEmail("restaurante@teste.com");
         restaurante.setTelefone("(11) 99999-9999");
         restaurante.setStatus(StatusRestaurante.APPROVED);
+        restaurante.setAtivo(true);
+        restaurante.setRaioEntregaKm(new BigDecimal("10.00"));
+        restaurante.setFotoUrl("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80");
         restaurante.setUser(savedRestauranteUser);
         Restaurante savedRestaurante = restauranteRepository.save(restaurante);
         
         // Criar endereço para restaurante
         EnderecoRequestDTO enderecoRestauranteDTO = new EnderecoRequestDTO();
-        enderecoRestauranteDTO.setLogradouro("Rua Teste");
-        enderecoRestauranteDTO.setNumero("123");
+        enderecoRestauranteDTO.setLogradouro("Rua Anton Phillips");
+        enderecoRestauranteDTO.setNumero("100");
         enderecoRestauranteDTO.setBairro("Centro");
-        enderecoRestauranteDTO.setCidade("São Paulo");
+        enderecoRestauranteDTO.setCidade("Guarulhos");
         enderecoRestauranteDTO.setEstado("SP");
-        enderecoRestauranteDTO.setCep("01310100");
+        enderecoRestauranteDTO.setCep("07013000");
         enderecoRestauranteDTO.setPrincipal(true);
         enderecoService.criarEndereco(enderecoRestauranteDTO, savedRestaurante);
         aguardarRateLimit();
@@ -281,8 +284,19 @@ public class DataInitializer implements CommandLineRunner {
         prato.setPreco(new BigDecimal("25.90"));
         prato.setCategoria(CategoriaMenu.MAIN);
         prato.setDisponivel(true);
+        prato.setFotoUrl("https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&q=80");
         prato.setRestaurante(restaurante);
         prato = pratoRepository.save(prato);
+
+        criarPratoDemo(restaurante, "Batata Frita Crocante", "Porção generosa com tempero especial",
+                new BigDecimal("14.90"), CategoriaMenu.STARTER,
+                "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=800&q=80");
+        criarPratoDemo(restaurante, "Refrigerante Lata", "Coca-Cola, Guaraná ou Sprite 350ml",
+                new BigDecimal("6.90"), CategoriaMenu.DRINK,
+                "https://images.unsplash.com/photo-1629203851122-3726ecdf080e?w=800&q=80");
+        criarPratoDemo(restaurante, "Brownie com Sorvete", "Brownie quentinho com bola de sorvete de creme",
+                new BigDecimal("18.90"), CategoriaMenu.DESSERT,
+                "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=800&q=80");
 
         // Buscar primeiro cliente
         Cliente cliente = clienteRepository.findAll().stream().findFirst()
@@ -373,6 +387,25 @@ public class DataInitializer implements CommandLineRunner {
         System.out.println("   Status: APPROVED - Veículo: " + entregador.getTipoVeiculo() + " - Placa: " + entregador.getPlacaVeiculo());
     }
     
+    private void criarPratoDemo(
+            Restaurante restaurante,
+            String nome,
+            String descricao,
+            BigDecimal preco,
+            CategoriaMenu categoria,
+            String fotoUrl
+    ) {
+        Prato p = new Prato();
+        p.setNome(nome);
+        p.setDescricao(descricao);
+        p.setPreco(preco);
+        p.setCategoria(categoria);
+        p.setDisponivel(true);
+        p.setFotoUrl(fotoUrl);
+        p.setRestaurante(restaurante);
+        pratoRepository.save(p);
+    }
+
     private void aguardarRateLimit() {
         try {
             Thread.sleep(2000);
