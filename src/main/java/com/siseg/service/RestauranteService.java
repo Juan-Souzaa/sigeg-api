@@ -23,8 +23,10 @@ import com.siseg.repository.RoleRepository;
 import com.siseg.repository.UserRepository;
 import com.siseg.util.SecurityUtils;
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.data.domain.Page;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -35,8 +37,13 @@ import com.siseg.util.TempoEstimadoCalculator;
 import com.siseg.model.Endereco;
 import com.siseg.model.enumerations.TipoVeiculo;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.UUID;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -50,6 +57,9 @@ import java.util.stream.Collectors;
 public class RestauranteService {
     
     private static final Logger logger = Logger.getLogger(RestauranteService.class.getName());
+    
+    @Value("${app.storage.upload-dir:uploads}")
+    private String uploadDir;
     
     private final RestauranteRepository restauranteRepository;
     private final ModelMapper modelMapper;
@@ -420,5 +430,33 @@ public class RestauranteService {
         
         restaurante.getUser().setPassword(passwordEncoder.encode(dto.getNovaSenha()));
         userRepository.save(restaurante.getUser());
+    }
+
+    public RestauranteResponseDTO atualizarFoto(Long id, MultipartFile foto) {
+        if (foto == null || foto.isEmpty()) {
+            throw new IllegalArgumentException("Foto é obrigatória");
+        }
+
+        Restaurante restaurante = restauranteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurante não encontrado com ID: " + id));
+
+        SecurityUtils.validateRestauranteOwnership(restaurante);
+
+        restaurante.setFotoUrl(salvarFoto(foto));
+        Restaurante saved = restauranteRepository.save(restaurante);
+        return restauranteMapper.toResponseDTO(saved);
+    }
+
+    private String salvarFoto(MultipartFile foto) {
+        try {
+            String nomeArquivo = UUID.randomUUID() + "_" + foto.getOriginalFilename();
+            Path diretorio = Paths.get(uploadDir, "restaurantes");
+            Files.createDirectories(diretorio);
+            Path arquivo = diretorio.resolve(nomeArquivo);
+            Files.copy(foto.getInputStream(), arquivo);
+            return "/files/restaurantes/" + nomeArquivo;
+        } catch (IOException e) {
+            throw new RuntimeException("Erro ao salvar foto: " + e.getMessage());
+        }
     }
 }
