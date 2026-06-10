@@ -12,9 +12,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 
 
@@ -115,5 +117,15 @@ public class RestauranteController {
             @Valid @RequestBody AtualizarRaioEntregaDTO dto) {
         restauranteService.atualizarRaioEntrega(id, dto.getRaioEntregaKm());
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping(value = "/{id}/foto", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RESTAURANTE')")
+    @Operation(summary = "Atualizar foto do restaurante")
+    public ResponseEntity<RestauranteResponseDTO> atualizarFoto(
+            @PathVariable Long id,
+            @RequestPart("foto") MultipartFile foto) {
+        RestauranteResponseDTO response = restauranteService.atualizarFoto(id, foto);
+        return ResponseEntity.ok(response);
     }
 }

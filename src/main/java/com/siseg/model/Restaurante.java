@@ -47,6 +47,9 @@ public class Restaurante {
     @Column(precision = 5, scale = 2)
     private BigDecimal raioEntregaKm;
 
+    @Column(length = 512)
+    private String fotoUrl;
+
     @Column(nullable = false, updatable = false)
     private Instant criadoEm = Instant.now();
     
