@@ -14,6 +14,8 @@ public class RestauranteResponseDTO {
     private String telefone;
     private String email;
     private StatusRestaurante status;
+    private Boolean ativo;
     private BigDecimal raioEntregaKm;
+    private String fotoUrl;
     private Instant criadoEm;
 }

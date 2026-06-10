@@ -56,6 +56,7 @@ public class RestauranteMapper {
             raioEntrega = new BigDecimal("10.00");
         }
         dto.setRaioEntregaKm(raioEntrega);
+        dto.setFotoUrl(restaurante.getFotoUrl());
         
         BigDecimal mediaAvaliacao = avaliacaoRepository.calcularMediaNotaRestaurante(restaurante.getId());
         long totalAvaliacoes = avaliacaoRepository.countByRestauranteId(restaurante.getId());

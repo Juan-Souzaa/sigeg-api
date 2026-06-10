@@ -27,6 +27,8 @@ public class PedidoMapper {
     public PedidoResponseDTO toResponseDTO(Pedido pedido) {
         PedidoResponseDTO response = modelMapper.map(pedido, PedidoResponseDTO.class);
         response.setClienteId(pedido.getCliente().getId());
+        response.setClienteNome(pedido.getCliente().getNome());
+        response.setClienteTelefone(pedido.getCliente().getTelefone());
         response.setRestauranteId(pedido.getRestaurante().getId());
         
         if (pedido.getEntregador() != null) {

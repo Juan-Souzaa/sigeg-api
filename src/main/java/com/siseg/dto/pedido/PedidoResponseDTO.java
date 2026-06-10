@@ -14,6 +14,8 @@ import java.util.List;
 public class PedidoResponseDTO {
     private Long id;
     private Long clienteId;
+    private String clienteNome;
+    private String clienteTelefone;
     private Long restauranteId;
     private StatusPedido status;
     private MetodoPagamento metodoPagamento;

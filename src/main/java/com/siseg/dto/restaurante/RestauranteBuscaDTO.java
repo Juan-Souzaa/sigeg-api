@@ -15,4 +15,5 @@ public class RestauranteBuscaDTO {
     private BigDecimal raioEntregaKm;
     private BigDecimal mediaAvaliacao;
     private Long totalAvaliacoes;
+    private String fotoUrl;
 }

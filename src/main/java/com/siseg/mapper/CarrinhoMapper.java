@@ -31,6 +31,7 @@ public class CarrinhoMapper {
         CarrinhoItemResponseDTO dto = modelMapper.map(item, CarrinhoItemResponseDTO.class);
         dto.setPratoId(item.getPrato().getId());
         dto.setPratoNome(item.getPrato().getNome());
+        dto.setPratoFotoUrl(item.getPrato().getFotoUrl());
         return dto;
     }
 

@@ -13,6 +13,7 @@ public class CarrinhoItemResponseDTO {
     private Long id;
     private Long pratoId;
     private String pratoNome;
+    private String pratoFotoUrl;
     private Integer quantidade;
     private BigDecimal precoUnitario;
     private BigDecimal subtotal;
