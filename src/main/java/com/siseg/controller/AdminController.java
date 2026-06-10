@@ -21,8 +21,11 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+
+import java.time.LocalDate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -72,16 +75,20 @@ public class AdminController {
     @GetMapping("/relatorios/distribuicao")
     @Operation(summary = "Relatório de distribuição de valores")
     public ResponseEntity<RelatorioDistribuicaoDTO> relatorioDistribuicao(
-            @RequestParam(defaultValue = "MES") Periodo periodo) {
-        RelatorioDistribuicaoDTO response = ganhosService.gerarRelatorioDistribuicao(periodo);
+            @RequestParam(defaultValue = "MES") Periodo periodo,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim) {
+        RelatorioDistribuicaoDTO response = ganhosService.gerarRelatorioDistribuicao(periodo, dataInicio, dataFim);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/relatorios/completo")
     @Operation(summary = "Relatório completo com todas as estatísticas")
     public ResponseEntity<RelatorioCompletoDTO> relatorioCompleto(
-            @RequestParam(defaultValue = "MES") Periodo periodo) {
-        RelatorioCompletoDTO response = ganhosService.gerarRelatorioCompleto(periodo);
+            @RequestParam(defaultValue = "MES") Periodo periodo,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim) {
+        RelatorioCompletoDTO response = ganhosService.gerarRelatorioCompleto(periodo, dataInicio, dataFim);
         return ResponseEntity.ok(response);
     }
 

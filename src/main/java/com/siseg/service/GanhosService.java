@@ -83,7 +83,11 @@ public class GanhosService {
 
     @Transactional(readOnly = true)
     public RelatorioDistribuicaoDTO gerarRelatorioDistribuicao(Periodo periodo) {
-        var periodoDatas = obterPeriodoDatas(periodo);
+        return gerarRelatorioDistribuicao(periodo, null, null);
+    }
+
+    public RelatorioDistribuicaoDTO gerarRelatorioDistribuicao(Periodo periodo, LocalDate dataInicio, LocalDate dataFim) {
+        var periodoDatas = obterPeriodoDatas(periodo, dataInicio, dataFim);
         List<Pedido> pedidos = buscarPedidosEntregues(periodoDatas.inicio, periodoDatas.fim);
         
         BigDecimal volumeTotal = calcularVolumeTotal(pedidos);
@@ -101,7 +105,11 @@ public class GanhosService {
 
     @Transactional(readOnly = true)
     public RelatorioCompletoDTO gerarRelatorioCompleto(Periodo periodo) {
-        var periodoDatas = obterPeriodoDatas(periodo);
+        return gerarRelatorioCompleto(periodo, null, null);
+    }
+
+    public RelatorioCompletoDTO gerarRelatorioCompleto(Periodo periodo, LocalDate dataInicio, LocalDate dataFim) {
+        var periodoDatas = obterPeriodoDatas(periodo, dataInicio, dataFim);
         List<Pedido> pedidos = buscarPedidosEntregues(periodoDatas.inicio, periodoDatas.fim);
         
         
@@ -262,23 +270,35 @@ public class GanhosService {
     }
 
     private PeriodoDatas obterPeriodoDatas(Periodo periodo) {
+        return obterPeriodoDatas(periodo, null, null);
+    }
+
+    private PeriodoDatas obterPeriodoDatas(Periodo periodo, LocalDate dataInicioCustom, LocalDate dataFimCustom) {
+        ZoneId zone = ZoneId.systemDefault();
+
+        if (periodo == Periodo.CUSTOMIZADO && dataInicioCustom != null && dataFimCustom != null) {
+            Instant inicio = dataInicioCustom.atStartOfDay(zone).toInstant();
+            Instant fim = dataFimCustom.plusDays(1).atStartOfDay(zone).toInstant();
+            return new PeriodoDatas(inicio, fim);
+        }
+
         Instant fim = Instant.now();
         Instant inicio;
-        
+
         switch (periodo) {
             case HOJE:
-                inicio = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant();
+                inicio = LocalDate.now().atStartOfDay(zone).toInstant();
                 break;
             case SEMANA:
-                inicio = LocalDate.now().minusDays(7).atStartOfDay(ZoneId.systemDefault()).toInstant();
+                inicio = LocalDate.now().minusDays(7).atStartOfDay(zone).toInstant();
                 break;
             case MES:
-                inicio = LocalDate.now().minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant();
+                inicio = LocalDate.now().minusDays(30).atStartOfDay(zone).toInstant();
                 break;
             default:
-                inicio = LocalDate.now().minusDays(30).atStartOfDay(ZoneId.systemDefault()).toInstant();
+                inicio = LocalDate.now().minusDays(30).atStartOfDay(zone).toInstant();
         }
-        
+
         return new PeriodoDatas(inicio, fim);
     }
 
